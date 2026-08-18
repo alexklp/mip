@@ -4,3 +4,19 @@ __pycache__/
 .env
 *.log
 .DS_Store
+
+
+# Local models and installation artifacts
+models/
+*.deb
+
+# Downloaded tool binaries
+tools/llama.cpp-vulkan/
+
+# Telegram credentials and sessions
+*.session
+*.session-journal
+
+# Environment files
+.env.*
+!.env.example
