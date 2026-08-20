@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mip.local/schema/claim-extraction/1",
+  "title": "MIP claim-extraction output contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_id",
+    "claims"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "claim-extraction/1"
+    },
+    "evidence_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_local_id",
+          "claim_text",
+          "evidence_span",
+          "evidence_start",
+          "evidence_end",
+          "epistemic_status",
+          "claim_time_text",
+          "attribution_text"
+        ],
+        "properties": {
+          "claim_local_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claim_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_span": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_start": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Обчислюється детерміновано adapter-кодом з evidence_span (text.find()); НЕ виводиться моделлю напряму."
+          },
+          "evidence_end": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Обчислюється детерміновано adapter-кодом з evidence_span (text.find()); НЕ виводиться моделлю напряму."
+          },
+          "epistemic_status": {
+            "type": "string",
+            "enum": [
+              "asserted",
+              "reported",
+              "alleged",
+              "estimated",
+              "opinion",
+              "uncertain",
+              "denied",
+              "not_reported"
+            ]
+          },
+          "claim_time_text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attribution_text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
