@@ -91,6 +91,15 @@ python3 run_eval.py --out report_<name>.json
 
 `report_kupiansk_v1_run3.json` — окремий artifact, `report_kupiansk_v1_run2.json` не перезаписаний.
 
+## Provenance: `report_kupiansk_v1_run4.json` (prompt v2)
+Прогін на `prompt_claim_extractor_v2.txt` = v1 + два нові правила (JSON schema/поля не змінені): (1) atomicity застосовується до `claim_text`, НЕ до `evidence_span` — span завжди точна неперервна підрядка, не склеюється з розрізнених частин речення, при потребі береться ширший точний span аж до цілого речення; (2) qualifier inheritance — при decomposition не втрачати attribution/epistemic modality/явний час дочірнього claim. Frozen: без retry окремих evidence, без правок промпту після перегляду результату.
+
+Layer B (122 claims / 8 evidence): `resolved` 110, `not_found` 12, `ambiguous` 0. `normalized_contract_valid` по evidence — 6/8 (E1, E3, E4, E6, E7, E8 OK; E2, E5 FAIL — обидва виключно через `not_found`, не ambiguous).
+
+Regression guards (5/6 PASS): E2 not_reported — PASS; E3 Трегубов/наразі inheritance — PASS (перевірено проти джерела); E4 "наразі неефективно" — PASS, закритий давній coverage-miss; E5 "по даним з місць" ≠ asserted — PASS за раніше встановленим критерієм; E5 Соболівка + західний берег як окремі claims — **FAIL**, досі один злитий claim, той самий баг, що в run2/run3; E8 не дробити штучно — PASS.
+
+`report_kupiansk_v1_run4.json` — окремий artifact, run2/run3 не перезаписані. Root-cause `not_found` на E2/E5 і E5-merge — не розібраний, заплановано перед можливим v3.
+
 ## Відомі обмеження поточного сетапу (MamayLM + llama.cpp, спостереження на конкретній конфігурації — НЕ узагальнення на всі LLM/сервери)
 
 - Без явного `max_tokens` у запиті сервер повертав порожній `content` — причина не встановлена напевно, обхід: `max_tokens` завжди явний.
