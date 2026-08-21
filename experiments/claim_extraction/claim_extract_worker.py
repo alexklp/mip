@@ -103,11 +103,46 @@ def fetch_and_verify_registry(conn) -> str:
     return prompt_text_db
 
 
-def fetch_batch(conn, limit: int) -> list[tuple[str, str]]:
+def fetch_batch(conn, limit: int, contour_id: int | None) -> list[tuple[str, str]]:
     """Idempotent eligibility: content з occurrence, routing-eligible
     (analyze/maybe для поточної routing_version), без існуючого run для
     (llm_model_id, prompt_id, attempt_no=1). Той самий паттерн, що
-    fetch_batch() в collectors/embed_worker.py."""
+    fetch_batch() в collectors/embed_worker.py.
+
+    contour_id (опційно): фільтр по sources.contour_id через item_occurrences,
+    ordering по найсвіжішому occurrence САМЕ в межах цього контуру (не
+    first_seen_at і не найсвіжіший occurrence взагалі, якщо у content є
+    occurrences з інших контурів теж). Base FROM лишається content_items —
+    contour-фільтр і ordering через EXISTS/corelated subquery, без JOIN-
+    фанауту, тому один content_id ніколи не дублюється в batch навіть при
+    кількох occurrences в межах контуру."""
+    if contour_id is None:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ci.content_id, ci.text_content
+                FROM content_items ci
+                WHERE EXISTS (
+                    SELECT 1 FROM item_occurrences io WHERE io.content_id = ci.content_id
+                )
+                AND EXISTS (
+                    SELECT 1 FROM content_routing_decisions cr
+                    WHERE cr.content_id = ci.content_id
+                      AND cr.routing_version = %s
+                      AND cr.decision IN ('analyze', 'maybe')
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM claim_extraction_runs r
+                    WHERE r.content_id = ci.content_id
+                      AND r.llm_model_id = %s AND r.prompt_id = %s AND r.attempt_no = %s
+                )
+                ORDER BY ci.first_seen_at
+                LIMIT %s
+                """,
+                (ROUTING_VERSION, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, limit),
+            )
+            return cur.fetchall()
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -127,10 +162,20 @@ def fetch_batch(conn, limit: int) -> list[tuple[str, str]]:
                 WHERE r.content_id = ci.content_id
                   AND r.llm_model_id = %s AND r.prompt_id = %s AND r.attempt_no = %s
             )
-            ORDER BY ci.first_seen_at
+            AND EXISTS (
+                SELECT 1 FROM item_occurrences io
+                JOIN sources s ON s.source_id = io.source_id
+                WHERE io.content_id = ci.content_id AND s.contour_id = %s
+            )
+            ORDER BY (
+                SELECT max(io.collected_at)
+                FROM item_occurrences io
+                JOIN sources s ON s.source_id = io.source_id
+                WHERE io.content_id = ci.content_id AND s.contour_id = %s
+            ) DESC
             LIMIT %s
             """,
-            (ROUTING_VERSION, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, limit),
+            (ROUTING_VERSION, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, contour_id, contour_id, limit),
         )
         return cur.fetchall()
 
@@ -240,15 +285,15 @@ def process_one(conn, content_id: str, evidence_text: str, prompt_text: str, cod
     return status
 
 
-def run(limit: int) -> int:
+def run(limit: int, contour_id: int | None) -> int:
     code_revision = get_code_revision()
 
     summary = {"valid": 0, "invalid": 0, "transport_error": 0, "error": 0}
 
     with psycopg.connect(DB_DSN) as conn:
         prompt_text = fetch_and_verify_registry(conn)
-        batch = fetch_batch(conn, limit)
-        print(f"batch: {len(batch)} content_id(s) eligible (limit={limit}), code_revision={code_revision}")
+        batch = fetch_batch(conn, limit, contour_id)
+        print(f"batch: {len(batch)} content_id(s) eligible (limit={limit}, contour_id={contour_id}), code_revision={code_revision}")
 
         for content_id, evidence_text in batch:
             outcome = process_one(conn, str(content_id), evidence_text, prompt_text, code_revision)
@@ -265,10 +310,14 @@ def run(limit: int) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Batch claim-extraction worker (llm_model_id=1, prompt_id=1, attempt_no=1)")
     parser.add_argument("--limit", type=int, required=True, help="max content_items to process this run")
+    parser.add_argument("--contour-id", type=int, default=None,
+                         help="optional: restrict to sources.contour_id, order by most recent occurrence within that contour")
     args = parser.parse_args()
     if args.limit <= 0:
         parser.error("--limit must be > 0")
-    return run(args.limit)
+    if args.contour_id is not None and not (1 <= args.contour_id <= 4):
+        parser.error("--contour-id must be between 1 and 4")
+    return run(args.limit, args.contour_id)
 
 
 if __name__ == "__main__":
