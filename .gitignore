@@ -20,3 +20,4 @@ tools/llama.cpp-vulkan/
 # Environment files
 .env.*
 !.env.example
+experiments/content_routing/routing_scan_results.jsonl

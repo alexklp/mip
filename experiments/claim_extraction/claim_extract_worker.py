@@ -47,6 +47,7 @@ DB_DSN = "dbname=mip_dev"
 LLM_MODEL_ID = 1
 PROMPT_ID = 1
 ATTEMPT_NO = 1
+ROUTING_VERSION = 1
 
 # Очікувана identity — звіряється з БД, не встановлюється звідси.
 EXPECTED_MODEL_NAME = "MamayLM-Gemma-3-27B-IT"
@@ -103,7 +104,8 @@ def fetch_and_verify_registry(conn) -> str:
 
 
 def fetch_batch(conn, limit: int) -> list[tuple[str, str]]:
-    """Idempotent eligibility: content з occurrence, без існуючого run для
+    """Idempotent eligibility: content з occurrence, routing-eligible
+    (analyze/maybe для поточної routing_version), без існуючого run для
     (llm_model_id, prompt_id, attempt_no=1). Той самий паттерн, що
     fetch_batch() в collectors/embed_worker.py."""
     with conn.cursor() as cur:
@@ -114,6 +116,12 @@ def fetch_batch(conn, limit: int) -> list[tuple[str, str]]:
             WHERE EXISTS (
                 SELECT 1 FROM item_occurrences io WHERE io.content_id = ci.content_id
             )
+            AND EXISTS (
+                SELECT 1 FROM content_routing_decisions cr
+                WHERE cr.content_id = ci.content_id
+                  AND cr.routing_version = %s
+                  AND cr.decision IN ('analyze', 'maybe')
+            )
             AND NOT EXISTS (
                 SELECT 1 FROM claim_extraction_runs r
                 WHERE r.content_id = ci.content_id
@@ -122,7 +130,7 @@ def fetch_batch(conn, limit: int) -> list[tuple[str, str]]:
             ORDER BY ci.first_seen_at
             LIMIT %s
             """,
-            (LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, limit),
+            (ROUTING_VERSION, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, limit),
         )
         return cur.fetchall()
 
