@@ -21,3 +21,6 @@ tools/llama.cpp-vulkan/
 .env.*
 !.env.example
 experiments/content_routing/routing_scan_results.jsonl
+
+# Local/internal reference data
+local/reference/
