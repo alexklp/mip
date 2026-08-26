@@ -222,10 +222,18 @@ def main() -> int:
         default=None,
         help="filter by MIP first_seen_at; this is observation time, not publication/origin time",
     )
+    parser.add_argument(
+        "--lemmatize",
+        action="store_true",
+        help="detect document language and use RU/UA Stanza lemmas; other languages keep surface tokens",
+    )
     args = parser.parse_args()
 
     stopwords = load_stopwords()
     rules = load_rules()
+
+    if args.lemmatize:
+        from morphology import detect_language, normalized_tokens
 
     tf: dict[str, Counter] = defaultdict(Counter)
     df: dict[str, Counter] = defaultdict(Counter)
@@ -244,7 +252,20 @@ def main() -> int:
             list(source_names or []),
             rules,
         )
-        tokens = tokenize(cleaned)
+        if args.lemmatize:
+            lang = detect_language(cleaned)
+
+            if lang in ("uk", "ru"):
+                tokens = normalized_tokens(
+                    cleaned,
+                    lang,
+                    stopwords,
+                )
+            else:
+                # Unsupported language: preserve existing surface-token behavior.
+                tokens = tokenize(cleaned)
+        else:
+            tokens = tokenize(cleaned)
 
         per_doc = document_terms(
             tokens,
@@ -262,6 +283,7 @@ def main() -> int:
         print(
             f"documents={doc_counts[group]} "
             f"ngram={args.ngram} "
+            f"lemmatize={args.lemmatize} "
             f"since_hours={args.since_hours}"
         )
         print(

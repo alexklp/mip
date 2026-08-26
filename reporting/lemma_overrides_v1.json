@@ -1,0 +1,26 @@
+{
+  "uk": [
+    {
+      "lemma": "дрін",
+      "surface_prefix": "дрон",
+      "replace": "дрон"
+    },
+    {
+      "lemma": "ракет",
+      "surface_prefix": "ракет",
+      "replace": "ракета"
+    },
+    {
+      "lemma": "атаки",
+      "surface_prefix": "атак",
+      "replace": "атака"
+    }
+  ],
+  "ru": [
+    {
+      "lemma": "страдать",
+      "surface_prefix": "пострад",
+      "replace": "пострадать"
+    }
+  ]
+}
