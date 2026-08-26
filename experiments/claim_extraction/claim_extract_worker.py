@@ -103,7 +103,7 @@ def fetch_and_verify_registry(conn) -> str:
     return prompt_text_db
 
 
-def fetch_batch(conn, limit: int, contour_id: int | None) -> list[tuple[str, str]]:
+def fetch_batch(conn, limit: int, contour_id: int | None, decision: str | None) -> list[tuple[str, str]]:
     """Idempotent eligibility: content з occurrence, routing-eligible
     (analyze/maybe для поточної routing_version), без існуючого run для
     (llm_model_id, prompt_id, attempt_no=1). Той самий паттерн, що
@@ -130,6 +130,7 @@ def fetch_batch(conn, limit: int, contour_id: int | None) -> list[tuple[str, str
                     WHERE cr.content_id = ci.content_id
                       AND cr.routing_version = %s
                       AND cr.decision IN ('analyze', 'maybe')
+                      AND (%s::text IS NULL OR cr.decision = %s::text)
                 )
                 AND NOT EXISTS (
                     SELECT 1 FROM claim_extraction_runs r
@@ -139,7 +140,7 @@ def fetch_batch(conn, limit: int, contour_id: int | None) -> list[tuple[str, str
                 ORDER BY ci.first_seen_at
                 LIMIT %s
                 """,
-                (ROUTING_VERSION, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, limit),
+                (ROUTING_VERSION, decision, decision, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, limit),
             )
             return cur.fetchall()
 
@@ -156,6 +157,7 @@ def fetch_batch(conn, limit: int, contour_id: int | None) -> list[tuple[str, str
                 WHERE cr.content_id = ci.content_id
                   AND cr.routing_version = %s
                   AND cr.decision IN ('analyze', 'maybe')
+                  AND (%s::text IS NULL OR cr.decision = %s::text)
             )
             AND NOT EXISTS (
                 SELECT 1 FROM claim_extraction_runs r
@@ -175,7 +177,7 @@ def fetch_batch(conn, limit: int, contour_id: int | None) -> list[tuple[str, str
             ) DESC
             LIMIT %s
             """,
-            (ROUTING_VERSION, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, contour_id, contour_id, limit),
+            (ROUTING_VERSION, decision, decision, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, contour_id, contour_id, limit),
         )
         return cur.fetchall()
 
@@ -285,15 +287,15 @@ def process_one(conn, content_id: str, evidence_text: str, prompt_text: str, cod
     return status
 
 
-def run(limit: int, contour_id: int | None) -> int:
+def run(limit: int, contour_id: int | None, decision: str | None) -> int:
     code_revision = get_code_revision()
 
     summary = {"valid": 0, "invalid": 0, "transport_error": 0, "error": 0}
 
     with psycopg.connect(DB_DSN) as conn:
         prompt_text = fetch_and_verify_registry(conn)
-        batch = fetch_batch(conn, limit, contour_id)
-        print(f"batch: {len(batch)} content_id(s) eligible (limit={limit}, contour_id={contour_id}), code_revision={code_revision}")
+        batch = fetch_batch(conn, limit, contour_id, decision)
+        print(f"batch: {len(batch)} content_id(s) eligible (limit={limit}, contour_id={contour_id}, decision={decision}), code_revision={code_revision}")
 
         for content_id, evidence_text in batch:
             outcome = process_one(conn, str(content_id), evidence_text, prompt_text, code_revision)
@@ -312,12 +314,14 @@ def main() -> int:
     parser.add_argument("--limit", type=int, required=True, help="max content_items to process this run")
     parser.add_argument("--contour-id", type=int, default=None,
                          help="optional: restrict to sources.contour_id, order by most recent occurrence within that contour")
+    parser.add_argument("--decision", choices=("analyze", "maybe"), default=None,
+                         help="optional: restrict routing decision; default keeps analyze+maybe")
     args = parser.parse_args()
     if args.limit <= 0:
         parser.error("--limit must be > 0")
     if args.contour_id is not None and not (1 <= args.contour_id <= 4):
         parser.error("--contour-id must be between 1 and 4")
-    return run(args.limit, args.contour_id)
+    return run(args.limit, args.contour_id, args.decision)
 
 
 if __name__ == "__main__":
