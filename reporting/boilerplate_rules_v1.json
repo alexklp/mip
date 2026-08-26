@@ -1,0 +1,99 @@
+[
+  {
+    "name": "urls",
+    "pattern": "https?://\\S+|www\\.\\S+"
+  },
+  {
+    "name": "html_tags",
+    "pattern": "<[^>]+>"
+  },
+  {
+    "name": "zaxid_cdata",
+    "source_names": [
+      "Zaxid.net"
+    ],
+    "pattern": "\\[CDATA\\[.*?\\]\\]>"
+  },
+  {
+    "name": "24_full_text",
+    "source_names": [
+      "24 канал"
+    ],
+    "pattern": "Повний\\s+текст\\s+новини"
+  },
+  {
+    "name": "cdata_marker",
+    "pattern": "\\bCDATA\\b"
+  },
+  {
+    "name": "bare_telegram_links",
+    "pattern": "\\bt\\.me/\\S+"
+  },
+  {
+    "name": "bare_max_links",
+    "pattern": "\\bmax\\.ru/\\S+"
+  },
+  {
+    "name": "telegram_handles",
+    "pattern": "@[A-Za-z0-9_]+"
+  },
+  {
+    "name": "subscribe_to_channel",
+    "pattern": "\\bподпис(?:аться|ывайтесь|ывайся|пишись)\\b.{0,80}?(?:telegram|телеграм|max|мах|макс|канал)"
+  },
+  {
+    "name": "read_us_in_max",
+    "pattern": "\\bчит(?:ать|айте)\\s+нас\\s+в\\s+(?:max|мах|макс)\\b"
+  },
+  {
+    "name": "read_in_max",
+    "pattern": "\\bчит(?:ать|айте)\\s+.*?\\s+в\\s+(?:max|мах|макс)\\b"
+  },
+  {
+    "name": "media_not_loading_promo",
+    "pattern": "не\\s+грузятся\\s+фото\\s+и\\s+видео\\??.{0,100}?(?:max|мах|макс)"
+  },
+  {
+    "name": "rv_footer",
+    "source_names": [
+      "Операция Z: Военкоры Русской Весны"
+    ],
+    "pattern": "подписаться\\s+на\\s+rv\\s*:\\s*(?:max|мах|макс)"
+  },
+  {
+    "name": "kp_footer",
+    "source_names": [
+      "Комсомольская правда (TG)"
+    ],
+    "pattern": "подписаться\\s+на\\s+@?truekpru"
+  },
+  {
+    "name": "tsargrad_footer",
+    "source_names": [
+      "Царьград ТВ"
+    ],
+    "pattern": "царьград\\.?тв\\s*[—-]\\s*не\\s+боимся\\s+говорить\\s+правду"
+  },
+  {
+    "name": "generic_subscribe_max",
+    "pattern": "\\bподпис(?:аться|ывайтесь|ывайся|пишись)\\b.{0,100}?(?:[mм][aа](?:[xх]|[kк][cс](?:е|у|ом)?))"
+  },
+  {
+    "name": "generic_read_max",
+    "pattern": "\\bчит(?:ать|айте)\\b.{0,100}?(?:[mм][aа](?:[xх]|[kк][cс](?:е|у|ом)?))"
+  },
+  {
+    "name": "mash_media_footer",
+    "source_names": [
+      "Mash"
+    ],
+    "pattern": "не\\s+грузятся\\s+фото\\s+и\\s+видео\\??.{0,120}?(?:[mм][aа](?:[xх]|[kк][cс](?:е|у|ом)?))"
+  },
+  {
+    "name": "bloknot_market_footer",
+    "source_names": [
+      "Блокнот Россия"
+    ],
+    "pattern": "блокнот\\s+в\\s+(?:[mм][aа](?:[xх]|[kк][cс](?:е|у|ом)?)).{0,120}?объявления\\s+работа.{0,80}?купи\\s*/?\\s*продай\\s+авто"
+  }
+]
