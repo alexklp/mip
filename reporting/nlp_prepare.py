@@ -52,6 +52,8 @@ def fetch_documents(
     conn,
     source_group: str | None,
     since_hours: int | None,
+    start_at: str | None = None,
+    end_at: str | None = None,
 ) -> list[tuple]:
     with conn.cursor() as cur:
         cur.execute(
@@ -72,6 +74,14 @@ def fetch_documents(
                     %s::int IS NULL
                     OR ci.first_seen_at >= now() - (%s::int * interval '1 hour')
                   )
+              AND (
+                    %s::timestamptz IS NULL
+                    OR ci.first_seen_at >= %s::timestamptz
+                  )
+              AND (
+                    %s::timestamptz IS NULL
+                    OR ci.first_seen_at < %s::timestamptz
+                  )
             GROUP BY
                 ci.content_id,
                 s.source_group,
@@ -85,6 +95,10 @@ def fetch_documents(
                 source_group,
                 since_hours,
                 since_hours,
+                start_at,
+                start_at,
+                end_at,
+                end_at,
             ),
         )
         return cur.fetchall()

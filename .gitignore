@@ -24,3 +24,6 @@ experiments/content_routing/routing_scan_results.jsonl
 
 # Local/internal reference data
 local/reference/
+
+# Generated reporting artifacts
+reporting/output/
