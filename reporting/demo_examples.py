@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
 
+from morphology import detect_language, lemmatize_words
 from nlp_prepare import DB_DSN
 
 
@@ -62,11 +64,14 @@ def build_metadata(conn, content_ids: set[str]) -> dict[str, dict]:
         SELECT
             ci.content_id::text,
             ci.title,
-            left(
-                regexp_replace(ci.text_content, '\\s+', ' ', 'g'),
-                520
-            ) AS text_preview,
+            regexp_replace(
+                ci.text_content,
+                '\\s+',
+                ' ',
+                'g'
+            ) AS text_content,
             ci.first_seen_at,
+            crd.score AS routing_score,
             array_agg(DISTINCT s.name ORDER BY s.name)
                 FILTER (WHERE s.name IS NOT NULL) AS source_names,
             array_agg(DISTINCT s.source_type ORDER BY s.source_type)
@@ -75,6 +80,10 @@ def build_metadata(conn, content_ids: set[str]) -> dict[str, dict]:
                 FILTER (WHERE s.source_group IS NOT NULL) AS source_groups,
             min(io.published_at) AS published_at
         FROM content_items ci
+        JOIN content_routing_decisions crd
+          ON crd.content_id = ci.content_id
+         AND crd.routing_version = 1
+         AND crd.decision = 'analyze'
         LEFT JOIN item_occurrences io
           ON io.content_id = ci.content_id
         LEFT JOIN sources s
@@ -84,15 +93,105 @@ def build_metadata(conn, content_ids: set[str]) -> dict[str, dict]:
             ci.content_id,
             ci.title,
             ci.text_content,
-            ci.first_seen_at
+            ci.first_seen_at,
+            crd.score
         """,
         (list(sorted(content_ids)),),
     )
+
+    for row in rows:
+        prepare_text_analysis(row)
 
     return {
         row["content_id"]: row
         for row in rows
     }
+
+
+def prepare_text_analysis(row: dict) -> None:
+    text = row.get("text_content") or ""
+    lang = detect_language(text)
+
+    row["_analysis_words"] = (
+        lemmatize_words(text, lang)
+        if lang in {"uk", "ru"}
+        else []
+    )
+
+
+def term_centered_preview(
+    row: dict,
+    term: str,
+    label: str,
+    *,
+    before: int = 90,
+    after: int = 310,
+) -> str:
+    text = (row.get("text_content") or "").strip()
+
+    if not text:
+        return ""
+
+    target = term.lower().split()
+    words = [
+        (surface, lemma)
+        for surface, lemma, pos in row.get("_analysis_words", [])
+        if pos != "PUNCT"
+    ]
+
+    match = None
+
+    if target:
+        width = len(target)
+
+        for i in range(len(words) - width + 1):
+            window = words[i:i + width]
+
+            if [lemma for _, lemma in window] != target:
+                continue
+
+            surfaces = [surface for surface, _ in window]
+            pattern = (
+                r"(?<!\w)"
+                + r"(?:\s|[^\w])+"
+                .join(re.escape(surface) for surface in surfaces)
+                + r"(?!\w)"
+            )
+
+            match = re.search(pattern, text, re.IGNORECASE)
+
+            if match:
+                break
+
+    if match is None:
+        for candidate in (label, term):
+            if not candidate:
+                continue
+
+            match = re.search(
+                re.escape(candidate),
+                text,
+                re.IGNORECASE,
+            )
+
+            if match:
+                break
+
+    if match is None:
+        return text[:520]
+
+    start = max(0, match.start() - before)
+    end = min(len(text), match.end() + after)
+
+    snippet = text[start:end].strip()
+
+    if start > 0:
+        snippet = "…" + snippet
+
+    if end < len(text):
+        snippet += "…"
+
+    return snippet
 
 
 def choose_examples(
@@ -108,6 +207,7 @@ def choose_examples(
 
     candidates.sort(
         key=lambda row: (
+            -float(row["routing_score"]),
             str(row["first_seen_at"]),
             row["content_id"],
         )
@@ -116,7 +216,8 @@ def choose_examples(
     selected = []
     used_sources = set()
 
-    # Pass 1: maximize source diversity.
+    # Прохід 1: зберігаємо різноманітність джерел
+    # у порядку спадання routing score.
     for row in candidates:
         sources = tuple(row.get("source_names") or [])
         primary_source = sources[0] if sources else "unknown"
@@ -130,7 +231,7 @@ def choose_examples(
         if len(selected) >= limit:
             return selected
 
-    # Pass 2: fill remaining slots deterministically.
+    # Прохід 2: детерміновано заповнюємо решту місць.
     selected_ids = {
         row["content_id"]
         for row in selected
@@ -148,12 +249,21 @@ def choose_examples(
     return selected
 
 
-def compact(row: dict) -> dict:
+def compact(
+    row: dict,
+    term: str,
+    label: str,
+) -> dict:
     return {
         "content_id": row["content_id"],
         "title": row["title"],
-        "text_preview": row["text_preview"],
+        "text_preview": term_centered_preview(
+            row,
+            term,
+            label,
+        ),
         "first_seen_at": row["first_seen_at"],
+        "routing_score": row["routing_score"],
         "published_at": row["published_at"],
         "source_names": row["source_names"] or [],
         "source_types": row["source_types"] or [],
@@ -183,8 +293,8 @@ def main() -> int:
         "meta": {
             "examples_per_term": EXAMPLES_PER_TERM,
             "selection": (
-                "deterministic; source-diverse first, "
-                "then first_seen_at/content_id"
+                "deterministic; routing_score desc, "
+                "source-diverse, then first_seen_at/content_id"
             ),
         },
         "groups": {},
@@ -211,7 +321,11 @@ def main() -> int:
                 "documents": row["documents"],
                 "doc_pct": row["doc_pct"],
                 "examples": [
-                    compact(example)
+                    compact(
+                        example,
+                        term,
+                        row.get("label", term),
+                    )
                     for example in examples
                 ],
             }
@@ -235,7 +349,11 @@ def main() -> int:
                 "delta_pct": row["delta_pct"],
                 "score": row["score"],
                 "examples": [
-                    compact(example)
+                    compact(
+                        example,
+                        term,
+                        row.get("label", term),
+                    )
                     for example in examples
                 ],
             }
