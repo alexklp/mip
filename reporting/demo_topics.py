@@ -8,7 +8,7 @@ from pathlib import Path
 
 import psycopg
 
-from morphology import detect_language, normalized_tokens
+from morphology import detect_language, lemmatize_words, normalized_tokens
 from nlp_prepare import (
     DB_DSN,
     clean_text,
@@ -69,13 +69,40 @@ def load_noise() -> set[str]:
 def visible_term(term: str, noise: set[str]) -> bool:
     parts = term.lower().split()
 
-    if any(part.isdigit() for part in parts):
+    if any(
+        part.replace(",", "").replace(".", "").replace("%", "").isdigit()
+        for part in parts
+    ):
         return False
 
     if any(part in noise for part in parts):
         return False
 
     return True
+
+
+def analysis_tokens_with_surfaces(
+    text: str,
+    lang: str,
+    stopwords: set[str],
+) -> tuple[list[str], list[str]]:
+    if lang not in ("uk", "ru"):
+        tokens = tokenize(text)
+        return tokens, tokens
+
+    normalized = []
+    surfaces = []
+
+    for surface, lemma, pos in lemmatize_words(text, lang):
+        if pos == "PUNCT":
+            continue
+
+        normalized.append(
+            surface if surface in stopwords else lemma
+        )
+        surfaces.append(surface)
+
+    return normalized, surfaces
 
 
 def process_slice(
@@ -97,99 +124,33 @@ def process_slice(
         end_at=end_at,
     )
 
-    # DEMO relevance gate.
-    #
-    # Presentation-only high-precision subset:
-    #   - start from routing v1 = analyze;
-    #   - suppress known observed off-topic failure classes;
-    #   - suppress standalone accidents/fires unless a conflict/security
-    #     signal is present.
-    #
-    # This is NOT a production reporting-relevance baseline.
-
-    offtopic_re = (
-        r"амурск.{0,40}гхк|"
-        r"газохимическ.{0,30}комплекс|"
-        r"крипто|defi|биткоин|криптобирж|"
-        r"пологов|роддом|немовлят|новорожден|"
-        r"вьетнам|макнамар|"
-        r"берлінськ.{0,25}конференц|"
-        r"берлинск.{0,25}конференц|"
-        r"територія[ ]+терору|музе|"
-        r"таджикистан.{0,120}гуманитар|"
-        r"гуманитар.{0,120}таджикистан|"
-        r"беженц|"
-        r"дтп|"
-        r"збив.{0,40}пенсіон|"
-        r"сбил.{0,40}пенсион|"
-        r"мошеннич|шахрай|"
-        r"рождаем|народжуван|"
-        r"солнечн.{0,30}вспыш|"
-        r"сонячн.{0,30}спалах|"
-        r"школ.{0,60}телефон|"
-        r"ахмат.{0,40}кадыров|"
-        r"ахмат-хаджи|"
-        r"доллі[ ]+партон|"
-        r"долли[ ]+партон"
-    )
-
-    accident_re = (
-        r"пожар|пожеж|возгоран|загорел|займан|"
-        r"авари|катастроф|вибух|взрыв"
-    )
-
-    conflict_signal_re = (
-        r"бпла|дрон|всу|зсу|"
-        r"удар|атак|обстр|ракет|ппо|шахед|"
-        r"фронт|боев|бойов|"
-        r"мобилиз|мобіліз|тцк|"
-        r"минобор|мінобор|генштаб|"
-        r"сбу|гур|фсб|цру|нато|"
-        r"санкц|спецслужб|"
-        r"оккуп|окуп|"
-        r"кремл|путин|путін|зеленськ"
-    )
-
+    # Корпус для аналітичної звітності:
+    # лише високовпевнена гілка "analyze" з routing v1.
     with conn.cursor() as cur:
         cur.execute(
             """
-            WITH candidate AS (
-                SELECT DISTINCT
-                    ci.content_id::text AS content_id,
-                    coalesce(ci.title, '') || ' ' ||
-                    coalesce(ci.text_content, '') AS full_text
-                FROM content_items ci
-                JOIN content_routing_decisions crd
-                  ON crd.content_id = ci.content_id
-                 AND crd.routing_version = 1
-                 AND crd.decision = 'analyze'
-                JOIN item_occurrences io
-                  ON io.content_id = ci.content_id
-                JOIN sources s
-                  ON s.source_id = io.source_id
-                WHERE s.source_group = %s
-                  AND ci.first_seen_at >= %s::timestamptz
-                  AND ci.first_seen_at <  %s::timestamptz
-            )
-            SELECT content_id
-            FROM candidate
-            WHERE full_text !~* %s
-              AND NOT (
-                    full_text ~* %s
-                    AND full_text !~* %s
-                  )
+            SELECT DISTINCT ci.content_id::text
+            FROM content_items ci
+            JOIN content_routing_decisions crd
+              ON crd.content_id = ci.content_id
+             AND crd.routing_version = 1
+             AND crd.decision = 'analyze'
+            JOIN item_occurrences io
+              ON io.content_id = ci.content_id
+            JOIN sources src
+              ON src.source_id = io.source_id
+            WHERE src.source_group = %s
+              AND ci.first_seen_at >= %s::timestamptz
+              AND ci.first_seen_at <  %s::timestamptz
             """,
             (
                 source_group,
                 start_at,
                 end_at,
-                offtopic_re,
-                accident_re,
-                conflict_signal_re,
             ),
         )
 
-        demo_ids = {
+        analyze_ids = {
             row[0]
             for row in cur.fetchall()
         }
@@ -199,18 +160,21 @@ def process_slice(
     rows = [
         row
         for row in rows
-        if str(row[0]) in demo_ids
+        if str(row[0]) in analyze_ids
     ]
 
     print(
         f"{source_group} "
         f"{start_at[:10]} "
-        f"demo_selected={len(rows)}/{observed_count}",
+        f"analyze_selected={len(rows)}/{observed_count}",
         flush=True,
     )
 
     unigram_df = Counter()
     bigram_df = Counter()
+
+    unigram_labels: dict[str, Counter] = defaultdict(Counter)
+    bigram_labels: dict[str, Counter] = defaultdict(Counter)
 
     unigram_docs: dict[str, list[str]] = defaultdict(list)
     bigram_docs: dict[str, list[str]] = defaultdict(list)
@@ -226,14 +190,11 @@ def process_slice(
 
         lang = detect_language(cleaned)
 
-        if lang in ("uk", "ru"):
-            tokens = normalized_tokens(
-                cleaned,
-                lang,
-                stopwords,
-            )
-        else:
-            tokens = tokenize(cleaned)
+        tokens, surfaces = analysis_tokens_with_surfaces(
+            cleaned,
+            lang,
+            stopwords,
+        )
 
         unigrams = document_terms(
             tokens,
@@ -249,6 +210,16 @@ def process_slice(
 
         unigram_df.update(unigrams.keys())
         bigram_df.update(bigrams.keys())
+
+        for token, surface in zip(tokens, surfaces):
+            if token in unigrams:
+                unigram_labels[token][surface] += 1
+
+        for j in range(len(tokens) - 1):
+            term = f"{tokens[j]} {tokens[j + 1]}"
+            if term in bigrams:
+                label = f"{surfaces[j]} {surfaces[j + 1]}"
+                bigram_labels[term][label] += 1
 
         if keep_doc_ids:
             cid = str(content_id)
@@ -271,6 +242,8 @@ def process_slice(
         "documents": total,
         "unigram_df": unigram_df,
         "bigram_df": bigram_df,
+        "unigram_labels": unigram_labels,
+        "bigram_labels": bigram_labels,
         "unigram_docs": unigram_docs,
         "bigram_docs": bigram_docs,
     }
@@ -304,6 +277,7 @@ def top_unigrams(
         result.append(
             {
                 "term": term,
+                "label": term,
                 "documents": docs,
                 "doc_pct": round(100.0 * docs / n, 3) if n else 0.0,
                 "content_ids": data["unigram_docs"][term],
@@ -347,9 +321,20 @@ def temporal_shift(
             old_n,
         )
 
+        labels = (
+            new["bigram_labels"].get(term)
+            or old["bigram_labels"].get(term)
+        )
+        label = (
+            labels.most_common(1)[0][0]
+            if labels
+            else term
+        )
+
         rows.append(
             {
                 "term": term,
+                "label": label,
                 "score": round(score, 6),
                 "old_documents": old_docs,
                 "new_documents": new_docs,
@@ -390,7 +375,9 @@ def temporal_shift(
 
 def main() -> int:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    noise = load_noise()\n    unigram_noise = noise | DEMO_GENERIC_UNIGRAMS\n
+    noise = load_noise()
+    unigram_noise = noise | DEMO_GENERIC_UNIGRAMS
+
     result = {
         "meta": {
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -460,7 +447,7 @@ def main() -> int:
         print(f"\n===== {group} TOP THEMES =====")
         for row in block["top_unigrams"][:10]:
             print(
-                f"{row['term']:24} "
+                f"{row.get('label', row['term']):24} "
                 f"{row['documents']:4d} "
                 f"{row['doc_pct']:6.2f}%"
             )
@@ -468,7 +455,7 @@ def main() -> int:
         print(f"\n===== {group} EMERGING BIGRAMS =====")
         for row in block["bigram_shift"]["emerging"][:10]:
             print(
-                f"{row['term']:30} "
+                f"{row.get('label', row['term']):30} "
                 f"{row['old_pct']:6.2f}% -> "
                 f"{row['new_pct']:6.2f}% "
                 f"({row['delta_pct']:+6.2f})"
