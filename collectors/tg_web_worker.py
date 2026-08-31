@@ -21,6 +21,7 @@ import hashlib
 import html
 import json
 import logging
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -35,7 +36,7 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
 COLLECTOR_NAME = "tg_web_worker"
-COLLECTOR_VERSION = "0.2.0"
+COLLECTOR_VERSION = "0.2.1"
 MIN_TEXT_LEN = 30
 POLL_INTERVAL_SEC = 300
 BETWEEN_SOURCES_DELAY_SEC = 0.7  # ввічливість до t.me, не женемо скрейпінг
@@ -72,9 +73,50 @@ def fetch_active_sources(conn):
         return cur.fetchall()
 
 
+def get_proxy_url():
+    """Повертає SOCKS-проксі для доступу до Telegram web-preview."""
+    proxy_url = (
+        os.environ.get("MIP_TG_PROXY_URL")
+        or os.environ.get("MIP_RSS_PROXY_URL")
+    )
+    if not proxy_url:
+        raise RuntimeError(
+            "MIP_TG_PROXY_URL або MIP_RSS_PROXY_URL не встановлено"
+        )
+    return proxy_url
+
+
 def fetch_posts(url):
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=20)
-    resp.raise_for_status()
+    proxy_url = get_proxy_url()
+    proxies = {
+        "http": proxy_url,
+        "https": proxy_url,
+    }
+
+    last_exc = None
+    for attempt in range(1, 4):
+        try:
+            resp = requests.get(
+                url,
+                headers={"User-Agent": USER_AGENT},
+                proxies=proxies,
+                timeout=20,
+            )
+            resp.raise_for_status()
+            break
+        except requests.exceptions.RequestException as exc:
+            last_exc = exc
+            if attempt == 3:
+                raise
+            log.warning(
+                "fetch attempt %d/3 failed for %s: %s; retrying",
+                attempt,
+                url,
+                exc,
+            )
+            time.sleep(2 * attempt)
+    else:
+        raise last_exc
     soup = BeautifulSoup(resp.text, "html.parser")
     posts = []
     for msg in soup.select("div.tgme_widget_message[data-post]"):
