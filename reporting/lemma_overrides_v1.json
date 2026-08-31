@@ -19,6 +19,16 @@
       "lemma": "реткліффа",
       "surface_prefix": "реткліфф",
       "replace": "реткліфф"
+    },
+    {
+      "lemma": "різ",
+      "surface_prefix": "розі",
+      "replace": "ріг"
+    },
+    {
+      "lemma": "розь",
+      "surface_prefix": "розі",
+      "replace": "ріг"
     }
   ],
   "ru": [
