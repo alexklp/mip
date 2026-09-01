@@ -42,7 +42,6 @@ DB_DSN = "dbname=mip_dev"
 
 LLM_MODEL_ID = 1
 PROMPT_ID = 1
-ATTEMPT_NO = 1
 ROUTING_VERSION = 1
 ASSIGNMENT_VERSION = 1
 
@@ -333,8 +332,22 @@ def fetch_batch(
                       ON s.source_id = io.source_id
                     WHERE io.content_id = ci.content_id
                       AND s.contour_id = 4
-                ) AS c4_eligible
+                ) AS c4_eligible,
+                history.next_attempt_no
             FROM content_items ci
+            CROSS JOIN LATERAL (
+                SELECT
+                    COALESCE(MAX(r.attempt_no), 0) + 1
+                        AS next_attempt_no,
+                    COALESCE(
+                        BOOL_OR(r.status IN ('valid', 'invalid')),
+                        false
+                    ) AS has_terminal
+                FROM contour_classification_runs r
+                WHERE r.content_id = ci.content_id
+                  AND r.llm_model_id = %s
+                  AND r.prompt_id = %s
+            ) history
             WHERE EXISTS (
                 SELECT 1
                 FROM item_occurrences io
@@ -351,24 +364,16 @@ def fetch_batch(
                       OR cr.decision = %s::text
                   )
             )
-            AND NOT EXISTS (
-                SELECT 1
-                FROM contour_classification_runs r
-                WHERE r.content_id = ci.content_id
-                  AND r.llm_model_id = %s
-                  AND r.prompt_id = %s
-                  AND r.attempt_no = %s
-            )
+            AND NOT history.has_terminal
             ORDER BY ci.first_seen_at {order_sql}, ci.content_id {order_sql}
             LIMIT %s
             """,
             (
+                LLM_MODEL_ID,
+                PROMPT_ID,
                 ROUTING_VERSION,
                 decision,
                 decision,
-                LLM_MODEL_ID,
-                PROMPT_ID,
-                ATTEMPT_NO,
                 limit,
             ),
         )
@@ -457,6 +462,7 @@ def insert_run(
     conn,
     *,
     content_id: str,
+    attempt_no: int,
     status: str,
     errors: list[str] | None,
     raw_response: str | None,
@@ -499,7 +505,7 @@ def insert_run(
                 content_id,
                 LLM_MODEL_ID,
                 PROMPT_ID,
-                ATTEMPT_NO,
+                attempt_no,
                 status,
                 Jsonb(errors) if errors is not None else None,
                 raw_response,
@@ -597,6 +603,7 @@ def process_one(
     conn,
     *,
     content_id: str,
+    attempt_no: int,
     title: str | None,
     text_content: str,
     c4_eligible: bool,
@@ -643,7 +650,8 @@ def process_one(
         error_msg = f"{type(exc).__name__}: {exc}"
 
         print(
-            f"[{content_id}] TRANSPORT ERROR: {error_msg}",
+            f"[{content_id}] TRANSPORT ERROR "
+            f"attempt={attempt_no}: {error_msg}",
             file=sys.stderr,
         )
 
@@ -651,6 +659,7 @@ def process_one(
             insert_run(
                 conn,
                 content_id=content_id,
+                attempt_no=attempt_no,
                 status="transport_error",
                 errors=[error_msg],
                 raw_response=None,
@@ -723,6 +732,7 @@ def process_one(
 
     print(
         f"[{content_id}] {status.upper()} "
+        f"attempt={attempt_no} "
         f"{latency:.1f}s "
         f"c4_eligible={c4_eligible} "
         f"c4_overridden={c4_overridden} "
@@ -737,6 +747,7 @@ def process_one(
         run_id = insert_run(
             conn,
             content_id=content_id,
+            attempt_no=attempt_no,
             status=status,
             errors=errors if errors else None,
             raw_response=raw_text,
@@ -815,11 +826,13 @@ def run(
             title,
             text_content,
             c4_eligible,
+            attempt_no,
         ) in batch:
             try:
                 outcome = process_one(
                     conn,
                     content_id=str(content_id),
+                    attempt_no=attempt_no,
                     title=title,
                     text_content=text_content,
                     c4_eligible=bool(c4_eligible),
@@ -857,7 +870,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Batch Mamay strategic content-contour classifier "
-            "(model_id=1, prompt_id=1, attempt_no=1)"
+            "(model_id=1, prompt_id=1)"
         )
     )
 
