@@ -1,0 +1,1123 @@
+{
+  "schema_version": "contour-pilot-report/1",
+  "items": [
+    {
+      "evidence_id": "P05",
+      "latency_sec": 25.37,
+      "finish_reason": "stop",
+      "completion_tokens": 388,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P05\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про російський інформаційний простір, офіційні заяви, військову тематику, пропагандистські наративи, суспільні настрої або оборонно-промисловий комплекс РФ.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P05",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про російський інформаційний простір, офіційні заяви, військову тематику, пропагандистські наративи, суспільні настрої або оборонно-промисловий комплекс РФ."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P05",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про російський інформаційний простір, офіційні заяви, військову тематику, пропагандистські наративи, суспільні настрої або оборонно-промисловий комплекс РФ."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          4
+        ],
+        "predicted_contours": [],
+        "contour_exact": false,
+        "facet_exact": null
+      }
+    },
+    {
+      "evidence_id": "P06",
+      "latency_sec": 24.97,
+      "finish_reason": "stop",
+      "completion_tokens": 385,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P06\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\"military_aid\"],\n      \"evidence_span\": \"Україна отримала від партнерів невелику партію ракет для Patriot\",\n      \"reason\": \"Матеріал повідомляє про отримання Україною військової допомоги у вигляді ракет для Patriot.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про російський інформаційний простір, офіційні заяви, військову тематику, пропагандистські наративи, суспільні настрої або оборонно-промисловий комплекс РФ.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P06",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "yes",
+            "facet_codes": [
+              "military_aid"
+            ],
+            "evidence_span": "Україна отримала від партнерів невелику партію ракет для Patriot",
+            "reason": "Матеріал повідомляє про отримання Україною військової допомоги у вигляді ракет для Patriot."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про російський інформаційний простір, офіційні заяви, військову тематику, пропагандистські наративи, суспільні настрої або оборонно-промисловий комплекс РФ."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P06",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "yes",
+            "facet_codes": [
+              "military_aid"
+            ],
+            "evidence_span": "Україна отримала від партнерів невелику партію ракет для Patriot",
+            "reason": "Матеріал повідомляє про отримання Україною військової допомоги у вигляді ракет для Patriot."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "C4 заблоковано deterministic provenance gate: матеріал не має occurrence з джерела sources.contour_id=4."
+          }
+        ]
+      },
+      "c4_eligible": false,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          2
+        ],
+        "predicted_contours": [
+          2
+        ],
+        "contour_exact": true,
+        "facet_exact": true
+      }
+    },
+    {
+      "evidence_id": "P07",
+      "latency_sec": 24.98,
+      "finish_reason": "stop",
+      "completion_tokens": 335,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P07\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\n        \"military_aid\"\n      ],\n      \"evidence_span\": \"подальшу військову підтримку України з боку Альянсу\",\n      \"reason\": \"Матеріал повідомляє про подальшу військову підтримку України з боку НАТО.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про загальнодержавні події в Україні.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про російський інформаційний простір.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P07",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "yes",
+            "facet_codes": [
+              "military_aid"
+            ],
+            "evidence_span": "подальшу військову підтримку України з боку Альянсу",
+            "reason": "Матеріал повідомляє про подальшу військову підтримку України з боку НАТО."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні."
+          },
+          {
+            "contour_id": 4,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про російський інформаційний простір."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P07",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "yes",
+            "facet_codes": [
+              "military_aid"
+            ],
+            "evidence_span": "подальшу військову підтримку України з боку Альянсу",
+            "reason": "Матеріал повідомляє про подальшу військову підтримку України з боку НАТО."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні."
+          },
+          {
+            "contour_id": 4,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "C4 заблоковано deterministic provenance gate: матеріал не має occurrence з джерела sources.contour_id=4."
+          }
+        ]
+      },
+      "c4_eligible": false,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          2
+        ],
+        "predicted_contours": [
+          2
+        ],
+        "contour_exact": true,
+        "facet_exact": true
+      }
+    },
+    {
+      "evidence_id": "P08",
+      "latency_sec": 25.83,
+      "finish_reason": "stop",
+      "completion_tokens": 363,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P08\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить заяв лідерів країн НАТО щодо війни в Україні.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\"rf_official_statements\"],\n      \"evidence_span\": \"Посол России в Брюсселе заявил о провокационной позиции НАТО по Украине\",\n      \"reason\": \"Матеріал містить заяву посадовця РФ щодо позиції НАТО, що відповідає facet 'rf_official_statements'.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P08",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить заяв лідерів країн НАТО щодо війни в Україні."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_official_statements"
+            ],
+            "evidence_span": "Посол России в Брюсселе заявил о провокационной позиции НАТО по Украине",
+            "reason": "Матеріал містить заяву посадовця РФ щодо позиції НАТО, що відповідає facet 'rf_official_statements'."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P08",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить заяв лідерів країн НАТО щодо війни в Україні."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_official_statements"
+            ],
+            "evidence_span": "Посол России в Брюсселе заявил о провокационной позиции НАТО по Украине",
+            "reason": "Матеріал містить заяву посадовця РФ щодо позиції НАТО, що відповідає facet 'rf_official_statements'."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          4
+        ],
+        "predicted_contours": [
+          4
+        ],
+        "contour_exact": true,
+        "facet_exact": true
+      }
+    },
+    {
+      "evidence_id": "P09",
+      "latency_sec": 26.61,
+      "finish_reason": "stop",
+      "completion_tokens": 379,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P09\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\"rf_strikes\"],\n      \"evidence_span\": \"Один из объектов под Киевом получил критические повреждения после удара\",\n      \"reason\": \"Матеріал повідомляє про ураження об'єкта під Києвом, що є ураженням, завданим Росією Україні.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P09",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "Один из объектов под Киевом получил критические повреждения после удара",
+            "reason": "Матеріал повідомляє про ураження об'єкта під Києвом, що є ураженням, завданим Росією Україні."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P09",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "Один из объектов под Киевом получил критические повреждения после удара",
+            "reason": "Матеріал повідомляє про ураження об'єкта під Києвом, що є ураженням, завданим Росією Україні."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false
+    },
+    {
+      "evidence_id": "P10",
+      "latency_sec": 27.78,
+      "finish_reason": "stop",
+      "completion_tokens": 397,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P10\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\n        \"rf_strikes\"\n      ],\n      \"evidence_span\": \"ВС РФ поразили используемую в интересах ВСУ энергетическую инфраструктуру\",\n      \"reason\": \"Матеріал повідомляє про ураження, завдане ВС РФ енергетичній інфраструктурі, що використовується в інтересах ЗСУ.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P10",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "ВС РФ поразили используемую в интересах ВСУ энергетическую инфраструктуру",
+            "reason": "Матеріал повідомляє про ураження, завдане ВС РФ енергетичній інфраструктурі, що використовується в інтересах ЗСУ."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P10",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "ВС РФ поразили используемую в интересах ВСУ энергетическую инфраструктуру",
+            "reason": "Матеріал повідомляє про ураження, завдане ВС РФ енергетичній інфраструктурі, що використовується в інтересах ЗСУ."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          4
+        ],
+        "predicted_contours": [
+          4
+        ],
+        "contour_exact": true,
+        "facet_exact": true
+      }
+    },
+    {
+      "evidence_id": "P11",
+      "latency_sec": 27.6,
+      "finish_reason": "stop",
+      "completion_tokens": 392,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P11\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\n        \"rf_strikes\"\n      ],\n      \"evidence_span\": \"ВС России продолжают наносить удары по украинской портовой инфраструктуре\",\n      \"reason\": \"Матеріал повідомляє про удари, завдані Росією по українській портовій інфраструктурі, що відповідає facet 'rf_strikes'.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P11",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "ВС России продолжают наносить удары по украинской портовой инфраструктуре",
+            "reason": "Матеріал повідомляє про удари, завдані Росією по українській портовій інфраструктурі, що відповідає facet 'rf_strikes'."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P11",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "ВС России продолжают наносить удары по украинской портовой инфраструктуре",
+            "reason": "Матеріал повідомляє про удари, завдані Росією по українській портовій інфраструктурі, що відповідає facet 'rf_strikes'."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          4
+        ],
+        "predicted_contours": [
+          4
+        ],
+        "contour_exact": true,
+        "facet_exact": true
+      }
+    },
+    {
+      "evidence_id": "P12",
+      "latency_sec": 26.87,
+      "finish_reason": "stop",
+      "completion_tokens": 380,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P12\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\n        \"rf_strikes\"\n      ],\n      \"evidence_span\": \"об ударах по объектам на Украине\",\n      \"reason\": \"Матеріал повідомляє про удари, завдані по об'єктах на території України, що є інформацією про дії РФ.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P12",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "об ударах по объектам на Украине",
+            "reason": "Матеріал повідомляє про удари, завдані по об'єктах на території України, що є інформацією про дії РФ."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P12",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "об ударах по объектам на Украине",
+            "reason": "Матеріал повідомляє про удари, завдані по об'єктах на території України, що є інформацією про дії РФ."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false
+    },
+    {
+      "evidence_id": "P13",
+      "latency_sec": 26.56,
+      "finish_reason": "stop",
+      "completion_tokens": 380,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P13\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\n        \"rf_strikes\"\n      ],\n      \"evidence_span\": \"ВС России поразили склады с военным имуществом в украинских портах\",\n      \"reason\": \"Матеріал повідомляє про ураження, завдане Росією по складах в українських портах.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P13",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "ВС России поразили склады с военным имуществом в украинских портах",
+            "reason": "Матеріал повідомляє про ураження, завдане Росією по складах в українських портах."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P13",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "ВС России поразили склады с военным имуществом в украинских портах",
+            "reason": "Матеріал повідомляє про ураження, завдане Росією по складах в українських портах."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          4
+        ],
+        "predicted_contours": [
+          4
+        ],
+        "contour_exact": true,
+        "facet_exact": true
+      }
+    },
+    {
+      "evidence_id": "P14",
+      "latency_sec": 25.19,
+      "finish_reason": "stop",
+      "completion_tokens": 357,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P14\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну підтримку України, санкції, НАТО або оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про загальнодержавні події в Україні, рішення керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про російський інформаційний простір, пропаганду, суспільні настрої або оборонно-промисловий комплекс РФ.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P14",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну підтримку України, санкції, НАТО або оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про російський інформаційний простір, пропаганду, суспільні настрої або оборонно-промисловий комплекс РФ."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P14",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну підтримку України, санкції, НАТО або оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про загальнодержавні події в Україні, рішення керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про російський інформаційний простір, пропаганду, суспільні настрої або оборонно-промисловий комплекс РФ."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false
+    },
+    {
+      "evidence_id": "P15",
+      "latency_sec": 27.09,
+      "finish_reason": "stop",
+      "completion_tokens": 386,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P15\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\n        \"rf_strikes\"\n      ],\n      \"evidence_span\": \"ВС РФ в порту Рени поразили склады с вооружением, военной техникой и имуществом ВСУ\",\n      \"reason\": \"Матеріал повідомляє про ураження, завдане РФ по території України.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P15",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "ВС РФ в порту Рени поразили склады с вооружением, военной техникой и имуществом ВСУ",
+            "reason": "Матеріал повідомляє про ураження, завдане РФ по території України."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P15",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "ВС РФ в порту Рени поразили склады с вооружением, военной техникой и имуществом ВСУ",
+            "reason": "Матеріал повідомляє про ураження, завдане РФ по території України."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          4
+        ],
+        "predicted_contours": [
+          4
+        ],
+        "contour_exact": true,
+        "facet_exact": true
+      }
+    },
+    {
+      "evidence_id": "P16",
+      "latency_sec": 26.42,
+      "finish_reason": "stop",
+      "completion_tokens": 375,
+      "fence_stripped": true,
+      "valid": true,
+      "errors": [],
+      "model_valid": true,
+      "model_errors": [],
+      "raw_response": "```json\n{\n  \"schema_version\": \"contour-classification/1\",\n  \"evidence_id\": \"P16\",\n  \"decisions\": [\n    {\n      \"contour_id\": 1,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про об'єкти ДШВ ЗСУ.\"\n    },\n    {\n      \"contour_id\": 2,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст.\"\n    },\n    {\n      \"contour_id\": 3,\n      \"decision\": \"no\",\n      \"facet_codes\": [],\n      \"evidence_span\": null,\n      \"reason\": \"Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру.\"\n    },\n    {\n      \"contour_id\": 4,\n      \"decision\": \"yes\",\n      \"facet_codes\": [\n        \"rf_strikes\"\n      ],\n      \"evidence_span\": \"Россия нанесла комбинированные удары по Украине\",\n      \"reason\": \"Матеріал повідомляє про удари, завдані Росією по Україні.\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P16",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "Россия нанесла комбинированные удары по Украине",
+            "reason": "Матеріал повідомляє про удари, завдані Росією по Україні."
+          }
+        ]
+      },
+      "effective_parsed": {
+        "schema_version": "contour-classification/1",
+        "evidence_id": "P16",
+        "decisions": [
+          {
+            "contour_id": 1,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про об'єкти ДШВ ЗСУ."
+          },
+          {
+            "contour_id": 2,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про міжнародну військову підтримку України, рішення партнерів, санкції, НАТО або світовий оборонно-промисловий контекст."
+          },
+          {
+            "contour_id": 3,
+            "decision": "no",
+            "facet_codes": [],
+            "evidence_span": null,
+            "reason": "Матеріал не містить інформації про події загальнодержавного значення в Україні, рішення державного і військового керівництва, мобілізацію або критичну інфраструктуру."
+          },
+          {
+            "contour_id": 4,
+            "decision": "yes",
+            "facet_codes": [
+              "rf_strikes"
+            ],
+            "evidence_span": "Россия нанесла комбинированные удары по Украине",
+            "reason": "Матеріал повідомляє про удари, завдані Росією по Україні."
+          }
+        ]
+      },
+      "c4_eligible": true,
+      "c4_overridden": false,
+      "gold": {
+        "contours": [
+          4
+        ],
+        "predicted_contours": [
+          4
+        ],
+        "contour_exact": true,
+        "facet_exact": true
+      }
+    }
+  ],
+  "summary": {
+    "processed": 12,
+    "valid": 12,
+    "contour_exact": "8/9",
+    "facet_exact": "8/8"
+  }
+}

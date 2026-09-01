@@ -1,0 +1,176 @@
+{
+  "gold_version": 1,
+  "fixture_version": 1,
+  "items": [
+    {
+      "evidence_id": "P01",
+      "scoreable": true,
+      "contours": [
+        3
+      ],
+      "facets": {},
+      "note": "Український аналітичний матеріал про оборону Донеччини та зміни в управлінні військами. Згадки об'єктів ДШВ є контекстними; матеріал не є ворожим медіаресурсом."
+    },
+    {
+      "evidence_id": "P02",
+      "scoreable": true,
+      "contours": [
+        1
+      ],
+      "facets": {},
+      "note": "7 корпус ДШВ — прямий C1."
+    },
+    {
+      "evidence_id": "P03",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {},
+      "note": "Російський військовий контент; C1 semantic hit хибний."
+    },
+    {
+      "evidence_id": "P04",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {},
+      "note": "Російський військовий контент; C1 semantic hit хибний."
+    },
+    {
+      "evidence_id": "P05",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {},
+      "note": "Російська інформаційна подача про НАТО; недостатньо підстав для C2 facet."
+    },
+    {
+      "evidence_id": "P06",
+      "scoreable": true,
+      "contours": [
+        2
+      ],
+      "facets": {
+        "2": [
+          "military_aid"
+        ]
+      },
+      "note": "Пряма військова допомога Україні від партнерів."
+    },
+    {
+      "evidence_id": "P07",
+      "scoreable": true,
+      "contours": [
+        2
+      ],
+      "facets": {
+        "2": [
+          "military_aid"
+        ]
+      },
+      "note": "Підтвердження військової підтримки України з боку НАТО; nato_statements не застосовується, оскільки це не заява лідера країни НАТО."
+    },
+    {
+      "evidence_id": "P08",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {
+        "4": [
+          "rf_official_statements"
+        ]
+      },
+      "note": "Офіційна російська заява щодо НАТО та України."
+    },
+    {
+      "evidence_id": "P09",
+      "scoreable": false,
+      "contours": [],
+      "facets": {},
+      "note": "Недостатньо тексту: невідомий тип пошкодженого об'єкта та контекст повідомлення."
+    },
+    {
+      "evidence_id": "P10",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {
+        "4": [
+          "rf_strikes"
+        ]
+      },
+      "note": "Текст прямо підтверджує удар РФ по енергетичній інфраструктурі, що використовується в інтересах ЗСУ, але не підтверджує, що це саме критична інфраструктура України."
+    },
+    {
+      "evidence_id": "P11",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {
+        "4": [
+          "rf_strikes"
+        ]
+      },
+      "note": "Російська подача ударів по портовій інфраструктурі України; критичний статус інфраструктури прямо не підтверджений."
+    },
+    {
+      "evidence_id": "P12",
+      "scoreable": false,
+      "contours": [],
+      "facets": {},
+      "note": "Заголовок не дає достатньо підстав однозначно визначити суб'єкта Міноборони та тип цілей."
+    },
+    {
+      "evidence_id": "P13",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {
+        "4": [
+          "rf_strikes"
+        ]
+      },
+      "note": "Російська подача удару по військових складах в Україні."
+    },
+    {
+      "evidence_id": "P14",
+      "scoreable": false,
+      "contours": [],
+      "facets": {},
+      "note": "Є лише заголовок про коментар ЗСУ; недостатньо для надійного facet-level gold."
+    },
+    {
+      "evidence_id": "P15",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {
+        "4": [
+          "rf_strikes"
+        ]
+      },
+      "note": "Російська подача удару по військових об'єктах у порту Рені."
+    },
+    {
+      "evidence_id": "P16",
+      "scoreable": true,
+      "contours": [
+        4
+      ],
+      "facets": {
+        "4": [
+          "rf_strikes"
+        ]
+      },
+      "note": "Російська подача комбінованих ударів по Україні."
+    }
+  ]
+}
