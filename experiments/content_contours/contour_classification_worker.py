@@ -266,7 +266,7 @@ def build_prompt(
     }
 
     replacements = {
-        "<<CATALOG_JSON>>": json.dumps(
+        "<<CONTOUR_CATALOG_JSON>>": json.dumps(
             catalog,
             ensure_ascii=False,
             indent=2,
