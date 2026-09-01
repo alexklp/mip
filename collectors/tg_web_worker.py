@@ -74,33 +74,34 @@ def fetch_active_sources(conn):
 
 
 def get_proxy_url():
-    """Повертає SOCKS-проксі для доступу до Telegram web-preview."""
-    proxy_url = (
-        os.environ.get("MIP_TG_PROXY_URL")
-        or os.environ.get("MIP_RSS_PROXY_URL")
-    )
-    if not proxy_url:
-        raise RuntimeError(
-            "MIP_TG_PROXY_URL або MIP_RSS_PROXY_URL не встановлено"
-        )
-    return proxy_url
+    """Optional SOCKS proxy for Telegram web-preview.
+
+    Telegram is accessed directly by default. Set MIP_TG_PROXY_URL only
+    when this deployment explicitly requires Telegram traffic through SOCKS.
+    """
+    return os.environ.get("MIP_TG_PROXY_URL")
 
 
 def fetch_posts(url):
     proxy_url = get_proxy_url()
-    proxies = {
-        "http": proxy_url,
-        "https": proxy_url,
+
+    request_kwargs = {
+        "headers": {"User-Agent": USER_AGENT},
+        "timeout": 20,
     }
+
+    if proxy_url:
+        request_kwargs["proxies"] = {
+            "http": proxy_url,
+            "https": proxy_url,
+        }
 
     last_exc = None
     for attempt in range(1, 4):
         try:
             resp = requests.get(
                 url,
-                headers={"User-Agent": USER_AGENT},
-                proxies=proxies,
-                timeout=20,
+                **request_kwargs,
             )
             resp.raise_for_status()
             break
