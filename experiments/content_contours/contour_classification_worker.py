@@ -304,6 +304,7 @@ def fetch_batch(
     conn,
     limit: int,
     decision: str | None,
+    order: str,
 ) -> list[tuple]:
     """
     Idempotent eligibility:
@@ -313,9 +314,14 @@ def fetch_batch(
         model/prompt/attempt;
       - C4 eligibility is calculated from provenance, not source_group labels.
     """
+    if order not in {"oldest", "newest"}:
+        raise ValueError(f"unsupported order: {order}")
+
+    order_sql = "ASC" if order == "oldest" else "DESC"
+
     with conn.cursor() as cur:
         cur.execute(
-            """
+            f"""
             SELECT
                 ci.content_id,
                 ci.title,
@@ -353,7 +359,7 @@ def fetch_batch(
                   AND r.prompt_id = %s
                   AND r.attempt_no = %s
             )
-            ORDER BY ci.first_seen_at
+            ORDER BY ci.first_seen_at {order_sql}, ci.content_id {order_sql}
             LIMIT %s
             """,
             (
@@ -779,7 +785,11 @@ def process_one(
     return status
 
 
-def run(limit: int, decision: str | None) -> int:
+def run(
+    limit: int,
+    decision: str | None,
+    order: str,
+) -> int:
     code_revision = get_code_revision()
 
     summary = {
@@ -792,11 +802,11 @@ def run(limit: int, decision: str | None) -> int:
     with psycopg.connect(DB_DSN) as conn:
         prompt_text = fetch_and_verify_registry(conn)
         catalog, allowed_facets = load_catalog(conn)
-        batch = fetch_batch(conn, limit, decision)
+        batch = fetch_batch(conn, limit, decision, order)
 
         print(
             f"batch: {len(batch)} content_id(s) eligible "
-            f"(limit={limit}, decision={decision}), "
+            f"(limit={limit}, decision={decision}, order={order}), "
             f"code_revision={code_revision}"
         )
 
@@ -868,12 +878,22 @@ def main() -> int:
         ),
     )
 
+    parser.add_argument(
+        "--order",
+        choices=("oldest", "newest"),
+        default="oldest",
+        help=(
+            "eligible content ordering by first_seen_at; "
+            "default: oldest"
+        ),
+    )
+
     args = parser.parse_args()
 
     if args.limit <= 0:
         parser.error("--limit must be > 0")
 
-    return run(args.limit, args.decision)
+    return run(args.limit, args.decision, args.order)
 
 
 if __name__ == "__main__":
