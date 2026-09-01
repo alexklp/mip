@@ -46,6 +46,9 @@ ATTEMPT_NO = 1
 ROUTING_VERSION = 1
 ASSIGNMENT_VERSION = 1
 
+# Facets not yet calibrated well enough for automatic materialization.
+SUPPRESSED_C1_FACETS = {"movement_opsec", "personnel"}
+
 EXPECTED_MODEL_NAME = "MamayLM-Gemma-3-27B-IT"
 EXPECTED_MODEL_REVISION = "v2.0/Q4_K_M/7677fe7e2df2"
 
@@ -407,6 +410,43 @@ def apply_c4_gate(
     return effective, overridden
 
 
+
+def apply_uncalibrated_facet_gate(
+    effective: dict,
+) -> list[str]:
+    """Suppress uncalibrated C1 facets while preserving C1 decision."""
+    c1 = next(
+        d
+        for d in effective["decisions"]
+        if d["contour_id"] == 1
+    )
+
+    original = list(c1.get("facet_codes", []))
+    suppressed = [
+        facet
+        for facet in original
+        if facet in SUPPRESSED_C1_FACETS
+    ]
+
+    if not suppressed:
+        return []
+
+    c1["facet_codes"] = [
+        facet
+        for facet in original
+        if facet not in SUPPRESSED_C1_FACETS
+    ]
+
+    c1["reason"] = (
+        c1["reason"]
+        + " Deterministic facet gate: "
+        + ", ".join(sorted(suppressed))
+        + " suppressed from effective classification pending calibration."
+    )
+
+    return suppressed
+
+
 def insert_run(
     conn,
     *,
@@ -648,12 +688,17 @@ def process_one(
 
     effective_response = None
     c4_overridden = False
+    suppressed_facets: list[str] = []
     errors = list(model_errors)
 
     if not model_errors:
         effective_response, c4_overridden = apply_c4_gate(
             parsed,
             c4_eligible=c4_eligible,
+        )
+
+        suppressed_facets = apply_uncalibrated_facet_gate(
+            effective_response
         )
 
         effective_errors = validate_result(
@@ -675,6 +720,7 @@ def process_one(
         f"{latency:.1f}s "
         f"c4_eligible={c4_eligible} "
         f"c4_overridden={c4_overridden} "
+        f"facet_suppressed={suppressed_facets} "
         f"fence_stripped={fence_stripped}"
     )
 
