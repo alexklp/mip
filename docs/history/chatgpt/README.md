@@ -30,3 +30,4 @@
 | Файл | Зміст |
 |---|---|
 | `chatgpt_20_MIP_LivePipeline_Claims_Hardening_02_09_2026.md` | Перехід від batch/backlog processing до live `analyze + newest`, hardening claim worker, cron pipeline, виміряний Mamay capacity та наступний крок — contour live/hardening. |
+| `chatgpt_21_Repo_Audit_and_Delegation_02_09_2026.md` | Repository hygiene audit, language policy, README corruption finding, AI-autograph check та практична схема делегування задач Claude. |
