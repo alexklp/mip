@@ -14,8 +14,7 @@ sql/006_add_embeddings.sql МАЄ бути застосований ДО зап�
 batch. Вже закомічені batches лишаються — повторний запуск ідемпотентно продовжує
 (SELECT з NOT EXISTS природньо пропускає вже оброблене).
 
-Потребує: uv pip install pgvector sentence-transformers
-(НЕ встановлено і НЕ запускалось в рамках цього завдання — тільки код).
+Потребує: uv pip install pgvector sentence-transformers.
 """
 
 import logging
@@ -112,7 +111,7 @@ def fetch_batch(conn, limit):
 
 def process_batch(conn, model, batch):
     """Кодує весь batch одним викликом, валідує розмірність, пише і комітить одразу весь batch.
-    Будь-яка помилка -> rollback, лог batch content_id's, виняток пробрасується нагору (стоп прогону)."""
+    Будь-яка помилка -> rollback, лог batch content_id's, виняток передається нагору (стоп прогону)."""
     content_ids = [row[0] for row in batch]
     texts = [row[1] for row in batch]
 
