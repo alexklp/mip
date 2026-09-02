@@ -4,7 +4,7 @@ experiments/content_routing/audit_skip_keywords.py — одноразова ле
 підстраховка поверх routing_scan_results.jsonl. Не заміна семантичного
 routing, а швидкий keyword grep по SKIP-зоні: якщо туди потрапило щось з
 явно військовою лексикою в title — це сигнал, що пороги/prototypes треба
-посунути ДО написання sql/009 + routing_worker.py. Одноразовий диагностичний
+посунути ДО написання sql/009 + routing_worker.py. Одноразовий діагностичний
 скрипт, не частина production pipeline.
 """
 import json

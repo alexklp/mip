@@ -11,7 +11,7 @@ per-candidate ізоляція, per-candidate транзакція, registry-ver
 pure helpers (get_code_revision/build_context_snippet/fetch_claims_meta)
 продубльовані, не імпортовані з інших worker-скриптів -- те саме рішення.
 
-Ключове рішення (sql/018_add_event_merge.sql, зафіксовано в діалозі):
+Ключове рішення (див. sql/018_add_event_merge.sql):
 жодних connected components по merge edges автоматично. Eligibility (яка
 "сторона" пари -- сирий seed чи вже canonical_event, і чи взагалі пара
 eligible для LLM виклику ЦЬОГО run) ПЕРЕВІРЯЄТЬСЯ НАЖИВО перед КОЖНИМ

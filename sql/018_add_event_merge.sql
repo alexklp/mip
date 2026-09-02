@@ -1,10 +1,10 @@
 -- 018_add_event_merge.sql
--- Event Merge / Dedup v1: объединение пересекающихся accepted_seed
+-- Event Merge / Dedup v1: об'єднання accepted_seed, що перетинаються
 -- event_candidates (из event_candidate_builder.py + event_verifier_worker.py)
 -- в canonical_events -- claims -> candidate_pairs -> relation_judgments ->
 -- event_candidates -> event_verifications -> (цей шар) -> canonical_events.
 --
--- Ключові рішення (зафіксовано в діалозі, не переглядати без причини):
+-- Ключові рішення поточного v1 контракту:
 --
 -- 1. Merge candidate генерується ДЕТЕРМІНІСТИЧНО (event_merge_candidate_builder.py)
 --    лише для ДВОХ accepted_seed event_candidates, якщо у них є хоча б один

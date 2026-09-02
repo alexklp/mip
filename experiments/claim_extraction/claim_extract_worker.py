@@ -289,7 +289,7 @@ def process_one(
     attempt_no: int,
 ) -> str:
     """Обробляє один content_id. Транзакція per-item: commit/rollback тут,
-    виняток НЕ пробрасується нагору — повертає статус для логу/summary,
+    виняток НЕ передається нагору — повертає статус для логу/summary,
     щоб один поганий item не валив batch."""
     prompt = build_prompt(prompt_text, content_id, evidence_text)
 

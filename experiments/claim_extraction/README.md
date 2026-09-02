@@ -14,23 +14,6 @@ Vertical slice для перевірки claim-extraction контракту (`s
 - `report_kupiansk_v1_run1.json`, `report_kupiansk_v1_run2.json` — історичні raw-звіти реальних прогонів (evidence експерименту, не переписуються — див. Provenance нижче).
 
 ## Архітектура: три рівні
-cat > ~/mip/experiments/claim_extraction/README.md << 'EOF'
-# claim-extraction eval — vertical slice
-
-Vertical slice для перевірки claim-extraction контракту (`schema_claim_extraction_v1.json`) на живій моделі МІП (поточно — MamayLM-Gemma-3-27B через llama.cpp). Мета: перевірити, чи модель здатна стабільно повертати атомарні, перевірювані claims у заданому JSON-контракті, і виміряти де саме контракт ламається.
-
-## Склад файлів
-
-- `schema_claim_extraction_v1.json` — JSON Schema фінального (нормалізованого) claim-запису.
-- `prompt_claim_extractor_v1.txt` — промпт-шаблон для моделі (`<<EVIDENCE_ID>>`/`<<EVIDENCE_TEXT>>` підставляються через `str.replace`, не `.format`).
-- `fixture_kupiansk_v1.json` — 8 evidence (E1-E8), купянська наративна нитка + супутні багатотемні зведення.
-- `gold_kupiansk_v1.json` — мінімальні semantic-очікування по кожному evidence для людського side-by-side review (regression baseline, не об'єктивна істина).
-- `validator.py` — суворий transport-level валідатор контракту. Нічого не «лагодить» мовчки.
-- `run_eval.py` — харнесс: fixture → prompt → live model → deterministic adapter → validator → JSON-звіт.
-- `test_validator.py`, `test_run_eval.py` — unit tests, без звернення до LLM-сервера.
-- `report_kupiansk_v1_run1.json`, `report_kupiansk_v1_run2.json` — історичні raw-звіти реальних прогонів (evidence експерименту, не переписуються — див. Provenance нижче).
-
-## Архітектура: три рівні
 
 ```
 raw model output  →  deterministic adapter  →  validator  →  (окремо) semantic review

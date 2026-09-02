@@ -4,7 +4,7 @@ C4 provenance ablation / calibration experiment.
 
 READ ONLY.
 
-Сравнивает:
+Порівнює:
 A. legacy source provenance:
    EXISTS occurrence -> source.contour_id = 4
 
@@ -12,11 +12,11 @@ B. source_group_4 + C4 semantic score
 
 C. high C4 semantic score outside source_group_4
 
-ВАЖНО:
+ВАЖЛИВО:
 - source_group_4 != strategic Content Contour 4;
 - semantic facet != actor/direction truth;
-- никакой threshold здесь не становится production baseline;
-- threshold grid нужен только для измерения поведения.
+- жоден threshold тут не стає production baseline;
+- threshold grid потрібен лише для вимірювання поведінки.
 """
 
 from __future__ import annotations

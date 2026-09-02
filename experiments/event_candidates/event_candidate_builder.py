@@ -104,7 +104,7 @@ def fetch_qualifying_edges(conn) -> list[tuple]:
     (claim_id_a, claim_id_b, score, relation_label, judgment_id,
     candidate_pair_id). claim_id_a < claim_id_b -- канонічний порядок з
     candidate_pairs, напрямок anchor/neighbor визначається пізніше в Python
-    для КОЖНОГО boku окремо (кожен claim з пари може бути anchor з іншим як
+    для КОЖНОГО боку окремо (кожен claim з пари може бути anchor з іншим як
     neighbor)."""
     with conn.cursor() as cur:
         cur.execute(

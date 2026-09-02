@@ -135,8 +135,8 @@ def clean_text(
         text = rule["regex"].sub(" ", text)
 
     # Reporting-only self-reference suppression.
-    # Убираем название самого источника из его собственных материалов,
-    # чтобы footer/promo не становились тематическими терминами.
+    # Прибираємо назву самого джерела з його власних матеріалів,
+    # щоб footer/promo не ставали тематичними термінами.
     for source_name in source_set:
         variants = {source_name}
         variants.add(re.sub(r"\s*\([^)]*\)\s*$", "", source_name))
@@ -184,9 +184,9 @@ def document_terms(
     for i in range(len(tokens) - ngram + 1):
         gram = tokens[i : i + ngram]
 
-        # Не склеиваем слова через удалённые stopwords.
-        # Для n-gram сохраняется исходная последовательность.
-        # Stopword допустим внутри trigram, но не на краях.
+        # Не склеюємо слова через видалені stopwords.
+        # Для n-gram зберігається початкова послідовність.
+        # Stopword допустимий усередині trigram, але не на краях.
         if not is_content_token(gram[0], stopwords):
             continue
         if not is_content_token(gram[-1], stopwords):

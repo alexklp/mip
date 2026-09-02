@@ -10,7 +10,7 @@ event_merge_candidates.
 дублюється (не імпортується з worker-скриптів -- за тим самим рішенням, що
 й раніше).
 
-Ключове рішення (sql/018_add_event_merge.sql, зафіксовано в діалозі):
+Ключове рішення (див. sql/018_add_event_merge.sql):
 merge candidate генерується лише для ДВОХ accepted_seed event_candidates,
 якщо у них є хоча б один спільний claim з included=true в ОБОХ. Сам overlap
 НЕ означає merge -- це лише кандидат для LLM merge-verifier

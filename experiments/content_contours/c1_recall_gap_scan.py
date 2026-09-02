@@ -4,11 +4,11 @@ C1 recall / alias-gap calibration experiment.
 
 READ ONLY.
 
-Цель:
-- исключить уже CONFIRMED exact-anchor content;
-- найти потенциально пропущенные упоминания объектов C1;
-- semantic/lexical/structural сигналы используются ТОЛЬКО для candidate generation;
-- никакой semantic score сам по себе не подтверждает объект.
+Мета:
+- виключити вже CONFIRMED exact-anchor content;
+- знайти потенційно пропущені згадки об'єктів C1;
+- semantic/lexical/structural сигнали використовуються ЛИШЕ для candidate generation;
+- жоден semantic score сам по собі не підтверджує об'єкт.
 
 Reference objects/aliases/embeddings читаются непосредственно из
 Content Contours v2 registry в PostgreSQL.

@@ -7,7 +7,7 @@ ALTER TABLE sources ADD COLUMN IF NOT EXISTS contour_id smallint CHECK (contour_
 ALTER TABLE sources ADD CONSTRAINT sources_url_or_handle_key UNIQUE (url_or_handle);
 
 -- 3. Перевірені RSS-джерела. ON CONFLICT ловить і вже існуючий рядок ТСН —
---    doставляє йому contour_id, не плодить дубль.
+--    доставляє йому contour_id, не створюючи дубль.
 INSERT INTO sources (name, url_or_handle, source_type, contour_id) VALUES
     ('ТСН',               'https://tsn.ua/rss/full.rss',                              'rss', 3),
     ('Цензор.НЕТ',        'https://assets.censor.net/rss/censor.net/rss_uk_news.xml', 'rss', 3),

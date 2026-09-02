@@ -1,7 +1,7 @@
 -- 022_seed_contour1_core_reference_v1.sql
 -- Content Contours v2: Contour 1 core reference data v1.
 --
--- Это стартовый проверяемый seed, а не полный справочник ДШВ.
+-- Це стартовий перевірюваний seed, а не повний довідник ДШВ.
 
 INSERT INTO contour_reference_objects (
     monitoring_contour_id,
