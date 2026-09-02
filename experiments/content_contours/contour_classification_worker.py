@@ -600,7 +600,6 @@ def insert_assignments(
 
 
 def process_one(
-    conn,
     *,
     content_id: str,
     attempt_no: int,
@@ -655,9 +654,11 @@ def process_one(
             file=sys.stderr,
         )
 
+        db_conn = None
         try:
+            db_conn = psycopg.connect(DB_DSN)
             insert_run(
-                conn,
+                db_conn,
                 content_id=content_id,
                 attempt_no=attempt_no,
                 status="transport_error",
@@ -671,15 +672,20 @@ def process_one(
                 code_revision=code_revision,
                 latency_ms=None,
             )
-            conn.commit()
+            db_conn.commit()
         except Exception as db_exc:
-            conn.rollback()
             print(
                 f"[{content_id}] DB ERROR while recording "
-                f"transport_error: {db_exc}",
+                f"transport_error: {type(db_exc).__name__}: {db_exc}",
                 file=sys.stderr,
             )
             return "error"
+        finally:
+            if db_conn is not None:
+                try:
+                    db_conn.close()
+                except Exception:
+                    pass
 
         return "transport_error"
 
@@ -743,9 +749,12 @@ def process_one(
     for error in errors:
         print(f"    - {error}")
 
+    db_conn = None
     try:
+        db_conn = psycopg.connect(DB_DSN)
+
         run_id = insert_run(
-            conn,
+            db_conn,
             content_id=content_id,
             attempt_no=attempt_no,
             status=status,
@@ -764,22 +773,28 @@ def process_one(
 
         if status == "valid":
             assignment_count = insert_assignments(
-                conn,
+                db_conn,
                 content_id=content_id,
                 run_id=run_id,
                 effective_response=effective_response,
                 code_revision=code_revision,
             )
 
-        conn.commit()
+        db_conn.commit()
 
     except Exception as db_exc:
-        conn.rollback()
         print(
-            f"[{content_id}] DB ERROR while persisting: {db_exc}",
+            f"[{content_id}] DB ERROR while persisting: "
+            f"{type(db_exc).__name__}: {db_exc}",
             file=sys.stderr,
         )
         return "error"
+    finally:
+        if db_conn is not None:
+            try:
+                db_conn.close()
+            except Exception:
+                pass
 
     if status == "valid":
         positive = [
@@ -815,42 +830,40 @@ def run(
         catalog, allowed_facets = load_catalog(conn)
         batch = fetch_batch(conn, limit, decision, order)
 
-        print(
-            f"batch: {len(batch)} content_id(s) eligible "
-            f"(limit={limit}, decision={decision}, order={order}), "
-            f"code_revision={code_revision}"
-        )
+    print(
+        f"batch: {len(batch)} content_id(s) eligible "
+        f"(limit={limit}, decision={decision}, order={order}), "
+        f"code_revision={code_revision}"
+    )
 
-        for (
-            content_id,
-            title,
-            text_content,
-            c4_eligible,
-            attempt_no,
-        ) in batch:
-            try:
-                outcome = process_one(
-                    conn,
-                    content_id=str(content_id),
-                    attempt_no=attempt_no,
-                    title=title,
-                    text_content=text_content,
-                    c4_eligible=bool(c4_eligible),
-                    prompt_text=prompt_text,
-                    catalog=catalog,
-                    allowed_facets=allowed_facets,
-                    code_revision=code_revision,
-                )
-            except Exception as exc:
-                conn.rollback()
-                print(
-                    f"[{content_id}] ERROR: "
-                    f"{type(exc).__name__}: {exc}",
-                    file=sys.stderr,
-                )
-                outcome = "error"
+    for (
+        content_id,
+        title,
+        text_content,
+        c4_eligible,
+        attempt_no,
+    ) in batch:
+        try:
+            outcome = process_one(
+                content_id=str(content_id),
+                attempt_no=attempt_no,
+                title=title,
+                text_content=text_content,
+                c4_eligible=bool(c4_eligible),
+                prompt_text=prompt_text,
+                catalog=catalog,
+                allowed_facets=allowed_facets,
+                code_revision=code_revision,
+            )
+        except Exception as exc:
+            print(
+                f"[{content_id}] ERROR: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            outcome = "error"
 
-            summary[outcome] = summary.get(outcome, 0) + 1
+        summary[outcome] = summary.get(outcome, 0) + 1
 
     total = sum(summary.values())
 
