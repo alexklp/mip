@@ -32,3 +32,4 @@
 | `chatgpt_20_MIP_LivePipeline_Claims_Hardening_02_09_2026.md` | Перехід від batch/backlog processing до live `analyze + newest`, hardening claim worker, cron pipeline, виміряний Mamay capacity та наступний крок — contour live/hardening. |
 | `chatgpt_21_Repo_Audit_and_Delegation_02_09_2026.md` | Repository hygiene audit, language policy, README corruption finding, AI-autograph check та практична схема делегування задач Claude. |
 | `chatgpt_22_Claim_Relation_Candidate_Scaling_02_09_2026.md` | Claim embeddings 100% coverage, масштабування `candidate_version=1`, independent review global-top-N contract, blockwise profiling як reference step та вимірювання перед v2. |
+| `chatgpt_23_Relation_Candidate_Profile_02_09_2026.md` | Фактичний профіль 188.9M cross-source-group пар: blockwise exact performance, cosine tail, degree/coverage, time-window distribution, generic hubs та next step — stratified semantic sampling. |
