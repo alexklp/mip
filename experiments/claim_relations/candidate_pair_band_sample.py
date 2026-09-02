@@ -41,10 +41,6 @@ def band_index(score: float) -> int | None:
     return None
 
 
-def canonical_pair(claim_id_a, claim_id_b):
-    return (claim_id_a, claim_id_b) if claim_id_a < claim_id_b else (claim_id_b, claim_id_a)
-
-
 def sample_corpus(corpus: dict, chunk_size: int, per_band: int, seed: int) -> tuple[list[int], list[list[dict]]]:
     vectors = corpus["vectors"]
     claim_ids = corpus["claim_ids"]
@@ -91,11 +87,13 @@ def sample_corpus(corpus: dict, chunk_size: int, per_band: int, seed: int) -> tu
 
                     global_i = int(idx_a[local_i])
                     global_j = int(idx_b[local_j])
-                    claim_id_a, claim_id_b = canonical_pair(claim_ids[global_i], claim_ids[global_j])
                     item = {
                         "score": score,
-                        "claim_id_a": claim_id_a,
-                        "claim_id_b": claim_id_b,
+                        # Для read-only display зберігаємо орієнтацію matrix block,
+                        # щоб claim_id / group / text завжди залишались узгодженими.
+                        # Канонічний UUID-order потрібен лише перед persistence.
+                        "claim_id_a": claim_ids[global_i],
+                        "claim_id_b": claim_ids[global_j],
                         "group_a": groups[global_i],
                         "group_b": groups[global_j],
                         "delta_hours": abs(int(first_seen[global_i]) - int(b_times[local_j])) / 3600.0,
@@ -125,7 +123,6 @@ def print_report(corpus: dict, seen: list[int], reservoirs: list[list[dict]], el
     for idx, ((lo, hi), items) in enumerate(zip(BANDS, reservoirs)):
         label_hi = "1.00]" if idx == len(BANDS) - 1 else f"{hi:.2f})"
         print(f"\n=== band [{lo:.2f},{label_hi} total={seen[idx]} sampled={len(items)} ===")
-        # Presentation order is deterministic and easier to inspect than reservoir order.
         items_sorted = sorted(
             items,
             key=lambda item: (-item["score"], str(item["claim_id_a"]), str(item["claim_id_b"])),
