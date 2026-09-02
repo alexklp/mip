@@ -2,7 +2,7 @@
 
 Цей каталог зберігає **історичну інженерну пам'ять проєкту МІП**, експортовану з Claude Project, який використовувався паралельно з розробкою на сервері.
 
-Файли `claude_03`–`claude_19` залишаються у вихідному вигляді як provenance/history: handoff-и, результати експериментів, калібрування, негативні результати, rationale технічних рішень і зафіксовані на той момент стани системи.
+Файли `claude_03`–`claude_22` залишаються у вихідному вигляді як provenance/history: handoff-и, результати експериментів, калібрування, негативні результати, rationale технічних рішень і зафіксовані на той момент стани системи.
 
 ## Як використовувати цей каталог
 
@@ -41,6 +41,9 @@
 | `claude_17_MIP_ContentContours_v2_AdversarialReview_25_08_2026.md` | contour design review | **Research/rationale.** Важливе розділення source provenance, deterministic anchors та strategic content classification. Частина конкретного proposed design пізніше superseded реалізацією content-contour classifier. |
 | `claude_18_MIP_ContentContours_v2_CalibrationPlan_and_Results_25_08_2026.md` | contour calibration plan | **Historical research package.** Зафіксував `source_group_set` vs future `content_contour_set` та calibration methodology. Конкретний план/статус не вважати current без звірки з новішими результатами. |
 | `claude_19_MIP_Mamay_Performance_Diagnostics_01_09_2026.md` | performance baseline | **Current reference until superseded by newer measurements.** Закриває повторне безпричинне тестування power/clock, `np=1` vs `np=4`, context-size latency і prompt-cache. CUDA-vs-Vulkan та realistic shared-prefix concurrency були залишені відкритими, а не доведеними. |
+| `claude_20_MIP_DownstreamPipeline_ReliabilityAudit_02_09_2026.md` | downstream reliability audit | **Important pre-live blocker reference.** F1: hardcoded attempt semantics роблять `transport_error` terminal; F4: `event_candidate_builder` не бачить successful retry >1; F2: DB connection/transaction lifecycle через Mamay inference. F1+F4 мають випускатися атомарно; DDL/semantic contracts змін не потребують. |
+| `claude_21_MIP_CandidatePairGeneration_ScaleReview_02_09_2026.md` | candidate-generation scale review | **Research/rationale.** Підтвердив, що global exact top-N v1 придатний як reference/profile, але не як live relation queue; bottleneck — Mamay judgment budget. Blockwise exact виправданий як вимірювальний інструмент, а live v2 має бути bounded/per-claim після вимірювань. |
+| `claude_22_MIP_RelationStage_AdversarialReview_02_09_2026.md` | adversarial relation-stage review | **Current semantic review checkpoint.** Критикує overfit до 5 regression pairs і premature signatures/ontology; рекомендує human gold set до нових prompt/threshold рішень, розділяє retrieval, cheap deterministic discrimination, referent evidence та Mamay relation semantics. |
 
 ## Особливо важливі зафіксовані уроки
 
@@ -58,6 +61,14 @@
 
 Документи `11–12` фіксують принцип: semantic relation не стає event membership автоматично. Event verification і canonical merge повторно перевіряють coherence та membership, зберігаючи provenance і не дозволяючи неконтрольоване транзитивне злиття.
 
+### Downstream reliability: retry attempt — це runtime history, а не model/prompt identity
+
+Документ `20` фіксує критичне розділення: `attempt_no` не можна трактувати як частину identity relation contract. `transport_error` має залишатися retryable, successful retry повинен бути видимий downstream, а DB connection не повинен жити через тривалий Mamay inference. `relation_judgment_worker` retry-fix і attempt-aware `event_candidate_builder` потрібно змінювати разом.
+
+### Relation semantics: не підміняти відсутність gold set новою онтологією
+
+Документи `21–22` разом з новішими вимірюваннями показують, що claim cosine добре ловить proposition/template similarity, але не є доказом event/referent identity. Не заморожувати claim/content thresholds, hub cutoffs або нову signature/entity ontology без held-out human-labeled sample. Нові pairwise prompts та independent signatures не повинні замінювати вимірювання recall/precision.
+
 ### Mamay performance: не починати діагностику заново без нового симптому
 
 Документ `19` уже містить вимірювання single-stream decode, prompt processing, power/clock, context sizing, parallel slots і prompt cache. Повторювати ці ж тести варто лише при новому симптомі, зміні runtime/model/backend або конкретній optimization hypothesis.
@@ -70,6 +81,8 @@
 - claim-extraction prompt/offset failure modes;
 - relation/event/canonicalization semantics;
 - content contour provenance vs classification;
+- candidate generation / relation semantic calibration;
+- downstream retry/transaction lifecycle;
 - Mamay/llama.cpp performance tuning.
 
 Мета archive — не «заморозити» старі рішення, а **не повторювати вже проведені експерименти без нової причини**.
