@@ -9,10 +9,9 @@ existing validator (validate_claim_extraction_response з validator.py) ->
 claim_extraction_runs (+ claims, якщо valid).
 
 Відмінності від persist_single_run.py (single item):
-  1. Вибір content_id: SQL-вибірка (NOT EXISTS проти claim_extraction_runs
-     для llm_model_id/prompt_id/attempt_no=1) замість hardcoded константи —
-     той самий idempotent-eligibility паттерн, що fetch_batch() в
-     collectors/embed_worker.py.
+  1. Вибір content_id: SQL-вибірка з terminal eligibility:
+     valid/invalid завершують item, transport_error лишається retryable
+     з наступним attempt_no.
   2. Per-item ізоляція помилок: одна "погана" item (transport error чи
      неочікуваний виняток) НЕ валить весь batch. embed_worker.py навмисно
      робить навпаки (одна помилка -> rollback усього batch, sys.exit) —
@@ -26,7 +25,7 @@ claim_extraction_runs (+ claims, якщо valid).
   5. Лог: по кожному item + summary наприкінці batch.
 
 Без змін: run_eval.py, validator.py, persist_single_run.py. Без queue/broker,
-без retry, без parallel inference, без prompt v3.
+без parallel inference, без prompt v3.
 """
 from __future__ import annotations
 
@@ -46,7 +45,6 @@ DB_DSN = "dbname=mip_dev"
 
 LLM_MODEL_ID = 1
 PROMPT_ID = 1
-ATTEMPT_NO = 1
 ROUTING_VERSION = 1
 
 # Очікувана identity — звіряється з БД, не встановлюється звідси.
@@ -103,10 +101,17 @@ def fetch_and_verify_registry(conn) -> str:
     return prompt_text_db
 
 
-def fetch_batch(conn, limit: int, contour_id: int | None, decision: str | None) -> list[tuple[str, str]]:
+def fetch_batch(
+    conn,
+    limit: int,
+    contour_id: int | None,
+    decision: str | None,
+    order: str,
+) -> list[tuple[str, str, int]]:
     """Idempotent eligibility: content з occurrence, routing-eligible
-    (analyze/maybe для поточної routing_version), без існуючого run для
-    (llm_model_id, prompt_id, attempt_no=1). Той самий паттерн, що
+    (analyze/maybe для поточної routing_version), без terminal run
+    (valid/invalid) для поточних llm_model_id/prompt_id. transport_error
+    залишається retryable з наступним attempt_no. Той самий паттерн, що
     fetch_batch() в collectors/embed_worker.py.
 
     contour_id (опційно): фільтр по sources.contour_id через item_occurrences,
@@ -116,12 +121,33 @@ def fetch_batch(conn, limit: int, contour_id: int | None, decision: str | None) 
     contour-фільтр і ordering через EXISTS/corelated subquery, без JOIN-
     фанауту, тому один content_id ніколи не дублюється в batch навіть при
     кількох occurrences в межах контуру."""
+    if order not in {"oldest", "newest"}:
+        raise ValueError(f"unsupported order: {order}")
+
+    order_sql = "ASC" if order == "oldest" else "DESC"
+
     if contour_id is None:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                SELECT ci.content_id, ci.text_content
+                f"""
+                SELECT
+                    ci.content_id,
+                    ci.text_content,
+                    history.next_attempt_no
                 FROM content_items ci
+                CROSS JOIN LATERAL (
+                    SELECT
+                        COALESCE(MAX(r.attempt_no), 0) + 1
+                            AS next_attempt_no,
+                        COALESCE(
+                            BOOL_OR(r.status IN ('valid', 'invalid')),
+                            false
+                        ) AS has_terminal
+                    FROM claim_extraction_runs r
+                    WHERE r.content_id = ci.content_id
+                      AND r.llm_model_id = %s
+                      AND r.prompt_id = %s
+                ) history
                 WHERE EXISTS (
                     SELECT 1 FROM item_occurrences io WHERE io.content_id = ci.content_id
                 )
@@ -132,23 +158,42 @@ def fetch_batch(conn, limit: int, contour_id: int | None, decision: str | None) 
                       AND cr.decision IN ('analyze', 'maybe')
                       AND (%s::text IS NULL OR cr.decision = %s::text)
                 )
-                AND NOT EXISTS (
-                    SELECT 1 FROM claim_extraction_runs r
-                    WHERE r.content_id = ci.content_id
-                      AND r.llm_model_id = %s AND r.prompt_id = %s AND r.attempt_no = %s
-                )
-                ORDER BY ci.first_seen_at
+                AND NOT history.has_terminal
+                ORDER BY ci.first_seen_at {order_sql}, ci.content_id {order_sql}
                 LIMIT %s
                 """,
-                (ROUTING_VERSION, decision, decision, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, limit),
+                (
+                    LLM_MODEL_ID,
+                    PROMPT_ID,
+                    ROUTING_VERSION,
+                    decision,
+                    decision,
+                    limit,
+                ),
             )
             return cur.fetchall()
 
     with conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT ci.content_id, ci.text_content
+            f"""
+            SELECT
+                ci.content_id,
+                ci.text_content,
+                history.next_attempt_no
             FROM content_items ci
+            CROSS JOIN LATERAL (
+                SELECT
+                    COALESCE(MAX(r.attempt_no), 0) + 1
+                        AS next_attempt_no,
+                    COALESCE(
+                        BOOL_OR(r.status IN ('valid', 'invalid')),
+                        false
+                    ) AS has_terminal
+                FROM claim_extraction_runs r
+                WHERE r.content_id = ci.content_id
+                  AND r.llm_model_id = %s
+                  AND r.prompt_id = %s
+            ) history
             WHERE EXISTS (
                 SELECT 1 FROM item_occurrences io WHERE io.content_id = ci.content_id
             )
@@ -159,11 +204,7 @@ def fetch_batch(conn, limit: int, contour_id: int | None, decision: str | None) 
                   AND cr.decision IN ('analyze', 'maybe')
                   AND (%s::text IS NULL OR cr.decision = %s::text)
             )
-            AND NOT EXISTS (
-                SELECT 1 FROM claim_extraction_runs r
-                WHERE r.content_id = ci.content_id
-                  AND r.llm_model_id = %s AND r.prompt_id = %s AND r.attempt_no = %s
-            )
+            AND NOT history.has_terminal
             AND EXISTS (
                 SELECT 1 FROM item_occurrences io
                 JOIN sources s ON s.source_id = io.source_id
@@ -174,15 +215,35 @@ def fetch_batch(conn, limit: int, contour_id: int | None, decision: str | None) 
                 FROM item_occurrences io
                 JOIN sources s ON s.source_id = io.source_id
                 WHERE io.content_id = ci.content_id AND s.contour_id = %s
-            ) DESC
+            ) {order_sql}, ci.content_id {order_sql}
             LIMIT %s
             """,
-            (ROUTING_VERSION, decision, decision, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, contour_id, contour_id, limit),
+            (
+                LLM_MODEL_ID,
+                PROMPT_ID,
+                ROUTING_VERSION,
+                decision,
+                decision,
+                contour_id,
+                contour_id,
+                limit,
+            ),
         )
         return cur.fetchall()
 
 
-def insert_run(conn, *, content_id, status, claim_count, errors, raw_response, code_revision, latency_ms) -> str:
+def insert_run(
+    conn,
+    *,
+    content_id,
+    attempt_no,
+    status,
+    claim_count,
+    errors,
+    raw_response,
+    code_revision,
+    latency_ms,
+) -> str:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -193,7 +254,7 @@ def insert_run(conn, *, content_id, status, claim_count, errors, raw_response, c
             RETURNING run_id
             """,
             (
-                content_id, LLM_MODEL_ID, PROMPT_ID, ATTEMPT_NO, status,
+                content_id, LLM_MODEL_ID, PROMPT_ID, attempt_no, status,
                 claim_count, json.dumps(errors) if errors else None, raw_response,
                 code_revision, latency_ms,
             ),
@@ -220,7 +281,13 @@ def insert_claims(conn, run_id: str, claims: list[dict]) -> None:
             )
 
 
-def process_one(conn, content_id: str, evidence_text: str, prompt_text: str, code_revision: str) -> str:
+def process_one(
+    content_id: str,
+    evidence_text: str,
+    prompt_text: str,
+    code_revision: str,
+    attempt_no: int,
+) -> str:
     """Обробляє один content_id. Транзакція per-item: commit/rollback тут,
     виняток НЕ пробрасується нагору — повертає статус для логу/summary,
     щоб один поганий item не валив batch."""
@@ -232,18 +299,36 @@ def process_one(conn, content_id: str, evidence_text: str, prompt_text: str, cod
         )
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, KeyError) as e:
         error_msg = f"{type(e).__name__}: {e}"
-        print(f"[{content_id}] TRANSPORT ERROR: {error_msg}", file=sys.stderr)
+        print(
+            f"[{content_id}] TRANSPORT ERROR "
+            f"attempt={attempt_no}: {error_msg}",
+            file=sys.stderr,
+        )
+        db_conn = None
         try:
+            db_conn = psycopg.connect(DB_DSN)
             insert_run(
-                conn, content_id=content_id, status="transport_error",
+                db_conn,
+                content_id=content_id,
+                attempt_no=attempt_no,
+                status="transport_error",
                 claim_count=None, errors=[error_msg], raw_response=None,
                 code_revision=code_revision, latency_ms=None,
             )
-            conn.commit()
+            db_conn.commit()
         except Exception as db_err:
-            conn.rollback()
-            print(f"[{content_id}] DB ERROR while recording transport_error: {db_err}", file=sys.stderr)
+            print(
+                f"[{content_id}] DB ERROR while recording transport_error: "
+                f"{type(db_err).__name__}: {db_err}",
+                file=sys.stderr,
+            )
             return "error"
+        finally:
+            if db_conn is not None:
+                try:
+                    db_conn.close()
+                except Exception:
+                    pass
         return "transport_error"
 
     # той самий orchestration, що persist_single_run.py
@@ -263,43 +348,75 @@ def process_one(conn, content_id: str, evidence_text: str, prompt_text: str, cod
     status = "valid" if validation.valid else "invalid"
     latency_ms = round(latency * 1000)
     print(
-        f"[{content_id}] {status.upper()} — {validation.claim_count} claims, "
+        f"[{content_id}] {status.upper()} "
+        f"attempt={attempt_no} — {validation.claim_count} claims, "
         f"{latency:.1f}s, fence_stripped={fence_stripped}, offset_stats={offset_stats}"
     )
     for err in validation.errors:
         print(f"    - {err}")
 
+    db_conn = None
     try:
+        db_conn = psycopg.connect(DB_DSN)
         run_id = insert_run(
-            conn, content_id=content_id, status=status,
+            db_conn,
+            content_id=content_id,
+            attempt_no=attempt_no,
+            status=status,
             claim_count=validation.claim_count,
             errors=validation.errors if validation.errors else None,
             raw_response=raw_text, code_revision=code_revision, latency_ms=latency_ms,
         )
         if status == "valid":
-            insert_claims(conn, run_id, parsed["claims"])
-        conn.commit()
+            insert_claims(db_conn, run_id, parsed["claims"])
+        db_conn.commit()
     except Exception as db_err:
-        conn.rollback()
-        print(f"[{content_id}] DB ERROR while persisting: {db_err}", file=sys.stderr)
+        print(
+            f"[{content_id}] DB ERROR while persisting: "
+            f"{type(db_err).__name__}: {db_err}",
+            file=sys.stderr,
+        )
         return "error"
+    finally:
+        if db_conn is not None:
+            try:
+                db_conn.close()
+            except Exception:
+                pass
 
     return status
 
 
-def run(limit: int, contour_id: int | None, decision: str | None) -> int:
+def run(
+    limit: int,
+    contour_id: int | None,
+    decision: str | None,
+    order: str,
+) -> int:
     code_revision = get_code_revision()
 
     summary = {"valid": 0, "invalid": 0, "transport_error": 0, "error": 0}
 
     with psycopg.connect(DB_DSN) as conn:
         prompt_text = fetch_and_verify_registry(conn)
-        batch = fetch_batch(conn, limit, contour_id, decision)
-        print(f"batch: {len(batch)} content_id(s) eligible (limit={limit}, contour_id={contour_id}, decision={decision}), code_revision={code_revision}")
+        batch = fetch_batch(conn, limit, contour_id, decision, order)
 
-        for content_id, evidence_text in batch:
-            outcome = process_one(conn, str(content_id), evidence_text, prompt_text, code_revision)
-            summary[outcome] = summary.get(outcome, 0) + 1
+    print(
+        f"batch: {len(batch)} content_id(s) eligible "
+        f"(limit={limit}, contour_id={contour_id}, "
+        f"decision={decision}, order={order}), "
+        f"code_revision={code_revision}"
+    )
+
+    for content_id, evidence_text, attempt_no in batch:
+        outcome = process_one(
+            str(content_id),
+            evidence_text,
+            prompt_text,
+            code_revision,
+            attempt_no,
+        )
+        summary[outcome] = summary.get(outcome, 0) + 1
 
     total = sum(summary.values())
     print(
@@ -310,18 +427,35 @@ def run(limit: int, contour_id: int | None, decision: str | None) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Batch claim-extraction worker (llm_model_id=1, prompt_id=1, attempt_no=1)")
+    parser = argparse.ArgumentParser(description="Batch claim-extraction worker (llm_model_id=1, prompt_id=1)")
     parser.add_argument("--limit", type=int, required=True, help="max content_items to process this run")
-    parser.add_argument("--contour-id", type=int, default=None,
-                         help="optional: restrict to sources.contour_id, order by most recent occurrence within that contour")
+    parser.add_argument(
+        "--contour-id",
+        type=int,
+        default=None,
+        help="optional: restrict to sources.contour_id",
+    )
     parser.add_argument("--decision", choices=("analyze", "maybe"), default=None,
                          help="optional: restrict routing decision; default keeps analyze+maybe")
+    parser.add_argument(
+        "--order",
+        choices=("oldest", "newest"),
+        default=None,
+        help=(
+            "eligible content ordering; default preserves legacy behavior: "
+            "oldest without --contour-id, newest with --contour-id"
+        ),
+    )
     args = parser.parse_args()
     if args.limit <= 0:
         parser.error("--limit must be > 0")
     if args.contour_id is not None and not (1 <= args.contour_id <= 4):
         parser.error("--contour-id must be between 1 and 4")
-    return run(args.limit, args.contour_id, args.decision)
+    order = args.order
+    if order is None:
+        order = "newest" if args.contour_id is not None else "oldest"
+
+    return run(args.limit, args.contour_id, args.decision, order)
 
 
 if __name__ == "__main__":
