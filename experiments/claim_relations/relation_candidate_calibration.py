@@ -4,14 +4,15 @@ Read-only Mamay calibration for relation candidate selection.
 
 Builds the current source-provenance cross-group candidate space with
 claim cosine >= 0.80, stratifies a deterministic sample by full-content
-cosine, and sends only the sampled pairs through the existing relation_judge
-v3 prompt + validator.
+cosine, and sends only the sampled pairs through relation_judge v3 with an
+additional calibration-only strict grounding instruction + validator.
 
 IMPORTANT:
 - no writes to candidate_pairs or relation_judgments;
 - no DB connection is held during Mamay inference;
 - time is not used for eligibility, ranking, or stratification;
-- intended for calibration only, not live scheduling.
+- intended for calibration only, not live scheduling;
+- production prompt/registry/DDL are NOT changed by this script.
 """
 from __future__ import annotations
 
@@ -42,6 +43,28 @@ CONTENT_BANDS = (
     (0.70, 0.80),
     (0.80, 1.000001),
 )
+
+STRICT_GROUNDING_INSTRUCTION = """
+
+КАЛІБРАЦІЙНЕ УТОЧНЕННЯ ДО КРОКУ 1 (має вищий пріоритет за будь-яку
+неоднозначну інтерпретацію прикладів вище):
+
+1. Для shared_referent_status="confirmed" evidence ОБОВ'ЯЗКОВО має містити
+   щонайменше ДВІ дослівні цитати: одну з даних claim A і одну з даних claim B.
+   Формат: A: «...». B: «...». Не підтверджуй референт цитатою лише з одного боку.
+2. Ці дві цитати мають показувати СПІЛЬНУ ІДЕНТИФІКУЮЧУ ОЗНАКУ, а не просто
+   схожий результат/тип події. Самі по собі "є постраждалі", "загинула людина",
+   "стався вибух", "працюють служби", однакова кількість постраждалих тощо
+   НІКОЛИ не підтверджують спільний референт.
+3. Якщо в даних A і B явно названі РІЗНІ конкретні локації, об'єкти, особи
+   або інциденти, shared_referent_status має бути "not_confirmed", навіть якщо
+   claim_text майже однакові.
+4. Однакова широка локація + загальний тип події теж недостатні. Наприклад,
+   два повідомлення про вибухи в одному великому місті не є підтверджено тією
+   самою подією без додаткової специфічної ознаки.
+5. Якщо ти не можеш процитувати по одній конкретній ідентифікуючій ознаці з
+   КОЖНОГО боку, обирай not_confirmed/insufficient, а не confirmed.
+""".strip()
 
 
 def content_band_index(score: float) -> int | None:
@@ -122,7 +145,6 @@ def choose_sample(bands: list[list[dict]], per_band: int, seed: int) -> list[lis
     chosen: list[list[dict]] = [[] for _ in bands]
     globally_used_claims = set()
 
-    # First pass: maximize claim diversity across the whole calibration batch.
     for idx, items in enumerate(bands):
         ordered = sorted(items, key=lambda item: stable_key(item, seed))
         for item in ordered:
@@ -135,7 +157,6 @@ def choose_sample(bands: list[list[dict]], per_band: int, seed: int) -> list[lis
             chosen[idx].append(item)
             globally_used_claims.update((a, b))
 
-    # Fallback only if a band is too small after the diversity constraint.
     for idx, items in enumerate(bands):
         if len(chosen[idx]) >= per_band:
             continue
@@ -162,6 +183,49 @@ def preview(value: str | None, limit: int = 180) -> str:
         return "<null>"
     clean = " ".join(value.split())
     return clean[:limit] + ("…" if len(clean) > limit else "")
+
+
+def inject_strict_grounding(prompt_text: str) -> str:
+    marker = "<<PAYLOAD_JSON>>"
+    if prompt_text.count(marker) != 1:
+        raise RuntimeError(f"expected exactly one {marker} placeholder in relation prompt")
+    return prompt_text.replace(marker, STRICT_GROUNDING_INSTRUCTION + "\n\n" + marker)
+
+
+def validate_two_sided_grounding(
+    raw_text: str,
+    pair_id: str,
+    meta: dict,
+    claim_id_a,
+    claim_id_b,
+) -> tuple[bool, list[str], str | None, str | None, str | None, str | None, bool]:
+    result = judge.validate_relation_judgment(raw_text, pair_id, meta, claim_id_a, claim_id_b)
+    (
+        valid,
+        errors,
+        relation_label,
+        rationale_text,
+        shared_referent_status,
+        shared_referent_evidence,
+        fence_stripped,
+    ) = result
+    if not valid or shared_referent_status != "confirmed" or not shared_referent_evidence:
+        return result
+
+    quotes = judge.extract_quotes(shared_referent_evidence)
+    ground_a = judge.claim_groundable_text(meta, claim_id_a)
+    ground_b = judge.claim_groundable_text(meta, claim_id_b)
+    has_a = any(q in ground_a for q in quotes)
+    has_b = any(q in ground_b for q in quotes)
+    if has_a and has_b:
+        return result
+
+    strict_errors = list(errors)
+    if not has_a:
+        strict_errors.append("strict grounding: confirmed referent has no verbatim quote grounded in claim A")
+    if not has_b:
+        strict_errors.append("strict grounding: confirmed referent has no verbatim quote grounded in claim B")
+    return False, strict_errors, None, None, None, None, fence_stripped
 
 
 def run_inference(item: dict, meta: dict, prompt_text: str) -> dict:
@@ -199,7 +263,7 @@ def run_inference(item: dict, meta: dict, prompt_text: str) -> dict:
         shared_referent_status,
         shared_referent_evidence,
         fence_stripped,
-    ) = judge.validate_relation_judgment(raw_text, pair_id, meta, claim_id_a, claim_id_b)
+    ) = validate_two_sided_grounding(raw_text, pair_id, meta, claim_id_a, claim_id_b)
 
     return {
         "valid": valid,
@@ -227,11 +291,10 @@ def main() -> int:
     if args.per_band <= 0:
         parser.error("--per-band must be > 0")
 
-    # Short read phase only. Close before any Mamay call.
     with psycopg.connect(base.DB_DSN) as conn:
         register_vector(conn)
         base.verify_registered_model(conn)
-        prompt_text = judge.fetch_and_verify_registry(conn)
+        prompt_text = inject_strict_grounding(judge.fetch_and_verify_registry(conn))
         claim_rows = base.fetch_claims(conn)
         content_ids = sorted({row[3] for row in claim_rows}, key=str)
         occ_by_content = base.fetch_occurrences(conn, content_ids)
@@ -266,6 +329,7 @@ def main() -> int:
     print(f"code_revision={base.get_code_revision()} embedding_model_id={base.EMBEDDING_MODEL_ID}")
     print(f"claim_min={dual.CLAIM_MIN:.2f} per_band={args.per_band} seed={args.seed}")
     print("time_signal=NOT USED for candidate selection")
+    print("grounding_mode=STRICT_TWO_SIDED_CALIBRATION")
     print(f"selected_total={len(selected)}; DB connection closed before Mamay inference")
     for idx, ((lo, hi), items) in enumerate(zip(CONTENT_BANDS, chosen)):
         hi_label = "1.00]" if idx == len(CONTENT_BANDS) - 1 else f"{hi:.2f})"
