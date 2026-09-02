@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import sys
 import time
 import urllib.error
@@ -186,10 +187,20 @@ def preview(value: str | None, limit: int = 180) -> str:
 
 
 def inject_strict_grounding(prompt_text: str) -> str:
-    marker = "<<PAYLOAD_JSON>>"
+    marker = "\n<<PAYLOAD_JSON>>\n"
     if prompt_text.count(marker) != 1:
-        raise RuntimeError(f"expected exactly one {marker} placeholder in relation prompt")
-    return prompt_text.replace(marker, STRICT_GROUNDING_INSTRUCTION + "\n\n" + marker)
+        raise RuntimeError("expected exactly one standalone payload placeholder in relation prompt")
+    injected = "\n" + STRICT_GROUNDING_INSTRUCTION + "\n\n<<PAYLOAD_JSON>>\n"
+    return prompt_text.replace(marker, injected, 1)
+
+
+def build_prompt_single_payload(template: str, payload: dict) -> str:
+    """Calibration-only: substitute only the standalone payload placeholder."""
+    marker = "\n<<PAYLOAD_JSON>>\n"
+    if template.count(marker) != 1:
+        raise RuntimeError("expected exactly one standalone payload placeholder after grounding injection")
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2)
+    return template.replace(marker, "\n" + serialized + "\n", 1)
 
 
 def validate_two_sided_grounding(
@@ -238,7 +249,7 @@ def run_inference(item: dict, meta: dict, prompt_text: str) -> dict:
         "claim_a": judge.build_claim_payload(claim_id_a, meta),
         "claim_b": judge.build_claim_payload(claim_id_b, meta),
     }
-    prompt = judge.build_prompt_safe(prompt_text, payload)
+    prompt = build_prompt_single_payload(prompt_text, payload)
 
     started = time.perf_counter()
     try:
