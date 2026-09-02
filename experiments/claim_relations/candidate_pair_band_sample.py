@@ -17,11 +17,17 @@ from __future__ import annotations
 
 import argparse
 import random
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
 import psycopg
 from pgvector.psycopg import register_vector
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from experiments.claim_relations import candidate_pair_profile as base
 
