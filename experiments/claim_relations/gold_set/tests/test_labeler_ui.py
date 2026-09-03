@@ -2,22 +2,17 @@
 """
 UI-тести relation_gold_set_labeler.html у headless Chromium (Playwright).
 
-Ці тести перевіряють САМЕ ті властивості, які є методологічними інваріантами,
-а не косметику:
+Перевіряють методологічні інваріанти, а не косметику:
 
-  1. Діагностика (scores/страта/hub/групи) НЕ присутня в DOM до збереження
-     мітки. Це головне анти-leakage правило: якщо анотатор бачить score,
-     він починає погоджуватись зі score.
-  2. Referent gate працює в UI так само, як у validate_annotation:
-     same_fact/same_event/contradiction недоступні при "референт = ні".
-  3. Приховані повтори виглядають як звичайні пари (жодного маркера в DOM).
-  4. Клавіатурний потік реально зберігає запис і рухає лічильник.
-  5. Експорт дає валідний JSONL, який проходить контракт.
+  1. Scores/stratum/hub diagnostics не показуються анотатору взагалі під час
+     сесії, тому наступні рішення лишаються blind.
+  2. Referent gate відповідає validate_annotation.
+  3. Приховані повтори не мають маркера в UI.
+  4. Вибір confidence НЕ автозберігає: потрібен явний Enter.
+  5. Експорт містить dataset_id + pair_key і проходить контракт.
+  6. localStorage та resume працюють лише в межах конкретного dataset.
 
-Якщо Playwright/Chromium недоступні — тести пропускаються (skip), а не падають.
-
-Запуск:
-    python3 experiments/claim_relations/gold_set/tests/test_labeler_ui.py
+Якщо Playwright/Chromium недоступні — тести пропускаються, а не падають.
 """
 from __future__ import annotations
 
@@ -43,10 +38,10 @@ except Exception:  # pragma: no cover
     HAVE_PW = False
 
 from experiments.claim_relations.gold_set import gold_set_common as common  # noqa: E402
+from experiments.claim_relations.gold_set import relation_gold_set_analyze as analyze  # noqa: E402
 
 
 def _build_dataset(tmpdir: Path) -> Path:
-    """Генерує невеликий реальний датасет семплером (через stubs)."""
     from experiments.claim_relations.gold_set import relation_gold_set_sampler as sampler
     out = tmpdir / "ds"
     rc = sampler.main([
@@ -71,6 +66,7 @@ class TestLabelerUI(unittest.TestCase):
         cls.dataset_path = _build_dataset(tmpdir)
         cls.rows = [json.loads(l) for l in
                     cls.dataset_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+        cls.dataset_id = analyze.dataset_fingerprint(cls.rows)
         cls.pw = sync_playwright().start()
         cls.browser = cls.pw.chromium.launch(
             executable_path="/opt/pw-browsers/chromium/chrome-linux/chrome"
@@ -92,6 +88,16 @@ class TestLabelerUI(unittest.TestCase):
         page.wait_for_selector("#work", state="visible", timeout=8000)
         return ctx, page
 
+    @staticmethod
+    def _save_positive(page, relation="same_event", confidence="high"):
+        key_rel = {"same_fact": "q", "same_event": "w", "related": "r"}[relation]
+        key_cnf = {"high": "a", "medium": "s", "low": "d"}[confidence]
+        page.keyboard.press("1")
+        page.keyboard.press(key_rel)
+        page.keyboard.press(key_cnf)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(120)
+
     def test_dataset_loads_and_shows_first_pair(self):
         ctx, page = self._page()
         try:
@@ -101,161 +107,135 @@ class TestLabelerUI(unittest.TestCase):
         finally:
             ctx.close()
 
-    def test_no_diagnostics_in_dom_before_labeling(self):
-        """ГОЛОВНИЙ анти-leakage тест: у видимому DOM не має бути ані score,
-        ані назви страти, ані hub-прапорців, ані source-group."""
+    def test_strict_blindness_no_diagnostics_control_or_visible_scores(self):
+        """Diagnostics не можна відкрити навіть після збереження попередніх пар."""
         ctx, page = self._page()
         try:
             body = page.inner_text("body")
-            for token in ("claim_score", "content_score", "stratum",
-                          "S1_", "S4_", "S7_", "hub", "first_seen"):
-                self.assertNotIn(token, body, f"'{token}' visible before labeling")
-            # також перевіряємо, що числових score немає у розмітці
-            html = page.content()
-            self.assertNotIn("claim_score", html.split("<script")[0])
+            for token in ("claim_score", "content_score", "stratum", "S1_", "S4_",
+                          "S7_", "hub_a", "hub_b", "first_seen"):
+                self.assertNotIn(token, body, f"'{token}' visible in annotation UI")
+            self.assertIsNone(page.query_selector("#bdiag"))
+            self._save_positive(page)
+            page.keyboard.press("ArrowLeft")
+            page.wait_for_timeout(100)
+            body = page.inner_text("body")
+            self.assertNotIn("claim_score", body)
+            self.assertNotIn("content_score", body)
+            self.assertIsNone(page.query_selector("#bdiag"))
         finally:
             ctx.close()
 
-    def test_diagnostics_button_disabled_until_saved(self):
+    def test_confidence_does_not_autosave(self):
         ctx, page = self._page()
         try:
-            self.assertTrue(page.is_disabled("#bdiag"))
-            page.keyboard.press("1")   # referent = yes
-            page.keyboard.press("w")   # same_event
-            page.keyboard.press("a")   # confidence high -> autosave + advance
-            page.wait_for_timeout(400)
-            page.keyboard.press("ArrowLeft")  # повертаємось на збережену пару
-            page.wait_for_timeout(200)
-            self.assertFalse(page.is_disabled("#bdiag"))
-        finally:
-            ctx.close()
-
-    def test_diagnostics_revealed_only_after_save(self):
-        ctx, page = self._page()
-        try:
+            before = page.inner_text("#prog")
             page.keyboard.press("1")
             page.keyboard.press("w")
             page.keyboard.press("a")
-            page.wait_for_timeout(400)
-            page.keyboard.press("ArrowLeft")
-            page.wait_for_timeout(200)
-            page.keyboard.press("i")
-            page.wait_for_timeout(150)
-            diag = page.inner_text("#diag")
-            self.assertIn("stratum", diag)
-            self.assertIn("claim_score", diag)
+            page.wait_for_timeout(350)
+            self.assertEqual(page.inner_text("#prog"), before,
+                             "confidence selection must not auto-save/advance")
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(120)
+            self.assertNotEqual(page.inner_text("#prog"), before)
         finally:
             ctx.close()
 
-    def test_referent_gate_blocks_same_fact_when_referent_no(self):
-        """Дзеркалить validate_annotation: при референті 'ні' сильні labels
-        мають бути недоступні."""
+    def test_referent_gate_blocks_strong_labels_when_referent_no(self):
         ctx, page = self._page()
         try:
-            page.keyboard.press("2")   # referent = no
-            page.wait_for_timeout(120)
+            page.keyboard.press("2")
             for key, value in (("q", "same_fact"), ("w", "same_event"), ("e", "contradiction")):
                 page.keyboard.press(key)
-                page.wait_for_timeout(80)
+                page.wait_for_timeout(50)
                 on = page.eval_on_selector_all(
                     ".opt[data-g='rel'].on", "els => els.map(e => e.dataset.v)")
-                self.assertNotIn(value, on, f"{value} must be blocked when referent=no")
-            page.keyboard.press("t")   # unrelated дозволено
-            page.wait_for_timeout(80)
+                self.assertNotIn(value, on)
+            page.keyboard.press("t")
             on = page.eval_on_selector_all(
                 ".opt[data-g='rel'].on", "els => els.map(e => e.dataset.v)")
             self.assertEqual(on, ["unrelated"])
         finally:
             ctx.close()
 
-    def test_negative_requires_conflict_type_before_save(self):
+    def test_negative_requires_conflict_type_and_enter(self):
         ctx, page = self._page()
         try:
             before = page.inner_text("#prog")
-            page.keyboard.press("2")   # no
-            page.keyboard.press("t")   # unrelated
-            page.keyboard.press("a")   # confidence -> має НЕ зберегти (немає conflict_type)
-            page.wait_for_timeout(400)
-            self.assertEqual(page.inner_text("#prog"), before,
-                             "saved without conflict_type on a negative pair")
-            page.keyboard.press("l")   # location
+            page.keyboard.press("2")
+            page.keyboard.press("t")
             page.keyboard.press("a")
-            page.wait_for_timeout(400)
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(120)
+            self.assertEqual(page.inner_text("#prog"), before)
+            page.keyboard.press("l")
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(120)
             self.assertNotEqual(page.inner_text("#prog"), before)
         finally:
             ctx.close()
 
     def test_hidden_repeats_are_indistinguishable(self):
-        """У DOM не має бути жодної ознаки повтору."""
         repeat_positions = [i for i, r in enumerate(self.rows) if r["is_repeat"]]
         self.assertTrue(repeat_positions, "fixture has no repeats")
         ctx, page = self._page()
         try:
-            target = repeat_positions[0]
-            for _ in range(target):
+            for _ in range(repeat_positions[0]):
                 page.keyboard.press("ArrowRight")
-            page.wait_for_timeout(250)
-            body = page.inner_text("body")
+            page.wait_for_timeout(100)
+            body = page.inner_text("body").lower()
             for token in ("repeat", "повтор", "is_repeat", "swapped"):
-                self.assertNotIn(token.lower(), body.lower())
+                self.assertNotIn(token, body)
         finally:
             ctx.close()
 
-    def test_export_produces_valid_contract_jsonl(self):
+    def test_export_contains_dataset_identity_and_valid_contract(self):
         ctx, page = self._page()
         try:
-            # розмічаємо 3 пари різними шляхами
-            page.keyboard.press("1"); page.keyboard.press("q"); page.keyboard.press("a")
-            page.wait_for_timeout(350)
+            self._save_positive(page, "same_fact", "high")
+
             page.keyboard.press("2"); page.keyboard.press("l")
-            page.keyboard.press("t"); page.keyboard.press("s")
-            page.wait_for_timeout(350)
-            page.keyboard.press("3"); page.keyboard.press("r"); page.keyboard.press("d")
-            page.wait_for_timeout(350)
+            page.keyboard.press("t"); page.keyboard.press("s"); page.keyboard.press("Enter")
+            page.wait_for_timeout(100)
+
+            page.keyboard.press("3"); page.keyboard.press("r")
+            page.keyboard.press("d"); page.keyboard.press("Enter")
+            page.wait_for_timeout(100)
 
             with page.expect_download() as dl:
                 page.click("#bexport")
-            path = dl.value.path()
-            content = Path(path).read_text(encoding="utf-8")
+            content = Path(dl.value.path()).read_text(encoding="utf-8")
             records = [json.loads(l) for l in content.splitlines() if l.strip()]
             self.assertEqual(len(records), 3)
-            ids = {r["interaction_id"] for r in records}
-            self.assertEqual(len(ids), 3)
+            by_iid = {r["interaction_id"]: r for r in self.rows}
             for rec in records:
-                self.assertEqual(common.validate_annotation(rec), [],
-                                 f"exported record violates contract: {rec}")
+                self.assertEqual(rec["dataset_id"], self.dataset_id)
+                self.assertEqual(rec["pair_key"], by_iid[rec["interaction_id"]]["pair_key"])
+                self.assertEqual(common.validate_annotation(rec), [])
         finally:
             ctx.close()
 
-    def test_progress_survives_page_reload(self):
-        """Найдорожчий сценарій відмови: анотатор закрив вкладку після двох
-        годин розмітки. Перевіряємо, що стан реально відновлюється."""
+    def test_progress_survives_page_reload_for_same_dataset(self):
         ctx = self.browser.new_context(accept_downloads=True)
         page = ctx.new_page()
         try:
             page.goto(LABELER.resolve().as_uri())
             page.set_input_files("#fdata", str(self.dataset_path))
             page.wait_for_selector("#work", state="visible", timeout=8000)
-            page.keyboard.press("1"); page.keyboard.press("w"); page.keyboard.press("a")
-            page.wait_for_timeout(400)
-            page.keyboard.press("1"); page.keyboard.press("r"); page.keyboard.press("s")
-            page.wait_for_timeout(400)
+            self._save_positive(page)
+            self._save_positive(page, "related", "medium")
             self.assertIn("розмічено 2", page.inner_text("#prog"))
 
             page.reload()
             page.set_input_files("#fdata", str(self.dataset_path))
             page.wait_for_selector("#work", state="visible", timeout=8000)
-            page.wait_for_timeout(300)
-            prog = page.inner_text("#prog")
-            self.assertIn("розмічено 2", prog,
-                          f"annotations lost after reload (prog={prog!r}); "
-                          "labeler must survive a closed tab")
+            page.wait_for_timeout(150)
+            self.assertIn("розмічено 2", page.inner_text("#prog"))
         finally:
             ctx.close()
 
     def test_resume_from_exported_file(self):
-        """Другий рубіж оборони, якщо localStorage недоступний (file:// у
-        деяких браузерах): відновлення з експортованого JSONL."""
         ctx = self.browser.new_context(accept_downloads=True)
         page = ctx.new_page()
         try:
@@ -263,8 +243,7 @@ class TestLabelerUI(unittest.TestCase):
             page.set_input_files("#fdata", str(self.dataset_path))
             page.wait_for_selector("#work", state="visible", timeout=8000)
             page.evaluate("localStorage.clear()")
-            page.keyboard.press("1"); page.keyboard.press("q"); page.keyboard.press("a")
-            page.wait_for_timeout(400)
+            self._save_positive(page, "same_fact", "high")
             with page.expect_download() as dl:
                 page.click("#bexport")
             saved = Path(self.tmp.name) / "resume.jsonl"
@@ -277,7 +256,7 @@ class TestLabelerUI(unittest.TestCase):
             page2.set_input_files("#fdata", str(self.dataset_path))
             page2.wait_for_selector("#work", state="visible", timeout=8000)
             page2.set_input_files("#fann", str(saved))
-            page2.wait_for_timeout(400)
+            page2.wait_for_timeout(150)
             self.assertIn("розмічено 1", page2.inner_text("#prog"))
             ctx2.close()
         finally:
@@ -286,14 +265,23 @@ class TestLabelerUI(unittest.TestCase):
     def test_progress_and_back_navigation(self):
         ctx, page = self._page()
         try:
-            page.keyboard.press("1"); page.keyboard.press("r"); page.keyboard.press("a")
-            page.wait_for_timeout(350)
+            self._save_positive(page, "related", "high")
             self.assertIn("розмічено 1", page.inner_text("#prog"))
             page.keyboard.press("ArrowLeft")
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(100)
             on = page.eval_on_selector_all(
                 ".opt[data-g='ref'].on", "els => els.map(e => e.dataset.v)")
-            self.assertEqual(on, ["yes"], "previous answer not restored on back navigation")
+            self.assertEqual(on, ["yes"])
+        finally:
+            ctx.close()
+
+    def test_export_filename_is_dataset_scoped(self):
+        ctx, page = self._page()
+        try:
+            self._save_positive(page)
+            with page.expect_download() as dl:
+                page.click("#bexport")
+            self.assertIn(self.dataset_id, dl.value.suggested_filename)
         finally:
             ctx.close()
 
