@@ -453,7 +453,7 @@ $("bexport").onclick = ()=>{
                         {type:"application/x-ndjson"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "gold_set_v1_annotations.jsonl";
+  a.download = `gold_set_v1_annotations_${DATASET_ID}.jsonl`;
   a.click();
   URL.revokeObjectURL(a.href);
 };

@@ -575,7 +575,9 @@ class TestSamplerIntegration(unittest.TestCase):
                 d["claim_score"], d["content_score"], d["hub_a"], d["hub_b"], d["same_group"])
             self.assertEqual(expected, d["stratum"], row["interaction_id"])
 
-    def test_rerun_same_seed_is_byte_identical(self):
+    def test_rerun_same_seed_is_structurally_identical(self):
+        """chunk_size may change last-bit float32 GEMM scores, but it must not
+        change the selected pairs, strata, ordering, repeats, or displayed data."""
         out2 = Path(self.tmp.name) / "run2"
         argv = ["--out-dir", str(out2), "--seed", "20260903", "--chunk-size", "3",
                 "--hub-degree-threshold", "3", "--repeat-rate", "0.15",
@@ -584,10 +586,36 @@ class TestSamplerIntegration(unittest.TestCase):
                 "--n-s5", "4", "--n-s6", "4", "--n-s7", "3", "--n-s8", "3",
                 "--n-s9", "4"]
         self.assertEqual(self.sampler.main(argv), 0)
-        a = (self.out / "gold_set_v1_dataset.jsonl").read_text(encoding="utf-8")
-        b = (out2 / "gold_set_v1_dataset.jsonl").read_text(encoding="utf-8")
-        # chunk_size інший (7 vs 3) — результат МАЄ бути ідентичним
-        self.assertEqual(a, b, "sampling must not depend on chunk_size")
+
+        a = [json.loads(line) for line in
+             (self.out / "gold_set_v1_dataset.jsonl").read_text(
+                 encoding="utf-8").splitlines() if line.strip()]
+        b = [json.loads(line) for line in
+             (out2 / "gold_set_v1_dataset.jsonl").read_text(
+                 encoding="utf-8").splitlines() if line.strip()]
+
+        self.assertEqual(len(a), len(b))
+
+        for left, right in zip(a, b):
+            for field in ("schema_version", "interaction_id", "pair_key",
+                          "is_repeat", "repeat_of", "presented_swapped", "display"):
+                self.assertEqual(left[field], right[field], field)
+
+            dl = left["diagnostics"]
+            dr = right["diagnostics"]
+
+            for field in dl:
+                if field in ("claim_score", "content_score"):
+                    self.assertLessEqual(
+                        abs(float(dl[field]) - float(dr[field])),
+                        2e-5,
+                        f"{field} drift too large for {left['interaction_id']}",
+                    )
+                else:
+                    self.assertEqual(
+                        dl[field], dr[field],
+                        f"{field} changed for {left['interaction_id']}",
+                    )
 
     def test_different_seed_changes_dataset(self):
         out3 = Path(self.tmp.name) / "run3"
@@ -634,6 +662,7 @@ class TestAnalyzerIntegration(unittest.TestCase):
         # Синтетична "людина": вирішує за content_score, з одним навмисним
         # розходженням між оригіналом і повтором, щоб agreement != 100%.
         rng = random.Random(4)
+        dataset_id = analyze.dataset_fingerprint(cls.dataset)
         anns = []
         flipped = False
         for row in cls.dataset:
@@ -643,12 +672,12 @@ class TestAnalyzerIntegration(unittest.TestCase):
                 good = not good
                 flipped = True
             if good:
-                rec = {"interaction_id": row["interaction_id"], "status": "labeled",
+                rec = {"dataset_id": dataset_id, "interaction_id": row["interaction_id"], "pair_key": row["pair_key"], "status": "labeled",
                        "same_referent": "yes",
                        "relation_label": rng.choice(["same_fact", "same_event"]),
                        "conflict_type": None, "confidence": "high", "note": ""}
             else:
-                rec = {"interaction_id": row["interaction_id"], "status": "labeled",
+                rec = {"dataset_id": dataset_id, "interaction_id": row["interaction_id"], "pair_key": row["pair_key"], "status": "labeled",
                        "same_referent": "no", "relation_label": "unrelated",
                        "conflict_type": "location", "confidence": "medium", "note": ""}
             anns.append(rec)
@@ -676,7 +705,7 @@ class TestAnalyzerIntegration(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("COMPLETENESS", text)
         self.assertIn("INTRA-RATER", text)
-        self.assertIn("WHAT THE 0.80 RETRIEVAL FLOOR MISSES", text)
+        self.assertIn("BELOW-0.80 RECALL PROBES", text)
         self.assertIn("EXPLORATORY FRAME", text)
         self.assertNotIn("PROBLEM", text)
 
@@ -702,12 +731,51 @@ class TestAnalyzerIntegration(unittest.TestCase):
         self.assertEqual(len(stats["same_referent"]["disagreements"]), 1)
 
     def test_contract_violations_are_reported_not_silently_dropped(self):
-        bad = [{"interaction_id": self.dataset[0]["interaction_id"], "status": "labeled",
-                "same_referent": "no", "relation_label": "same_fact",
-                "conflict_type": "location", "confidence": "high"}]
+        row = self.dataset[0]
+        dataset_id = self.analyze.dataset_fingerprint(self.dataset)
+        bad = [{
+            "dataset_id": dataset_id,
+            "interaction_id": row["interaction_id"],
+            "pair_key": row["pair_key"],
+            "status": "labeled",
+            "same_referent": "no",
+            "relation_label": "same_fact",
+            "conflict_type": "location",
+            "confidence": "high",
+        }]
         joined, problems = self.analyze.join_annotations(self.dataset, bad)
         self.assertEqual(joined, [])
         self.assertEqual(len(problems["contract_errors"]), 1)
+
+    def test_dataset_mismatch_is_rejected(self):
+        row = self.dataset[0]
+        ann = [{
+            "dataset_id": "wrong-dataset",
+            "interaction_id": row["interaction_id"],
+            "pair_key": row["pair_key"],
+            "status": "labeled",
+            "same_referent": "yes",
+            "relation_label": "related",
+            "confidence": "high",
+        }]
+        joined, problems = self.analyze.join_annotations(self.dataset, ann)
+        self.assertEqual(joined, [])
+        self.assertEqual(problems["dataset_mismatch"], [row["interaction_id"]])
+
+    def test_pair_mismatch_is_rejected(self):
+        row = self.dataset[0]
+        ann = [{
+            "dataset_id": self.analyze.dataset_fingerprint(self.dataset),
+            "interaction_id": row["interaction_id"],
+            "pair_key": "wrong|pair",
+            "status": "labeled",
+            "same_referent": "yes",
+            "relation_label": "related",
+            "confidence": "high",
+        }]
+        joined, problems = self.analyze.join_annotations(self.dataset, ann)
+        self.assertEqual(joined, [])
+        self.assertEqual(problems["pair_mismatch"], [row["interaction_id"]])
 
     def test_unknown_interaction_id_reported(self):
         joined, problems = self.analyze.join_annotations(
