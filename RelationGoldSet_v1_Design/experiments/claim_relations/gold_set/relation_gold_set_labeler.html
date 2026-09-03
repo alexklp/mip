@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relation Gold Set v1 — labeler</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#191c24; --panel2:#1f232d; --line:#2b3040;
+    --ink:#e6e9f0; --dim:#98a0b3; --accent:#5b9cf6; --ok:#48b97a;
+    --warn:#e0a33e; --bad:#e06b6b; --focus:#7aa7ff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif}
+  header{position:sticky;top:0;z-index:10;background:var(--panel);
+    border-bottom:1px solid var(--line);padding:10px 16px;
+    display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.02em}
+  .grow{flex:1}
+  .prog{font:12px/1 var(--mono);color:var(--dim)}
+  .bar{height:4px;background:var(--line);border-radius:2px;width:180px;overflow:hidden}
+  .bar>div{height:100%;background:var(--accent);width:0%}
+  button,label.btn{background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer}
+  button:hover,label.btn:hover{border-color:var(--focus)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  main{max-width:1180px;margin:0 auto;padding:18px 16px 120px}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:900px){.pair{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .card h2{margin:0 0 10px;font-size:12px;letter-spacing:.08em;color:var(--dim);
+    text-transform:uppercase;font-weight:600}
+  .claim{font-size:17px;line-height:1.45;margin-bottom:12px}
+  .field{margin-top:10px}
+  .field .k{font:11px/1.4 var(--mono);color:var(--dim);text-transform:uppercase;
+    letter-spacing:.06em;margin-bottom:3px}
+  .field .v{color:#cdd4e2;font-size:13.5px}
+  .snip{max-height:190px;overflow:auto;background:var(--panel2);border:1px solid var(--line);
+    border-radius:6px;padding:9px 10px;font-size:13px;color:#c3cbdb;white-space:pre-wrap}
+  .ev{background:rgba(91,156,246,.13);border-left:2px solid var(--accent);
+    padding:7px 9px;border-radius:0 5px 5px 0;font-size:13.5px}
+  .panel{margin-top:18px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:14px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:9px 0}
+  .row .lab{min-width:150px;font-size:12px;color:var(--dim);
+    text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .opt{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:7px 12px;font-size:13.5px;cursor:pointer;user-select:none}
+  .opt kbd{font:11px/1 var(--mono);background:var(--bg);border:1px solid var(--line);
+    border-radius:3px;padding:2px 4px;margin-right:6px;color:var(--dim)}
+  .opt.on{background:var(--accent);border-color:var(--accent);color:#08101f;font-weight:600}
+  .opt.on kbd{background:rgba(0,0,0,.2);color:#08101f;border-color:transparent}
+  .opt.off{opacity:.3;cursor:not-allowed}
+  .opt.neg.on{background:var(--bad);border-color:var(--bad)}
+  .opt.warn.on{background:var(--warn);border-color:var(--warn)}
+  input[type=text]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:6px;padding:7px 10px;font-size:13.5px;flex:1;min-width:240px}
+  .foot{position:fixed;bottom:0;left:0;right:0;background:var(--panel);
+    border-top:1px solid var(--line);padding:9px 16px;display:flex;gap:10px;
+    align-items:center;flex-wrap:wrap}
+  .hint{font:11.5px/1.5 var(--mono);color:var(--dim)}
+  .diag{margin-top:12px;background:#0e1a10;border:1px solid #244a2e;border-radius:8px;
+    padding:11px;font:12px/1.6 var(--mono);color:#a9d8b8;display:none}
+  .diag.show{display:block}
+  .note{color:var(--warn);font-size:12.5px}
+  .center{text-align:center;padding:70px 20px;color:var(--dim)}
+  .center h2{color:var(--ink);font-size:19px}
+  #book{display:none;position:fixed;inset:0;background:rgba(8,10,14,.94);z-index:50;
+    overflow:auto;padding:36px 20px}
+  #book.show{display:block}
+  #book .inner{max-width:820px;margin:0 auto;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:22px 26px}
+  #book h3{margin:20px 0 6px;font-size:14px;color:var(--accent)}
+  #book p,#book li{font-size:13.5px;color:#cdd4e2}
+  #book code{font:12px/1 var(--mono);background:var(--panel2);padding:2px 5px;border-radius:3px}
+  .flash{position:fixed;top:64px;left:50%;transform:translateX(-50%);
+    background:var(--bad);color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;
+    opacity:0;pointer-events:none;transition:opacity .15s;z-index:60}
+  .flash.on{opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>RELATION GOLD SET v1</h1>
+  <div class="bar"><div id="barfill"></div></div>
+  <div class="prog" id="prog">no dataset</div>
+  <div class="grow"></div>
+  <label class="btn">load dataset<input id="fdata" type="file" accept=".jsonl,.json" hidden></label>
+  <label class="btn">resume from export<input id="fann" type="file" accept=".jsonl" hidden></label>
+  <button id="bexport">export annotations</button>
+  <button id="bbook">handbook (?)</button>
+</header>
+
+<div class="flash" id="flash"></div>
+
+<main>
+  <div id="empty" class="center">
+    <h2>Завантаж <code>gold_set_v1_dataset.jsonl</code></h2>
+    <p>Розмітка зберігається в браузері автоматично. Періодично тисни
+       <b>export annotations</b> — це і є артефакт для аналізатора.</p>
+    <p class="hint">Порядок пар зафіксовано семплером. Можна зупинитись будь-коли:
+       послідовність prefix-balanced, тому навіть неповна розмітка аналізовна.</p>
+  </div>
+
+  <div id="work" style="display:none">
+    <div class="pair">
+      <div class="card">
+        <h2>Claim A</h2>
+        <div class="claim" id="a_claim"></div>
+        <div class="field"><div class="k">evidence span</div><div class="ev" id="a_ev"></div></div>
+        <div class="field"><div class="k">title</div><div class="v" id="a_title"></div></div>
+        <div class="field"><div class="k">source</div><div class="v" id="a_src"></div></div>
+        <div class="field"><div class="k">context</div><div class="snip" id="a_ctx"></div></div>
+      </div>
+      <div class="card">
+        <h2>Claim B</h2>
+        <div class="claim" id="b_claim"></div>
+        <div class="field"><div class="k">evidence span</div><div class="ev" id="b_ev"></div></div>
+        <div class="field"><div class="k">title</div><div class="v" id="b_title"></div></div>
+        <div class="field"><div class="k">source</div><div class="v" id="b_src"></div></div>
+        <div class="field"><div class="k">context</div><div class="snip" id="b_ctx"></div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="lab">1. Спільний референт</div>
+        <div class="opt" data-g="ref" data-v="yes"><kbd>1</kbd>так</div>
+        <div class="opt neg" data-g="ref" data-v="no"><kbd>2</kbd>ні</div>
+        <div class="opt warn" data-g="ref" data-v="uncertain"><kbd>3</kbd>невизначено</div>
+      </div>
+
+      <div class="row" id="row_conflict">
+        <div class="lab">1b. Що саме різне</div>
+        <div class="opt" data-g="conf" data-v="location"><kbd>L</kbd>локація</div>
+        <div class="opt" data-g="conf" data-v="person_entity"><kbd>P</kbd>особа/суб'єкт</div>
+        <div class="opt" data-g="conf" data-v="object_facility"><kbd>O</kbd>об'єкт</div>
+        <div class="opt" data-g="conf" data-v="chronology"><kbd>C</kbd>час</div>
+        <div class="opt" data-g="conf" data-v="other"><kbd>X</kbd>інше</div>
+        <div class="opt" data-g="conf" data-v="not_obvious"><kbd>N</kbd>не видно з тексту</div>
+      </div>
+
+      <div class="row">
+        <div class="lab">2. Відношення</div>
+        <div class="opt" data-g="rel" data-v="same_fact"><kbd>Q</kbd>same_fact</div>
+        <div class="opt" data-g="rel" data-v="same_event"><kbd>W</kbd>same_event</div>
+        <div class="opt" data-g="rel" data-v="contradiction"><kbd>E</kbd>contradiction</div>
+        <div class="opt" data-g="rel" data-v="related"><kbd>R</kbd>related</div>
+        <div class="opt" data-g="rel" data-v="unrelated"><kbd>T</kbd>unrelated</div>
+      </div>
+
+      <div class="row">
+        <div class="lab">3. Впевненість</div>
+        <div class="opt" data-g="cnf" data-v="high"><kbd>A</kbd>висока</div>
+        <div class="opt" data-g="cnf" data-v="medium"><kbd>S</kbd>середня</div>
+        <div class="opt" data-g="cnf" data-v="low"><kbd>D</kbd>низька</div>
+      </div>
+
+      <div class="row">
+        <div class="lab">нотатка</div>
+        <input id="note" type="text" placeholder="необов'язково; Esc — вийти з поля">
+      </div>
+
+      <div class="row">
+        <button id="bunusable">позначити unusable (U)</button>
+        <span class="note" id="unote"></span>
+      </div>
+
+      <div class="diag" id="diag"></div>
+    </div>
+  </div>
+</main>
+
+<div class="foot">
+  <button id="bprev">← попередня</button>
+  <button id="bnext">наступна →</button>
+  <button id="bdiag" disabled>показати діагностику (I)</button>
+  <div class="grow"></div>
+  <div class="hint" id="hint">1/2/3 референт · Q/W/E/R/T відношення · A/S/D впевненість · Enter зберегти</div>
+</div>
+
+<div id="book"><div class="inner" id="bookinner"></div></div>
+
+<script>
+"use strict";
+const KEY = "mip_relation_gold_set_v1";
+let DATA = [];          // повний dataset (включно з diagnostics — НЕ рендериться)
+let ANN = {};           // interaction_id -> annotation
+let idx = 0;
+let draft = null;       // поточний незбережений стан
+let diagVisible = false;
+
+const ALLOWED = {
+  yes: ["same_fact","same_event","contradiction","related"],
+  no: ["related","unrelated"],
+  uncertain: ["related","unrelated"]
+};
+
+const $ = id => document.getElementById(id);
+function flash(msg){ const f=$("flash"); f.textContent=msg; f.classList.add("on");
+  clearTimeout(f._t); f._t=setTimeout(()=>f.classList.remove("on"),1400); }
+
+// ---------- persistence ----------
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify({ann:ANN, idx:idx})); }
+  catch(e){ /* file:// може блокувати localStorage — експорт лишається робочим */ }
+}
+function restore(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    ANN = s.ann || {}; idx = s.idx || 0;
+  }catch(e){}
+}
+
+// ---------- rendering ----------
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function render(){
+  if(!DATA.length){ $("empty").style.display="block"; $("work").style.display="none"; return; }
+  $("empty").style.display="none"; $("work").style.display="block";
+  idx = Math.max(0, Math.min(idx, DATA.length-1));
+  const row = DATA[idx];
+
+  // A/B вже переставлені семплером (presented_swapped) — тут просто показуємо.
+  const A = row.display.A, B = row.display.B;
+  $("a_claim").textContent = A.claim_text || "";
+  $("a_ev").textContent    = A.evidence_span || "—";
+  $("a_title").textContent = A.title || "—";
+  $("a_src").textContent   = A.source || "—";
+  $("a_ctx").textContent   = A.context_snippet || "—";
+  $("b_claim").textContent = B.claim_text || "";
+  $("b_ev").textContent    = B.evidence_span || "—";
+  $("b_title").textContent = B.title || "—";
+  $("b_src").textContent   = B.source || "—";
+  $("b_ctx").textContent   = B.context_snippet || "—";
+
+  const saved = ANN[row.interaction_id];
+  draft = saved ? JSON.parse(JSON.stringify(saved))
+                : {interaction_id: row.interaction_id, status:"labeled",
+                   same_referent:null, relation_label:null, conflict_type:null,
+                   confidence:null, note:""};
+  $("note").value = draft.note || "";
+  $("unote").textContent = draft.status==="unusable" ? ("unusable: "+(draft.unusable_reason||"")) : "";
+
+  // діагностика ховається при кожному переході — показати можна лише
+  // після того, як для цієї пари вже збережена мітка
+  diagVisible = false;
+  $("diag").classList.remove("show");
+  $("diag").textContent = "";
+  $("bdiag").disabled = !saved;
+
+  paint();
+  const done = Object.keys(ANN).length;
+  $("prog").textContent = `${idx+1} / ${DATA.length}  ·  розмічено ${done}`;
+  $("barfill").style.width = (100*done/DATA.length).toFixed(1)+"%";
+}
+
+function paint(){
+  document.querySelectorAll(".opt").forEach(el=>{
+    const g = el.dataset.g, v = el.dataset.v;
+    el.classList.remove("on","off");
+    if(g==="ref" && draft.same_referent===v) el.classList.add("on");
+    if(g==="rel"){
+      const allowed = draft.same_referent ? ALLOWED[draft.same_referent] : null;
+      if(allowed && !allowed.includes(v)) el.classList.add("off");
+      if(draft.relation_label===v) el.classList.add("on");
+    }
+    if(g==="conf"){
+      if(draft.same_referent!=="no") el.classList.add("off");
+      if(draft.conflict_type===v) el.classList.add("on");
+    }
+    if(g==="cnf" && draft.confidence===v) el.classList.add("on");
+  });
+  $("row_conflict").style.opacity = draft.same_referent==="no" ? "1" : ".35";
+}
+
+function valid(){
+  if(!draft) return false;
+  if(draft.status==="unusable") return !!draft.unusable_reason;
+  if(!draft.same_referent || !draft.relation_label || !draft.confidence) return false;
+  if(!ALLOWED[draft.same_referent].includes(draft.relation_label)) return false;
+  if(draft.same_referent==="no" && !draft.conflict_type) return false;
+  return true;
+}
+
+function commit(advance){
+  if(!valid()){ flash("заповни: референт → відношення → впевненість"); return false; }
+  draft.note = $("note").value.trim();
+  draft.labeled_at = new Date().toISOString();
+  ANN[draft.interaction_id] = JSON.parse(JSON.stringify(draft));
+  save();
+  $("bdiag").disabled = false;
+  if(advance){
+    if(idx < DATA.length-1){ idx++; render(); }
+    else { flash("це остання пара — не забудь export"); render(); }
+  }
+  return true;
+}
+
+// ---------- input ----------
+function setVal(group, value){
+  if(!draft) return;
+  if(group==="ref"){
+    draft.same_referent = value;
+    if(draft.relation_label && !ALLOWED[value].includes(draft.relation_label)) draft.relation_label=null;
+    if(value!=="no") draft.conflict_type=null;
+  } else if(group==="rel"){
+    if(!draft.same_referent){ flash("спершу вкажи спільний референт (1/2/3)"); return; }
+    if(!ALLOWED[draft.same_referent].includes(value)){
+      flash(`${value} недоступне при референті «${draft.same_referent}»`); return;
+    }
+    draft.relation_label = value;
+  } else if(group==="conf"){
+    if(draft.same_referent!=="no"){ flash("тип розбіжності — лише коли референт «ні»"); return; }
+    draft.conflict_type = value;
+  } else if(group==="cnf"){
+    draft.confidence = value;
+  }
+  draft.status = "labeled";
+  delete draft.unusable_reason;
+  $("unote").textContent = "";
+  paint();
+  if(group==="cnf" && valid()) setTimeout(()=>commit(true), 180);
+}
+
+document.querySelectorAll(".opt").forEach(el=>{
+  el.addEventListener("click", ()=>setVal(el.dataset.g, el.dataset.v));
+});
+
+const KEYMAP = {
+  "1":["ref","yes"], "2":["ref","no"], "3":["ref","uncertain"],
+  "q":["rel","same_fact"], "w":["rel","same_event"], "e":["rel","contradiction"],
+  "r":["rel","related"], "t":["rel","unrelated"],
+  "l":["conf","location"], "p":["conf","person_entity"], "o":["conf","object_facility"],
+  "c":["conf","chronology"], "x":["conf","other"], "n":["conf","not_obvious"],
+  "a":["cnf","high"], "s":["cnf","medium"], "d":["cnf","low"]
+};
+
+document.addEventListener("keydown", ev=>{
+  if($("book").classList.contains("show")){
+    if(ev.key==="Escape"||ev.key==="?") $("book").classList.remove("show");
+    return;
+  }
+  if(ev.target.tagName==="INPUT"){
+    if(ev.key==="Escape") ev.target.blur();
+    if(ev.key==="Enter"){ ev.target.blur(); commit(true); }
+    return;
+  }
+  if(!DATA.length) return;
+  const k = ev.key.toLowerCase();
+  if(KEYMAP[k]){ ev.preventDefault(); setVal(KEYMAP[k][0], KEYMAP[k][1]); return; }
+  if(ev.key==="Enter"){ ev.preventDefault(); commit(true); return; }
+  if(ev.key==="ArrowLeft"){ ev.preventDefault(); if(idx>0){idx--;render();} return; }
+  if(ev.key==="ArrowRight"){ ev.preventDefault(); if(idx<DATA.length-1){idx++;render();} return; }
+  if(k==="u"){ ev.preventDefault(); markUnusable(); return; }
+  if(k==="i"){ ev.preventDefault(); toggleDiag(); return; }
+  if(ev.key==="?"){ ev.preventDefault(); $("book").classList.add("show"); return; }
+});
+
+function markUnusable(){
+  const reason = prompt("Чому пару не можна розмітити? (порожній текст = скасувати)");
+  if(!reason) return;
+  draft.status="unusable"; draft.unusable_reason=reason;
+  draft.same_referent=null; draft.relation_label=null;
+  draft.conflict_type=null; draft.confidence=null;
+  $("unote").textContent = "unusable: "+reason;
+  paint(); commit(true);
+}
+
+function toggleDiag(){
+  const row = DATA[idx];
+  if(!ANN[row.interaction_id]){ flash("діагностика доступна лише ПІСЛЯ збереження мітки"); return; }
+  diagVisible = !diagVisible;
+  const d = $("diag");
+  if(!diagVisible){ d.classList.remove("show"); d.textContent=""; return; }
+  const g = row.diagnostics;
+  d.textContent =
+    `stratum       ${g.stratum}\n`+
+    `frame         ${g.frame}\n`+
+    `claim_score   ${g.claim_score}\n`+
+    `content_score ${g.content_score}\n`+
+    `hub_a/hub_b   ${g.hub_a} / ${g.hub_b}\n`+
+    `source_groups ${JSON.stringify(g.source_group_a)} x ${JSON.stringify(g.source_group_b)}\n`+
+    `claim_id_a    ${g.claim_id_a}\n`+
+    `claim_id_b    ${g.claim_id_b}`;
+  d.classList.add("show");
+}
+
+$("bprev").onclick = ()=>{ if(idx>0){idx--;render();} };
+$("bnext").onclick = ()=>{ if(idx<DATA.length-1){idx++;render();} };
+$("bdiag").onclick = toggleDiag;
+$("bunusable").onclick = markUnusable;
+$("bbook").onclick = ()=>$("book").classList.add("show");
+$("book").onclick = ev=>{ if(ev.target.id==="book") $("book").classList.remove("show"); };
+
+// ---------- files ----------
+function parseJsonl(text){
+  return text.split(/\r?\n/).filter(l=>l.trim()).map((l,i)=>{
+    try{ return JSON.parse(l); }
+    catch(e){ throw new Error("рядок "+(i+1)+": "+e.message); }
+  });
+}
+
+$("fdata").onchange = ev=>{
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const rows = parseJsonl(r.result);
+      if(!rows.length) throw new Error("порожній файл");
+      if(!rows[0].display || !rows[0].interaction_id) throw new Error("не схоже на gold-set dataset");
+      DATA = rows;
+      restore();
+      render();
+      flash("завантажено "+rows.length+" інтеракцій");
+    }catch(e){ alert("Не вдалося прочитати dataset: "+e.message); }
+  };
+  r.readAsText(f, "utf-8");
+};
+
+$("fann").onchange = ev=>{
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const rows = parseJsonl(r.result);
+      let n=0;
+      rows.forEach(a=>{ if(a.interaction_id){ ANN[a.interaction_id]=a; n++; } });
+      save(); render(); flash("відновлено "+n+" міток");
+    }catch(e){ alert("Не вдалося прочитати annotations: "+e.message); }
+  };
+  r.readAsText(f, "utf-8");
+};
+
+$("bexport").onclick = ()=>{
+  const rows = DATA.filter(r=>ANN[r.interaction_id]).map(r=>ANN[r.interaction_id]);
+  if(!rows.length){ flash("ще немає жодної мітки"); return; }
+  const blob = new Blob([rows.map(r=>JSON.stringify(r)).join("\n")+"\n"],
+                        {type:"application/x-ndjson"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "gold_set_v1_annotations.jsonl";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// автоекспорт-нагадування кожні 25 міток
+let lastReminder = 0;
+setInterval(()=>{
+  const n = Object.keys(ANN).length;
+  if(n>0 && n%25===0 && n!==lastReminder){ lastReminder=n; flash("зроби export ("+n+" міток)"); }
+}, 3000);
+
+// ---------- handbook ----------
+$("bookinner").innerHTML = `
+<h2 style="margin-top:0">Пам'ятка анотатора</h2>
+<p><b>Порядок рішень фіксований:</b> спершу «чи це той самий референт», і лише
+потім тип відношення. Це дзеркалить production referent gate: same_fact /
+same_event / contradiction без підтвердженого спільного референта заборонені
+і в коді.</p>
+
+<h3>1. Спільний референт</h3>
+<p><b>так</b> — обидва claims про одну й ту саму конкретну подію / факт / об'єкт,
+і це видно з тексту: спільна локація, дата, назва, учасник, номер, специфічна деталь.</p>
+<p><b>ні</b> — видно, що йдеться про різні речі (різні міста, різні люди, різні події).</p>
+<p><b>невизначено</b> — з наданого тексту неможливо вирішити. Це НЕ «ні».
+Не вгадуй: «невизначено» — це корисний сигнал, а вгадування псує лінійку.</p>
+<p class="note">Загальна/шаблонна фраза сама по собі НЕ робить референт спільним.
+«Є постраждалі» vs «Есть пострадавшие» без спільної локації/події — це «ні»
+або «невизначено», навіть якщо тексти майже ідентичні.</p>
+
+<h3>2. Тип відношення</h3>
+<p><b>same_fact</b> — одне й те саме твердження про той самий референт.
+<i>Контрприклад:</i> «студія під санкціями» vs «гендиректор студії під санкціями» —
+це НЕ same_fact (різні суб'єкти твердження), це same_event.</p>
+<p><b>same_event</b> — та сама подія, але різні аспекти/деталі.
+<i>Приклад:</i> «17 поранено» vs «ракета влучила в зупинку» про той самий удар.</p>
+<p><b>contradiction</b> — той самий референт, але твердження несумісні.
+<i>Контрприклад:</i> «загинуло 80» vs «загинули сотні» про РІЗНІ періоди —
+це не contradiction, бо scope не збігається.</p>
+<p><b>related</b> — змістовний зв'язок є (та сама тема/напрямок/учасники),
+але це не той самий конкретний референт.</p>
+<p><b>unrelated</b> — зв'язку немає. Спільна шаблонна фраза зв'язком не є.</p>
+
+<h3>related vs unrelated</h3>
+<p>Питай себе: чи аналітик, читаючи один claim, захотів би побачити другий?
+Якщо так — related. Якщо єдине спільне — граматична форма — unrelated.</p>
+
+<h3>3. Що саме різне (лише при референті «ні»)</h3>
+<p>Це прямо вимірює, чи спрацював би дешевий детермінований чек. Вибирай те,
+що першим доводить різницю. <code>не видно з тексту</code> — якщо ти вирішив
+«ні» з загального відчуття, а конкретної суперечності в тексті немає.</p>
+
+<h3>Впевненість</h3>
+<p><b>висока</b> — переконаний. <b>середня</b> — схиляюсь. <b>низька</b> — монетка.
+Не соромся «низької»: вона потрібна, щоб окремо порахувати надійні комірки.</p>
+
+<h3>Правила чесності</h3>
+<ul>
+<li>Не намагайся вгадати, що «хотіла б» система. Розмічай те, що бачиш.</li>
+<li>Діагностика (scores, страта) навмисно закрита до збереження мітки — не відкривай наперед.</li>
+<li>Деякі пари повторюються приховано, зі зміненими місцями сторонами. Це нормально
+    і потрібне для оцінки самоузгодженості. Не намагайся їх упізнати.</li>
+<li>Якщо контекст битий/порожній — <code>U</code> (unusable), а не вгадування.</li>
+</ul>
+
+<h3>Клавіші</h3>
+<p><code>1/2/3</code> референт · <code>Q/W/E/R/T</code> відношення ·
+<code>L/P/O/C/X/N</code> тип розбіжності · <code>A/S/D</code> впевненість ·
+<code>Enter</code> зберегти · <code>←/→</code> навігація · <code>U</code> unusable ·
+<code>I</code> діагностика · <code>?</code> ця пам'ятка</p>
+`;
+
+restore();
+render();
+</script>
+</body>
+</html>
