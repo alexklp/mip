@@ -3,19 +3,18 @@
 Relation Gold Set v1 — аналіз людської розмітки.
 
 Вхід:
-  --dataset    gold_set_v1_dataset.jsonl   (з семплера)
-  --manifest   gold_set_v1_manifest.json   (з семплера; дає populations для ваг)
-  --annotations gold_set_v1_annotations.jsonl (експорт з labeler'а)
+  --dataset     gold_set_v1_dataset.jsonl
+  --manifest    gold_set_v1_manifest.json
+  --annotations gold_set_v1_annotations.jsonl
 
-Нічого не пише в БД, не викликає LLM, не тренує моделей. Мета — відповісти
-на питання "цього сигналу достатньо / недостатньо", а не побудувати класифікатор.
+Нічого не пише в БД, не викликає LLM, не тренує моделей.
 
-ГОЛОВНЕ МЕТОДОЛОГІЧНЕ ПРАВИЛО ЦЬОГО ФАЙЛУ:
-стратифікована вибірка НЕ відображає природну поширеність. Будь-яке число,
-що претендує на "у популяції X% пар такі", рахується через ваги
-w_s = N_s/n_s. Числа без ваг звітуються лише як per-cell (усередині страти),
-і саме так і підписані. Exploratory frame (same-source-group) ніколи не
-змішується з main population.
+Методологічна рамка:
+- стратифікована вибірка не відображає natural prevalence;
+- population-like estimates використовують stratum weights N_s/n_s;
+- sampled envelope НЕ є всім cross-group простором і НЕ дає absolute recall;
+- S4/S5/S6 — recall probes нижче поточного claim>=0.80 floor;
+- exploratory frame ніколи не змішується з main frame.
 """
 from __future__ import annotations
 
@@ -38,8 +37,27 @@ CERTIFY_BOUND = 0.90
 
 
 # ---------------------------------------------------------------------------
-# Завантаження та перевірка контракту
+# Dataset identity / loading / contract validation
 # ---------------------------------------------------------------------------
+
+def dataset_fingerprint(dataset: list[dict]) -> str:
+    """Same FNV-1a64 identity as the standalone HTML labeler.
+
+    Identity is not a security primitive. It scopes browser progress and prevents
+    annotations for i0000 from silently attaching to a different generated set.
+    pair_key is validated separately, so a hash collision cannot silently misjoin.
+    """
+    text = "\x1e".join(
+        f"{row.get('schema_version', '')}\x1f{row.get('interaction_id', '')}\x1f{row.get('pair_key', '')}"
+        for row in dataset
+    )
+    h = 14695981039346656037
+    mask = (1 << 64) - 1
+    for byte in text.encode("utf-8"):
+        h ^= byte
+        h = (h * 1099511628211) & mask
+    return f"fnv1a64-{h:016x}"
+
 
 def load_jsonl(path: Path) -> list[dict]:
     rows = []
@@ -56,10 +74,17 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def join_annotations(dataset: list[dict], annotations: list[dict]) -> tuple[list[dict], dict]:
-    """Зшиває dataset з розміткою за interaction_id і валідує контракт."""
+    """Join by interaction_id only after dataset_id AND pair_key match."""
     by_interaction = {row["interaction_id"]: row for row in dataset}
+    expected_dataset_id = dataset_fingerprint(dataset)
     ann_by_interaction: dict[str, dict] = {}
-    problems = {"unknown_interaction": [], "duplicate_annotation": [], "contract_errors": []}
+    problems = {
+        "unknown_interaction": [],
+        "duplicate_annotation": [],
+        "dataset_mismatch": [],
+        "pair_mismatch": [],
+        "contract_errors": [],
+    }
 
     for ann in annotations:
         iid = ann.get("interaction_id")
@@ -68,6 +93,13 @@ def join_annotations(dataset: list[dict], annotations: list[dict]) -> tuple[list
             continue
         if iid in ann_by_interaction:
             problems["duplicate_annotation"].append(iid)
+            continue
+        if ann.get("dataset_id") != expected_dataset_id:
+            problems["dataset_mismatch"].append(iid)
+            continue
+        row = by_interaction[iid]
+        if ann.get("pair_key") != row.get("pair_key"):
+            problems["pair_mismatch"].append(iid)
             continue
         errs = common.validate_annotation(ann)
         if errs:
@@ -106,17 +138,10 @@ def join_annotations(dataset: list[dict], annotations: list[dict]) -> tuple[list
 
 
 # ---------------------------------------------------------------------------
-# Приховані повтори та self-consistency
+# Hidden repeats / self-consistency
 # ---------------------------------------------------------------------------
 
 def split_repeats(joined: list[dict]) -> tuple[list[dict], list[tuple[dict, dict]]]:
-    """Повертає (primary_rows, repeat_pairs).
-
-    primary_rows — рівно один рядок на унікальну пару (той, що НЕ повтор).
-    Це і є gold set. repeat_pairs — (original, repeat) для оцінки
-    self-consistency. Повтори НІКОЛИ не входять у primary_rows, інакше
-    унікальна популяція була б порахована двічі.
-    """
     primary = [r for r in joined if not r["is_repeat"]]
     by_key_primary = {r["pair_key"]: r for r in primary}
     pairs = []
@@ -130,7 +155,6 @@ def split_repeats(joined: list[dict]) -> tuple[list[dict], list[tuple[dict, dict
 
 
 def agreement_stats(repeat_pairs: list[tuple[dict, dict]]) -> dict:
-    """Intra-rater agreement + Cohen's kappa на same_referent і relation_label."""
     def _agree(field: str) -> dict:
         usable = [(a, b) for a, b in repeat_pairs
                   if a["status"] == "labeled" and b["status"] == "labeled"]
@@ -139,7 +163,6 @@ def agreement_stats(repeat_pairs: list[tuple[dict, dict]]) -> dict:
             return {"n": 0, "raw": float("nan"), "kappa": float("nan"), "disagreements": []}
         hits = sum(1 for a, b in usable if a[field] == b[field])
         raw = hits / n
-        # Cohen's kappa з маргіналами тієї самої людини у двох "проходах".
         labels = sorted({a[field] for a, _ in usable} | {b[field] for _, b in usable}, key=str)
         pa = Counter(a[field] for a, _ in usable)
         pb = Counter(b[field] for _, b in usable)
@@ -169,7 +192,7 @@ def agreement_stats(repeat_pairs: list[tuple[dict, dict]]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Допоміжне
+# Helpers
 # ---------------------------------------------------------------------------
 
 def bin_index(value: float, bins) -> int:
@@ -181,10 +204,9 @@ def bin_index(value: float, bins) -> int:
 
 def bin_label(bins, i: int) -> str:
     lo, hi = bins[i]
-    lo_s = "<" if lo <= -1.0 else f"[{lo:.2f}"
     if lo <= -1.0:
         return f"<{hi:.2f}"
-    return f"{lo_s},{hi:.2f})"
+    return f"[{lo:.2f},{hi:.2f})"
 
 
 def fmt_pct(value: float) -> str:
@@ -199,7 +221,7 @@ def pct_ci(successes: int, total: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Секції звіту
+# Report sections
 # ---------------------------------------------------------------------------
 
 def report_completeness(dataset, joined, problems, primary, repeat_pairs) -> None:
@@ -209,6 +231,7 @@ def report_completeness(dataset, joined, problems, primary, repeat_pairs) -> Non
     total_interactions = len(dataset)
     expected_unique = sum(1 for r in dataset if not r["is_repeat"])
     expected_repeats = total_interactions - expected_unique
+    print(f"dataset_id                : {dataset_fingerprint(dataset)}")
     print(f"dataset interactions      : {total_interactions} "
           f"(unique={expected_unique}, hidden repeats={expected_repeats})")
     print(f"annotations joined        : {len(joined)}")
@@ -223,9 +246,8 @@ def report_completeness(dataset, joined, problems, primary, repeat_pairs) -> Non
             for v in values[:5]:
                 print(f"    {v}")
     if not any(problems.values()):
-        print("  contract: OK (no unknown ids, no duplicates, no schema violations)")
+        print("  contract: OK (dataset_id/pair_key/schema joins are consistent)")
 
-    # Псевдореплікація: скільки насправді унікальних claims стоїть за мітками.
     labeled = [r for r in primary if r["status"] == "labeled"]
     claims = Counter()
     for r in labeled:
@@ -234,20 +256,16 @@ def report_completeness(dataset, joined, problems, primary, repeat_pairs) -> Non
     if labeled:
         worst = claims.most_common(5)
         print(f"\n  distinct claims behind {len(labeled)} labeled pairs: {len(claims)}")
-        print(f"  most reused claims: " + ", ".join(f"{c[:8]}…x{n}" for c, n in worst))
+        print("  most reused claims: " + ", ".join(f"{c[:8]}…x{n}" for c, n in worst))
         if worst and worst[0][1] >= 6:
-            print("  WARNING: a single claim appears in >=6 labeled pairs. The claim-use")
-            print("  cap exempts S8_HUB_X_HUB by design (hub reuse is the thing being")
-            print("  measured there), so treat S8 confidence intervals as optimistic:")
-            print("  those rows are not independent observations.")
+            print("  WARNING: repeated claims induce clustered observations; plain pair-level")
+            print("  Wilson intervals may be optimistic in affected strata.")
 
     n_unusable = len(unusable)
     n_labeled = len(labeled)
     if n_labeled and n_unusable / (n_labeled + n_unusable) > 0.10:
         print(f"\n  WARNING: {n_unusable} unusable of {n_labeled + n_unusable} "
-              f"({100.0 * n_unusable / (n_labeled + n_unusable):.0f}%). Weights use the")
-        print("  LABELED count per stratum, so a high unusable rate inflates weights in")
-        print("  the affected strata and widens the real (unreported) uncertainty.")
+              f"({100.0 * n_unusable / (n_labeled + n_unusable):.0f}%).")
 
 
 def report_agreement(agree: dict) -> None:
@@ -270,14 +288,13 @@ def report_agreement(agree: dict) -> None:
     for stratum, cell in agree["per_stratum_same_referent"].items():
         if cell["n"]:
             print(f"    {stratum:<32} {cell['hits']}/{cell['n']}")
-    print("\n  NOTE: repeats are presented with A/B sides swapped, so this also")
-    print("  measures order-invariance, not only memory consistency.")
+    print("\n  NOTE: repeats have A/B swapped, so this also tests order-invariance.")
 
 
 def report_distributions(primary: list[dict], weights: dict, populations: dict) -> None:
     print()
     print("=" * 78)
-    print("3. LABEL DISTRIBUTION — sample vs weighted population estimate")
+    print("3. LABEL DISTRIBUTION — sample vs weighted sampled-envelope estimate")
     print("=" * 78)
     labeled = [r for r in primary if r["status"] == "labeled" and r["frame"] == common.MAIN_FRAME]
     if not labeled:
@@ -285,7 +302,7 @@ def report_distributions(primary: list[dict], weights: dict, populations: dict) 
         return
 
     print("\n--- same_referent ---")
-    print(f"{'value':<12} {'sample':>14} {'weighted population':>24}")
+    print(f"{'value':<12} {'sample':>14} {'weighted envelope':>24}")
     for value in common.REFERENT_VALUES:
         k = sum(1 for r in labeled if r["same_referent"] == value)
         est, _num, _den = common.weighted_proportion(
@@ -309,9 +326,9 @@ def report_distributions(primary: list[dict], weights: dict, populations: dict) 
             print(f"{str(value):<16} {k:>4}/{len(negatives)}  ({100.0*k/len(negatives):.1f}% of negatives)")
         obvious = sum(1 for r in negatives if r["conflict_type"] in
                       ("location", "person_entity", "object_facility", "chronology"))
-        print(f"\n  -> {pct_ci(obvious, len(negatives))} of different-referent pairs have an")
-        print("     EXPLICIT conflict visible in the shown text. This directly sizes a")
-        print("     cheap deterministic conflict rule WITHOUT building one.")
+        print(f"\n  -> {pct_ci(obvious, len(negatives))} of sampled different-referent pairs")
+        print("     have an explicit visible conflict — candidate evidence for a cheap")
+        print("     deterministic negative rule, not yet a production threshold.")
     else:
         print("  (none)")
 
@@ -320,14 +337,14 @@ def report_distributions(primary: list[dict], weights: dict, populations: dict) 
         k = sum(1 for r in labeled if r["confidence"] == value)
         print(f"{value:<10} {k:>4}/{len(labeled)}")
 
-    print("\nNOTE: 'sample' columns are stratified counts and DO NOT reflect natural")
-    print("prevalence. Only the weighted column estimates the population.")
+    print("\nNOTE: weighted numbers estimate only the explicitly sampled measurement")
+    print("envelope. They are not prevalence over all 188.9M cross-group pairs.")
 
 
 def report_per_stratum(primary: list[dict], populations: dict, weights: dict) -> None:
     print()
     print("=" * 78)
-    print("4. PER-STRATUM OUTCOMES (unweighted within stratum = decision-relevant)")
+    print("4. PER-STRATUM OUTCOMES")
     print("=" * 78)
     print(f"{'stratum':<32} {'N_pop':>9} {'n':>4} {'w':>8} {'diff-referent':>22} {'positive rel':>22}")
     for stratum in common.STRATA:
@@ -342,8 +359,8 @@ def report_per_stratum(primary: list[dict], populations: dict, weights: dict) ->
         pos = sum(1 for r in rows if common.is_positive_relation(r))
         print(f"{stratum:<32} {npop:>9} {n:>4} {w:>8.1f} {pct_ci(diff, n):>22} {pct_ci(pos, n):>22}")
 
-    print("\n--- reject-zone certification (Wilson lower bound on P(different referent)) ---")
-    print(f"target: lower bound >= {CERTIFY_BOUND:.2f}")
+    print("\n--- reject-zone evidence (Wilson lower bound on P(different referent)) ---")
+    print(f"target for independent-pair certification: lower bound >= {CERTIFY_BOUND:.2f}")
     for stratum in common.MAIN_STRATA:
         rows = [r for r in primary if r["stratum"] == stratum and r["status"] == "labeled"]
         n = len(rows)
@@ -352,22 +369,17 @@ def report_per_stratum(primary: list[dict], populations: dict, weights: dict) ->
         diff = sum(1 for r in rows if common.is_different_referent(r))
         lo, _hi = common.wilson_interval(diff, n)
         budget = common.max_errors_for_lower_bound(n, CERTIFY_BOUND)
-        verdict = "CERTIFIED" if lo >= CERTIFY_BOUND else "not certified"
+        if stratum == "S8_HUB_X_HUB":
+            verdict = "SCREENING ONLY (hub-clustered pairs)"
+        else:
+            verdict = "CERTIFIED" if lo >= CERTIFY_BOUND else "not certified"
         print(f"  {stratum:<32} lower={100*lo:5.1f}%  errors={n-diff:>2}  "
               f"max_errors_allowed_at_n={budget:>2}  {verdict}")
-    print("\n  'max_errors_allowed_at_n' says what this sample size can prove at all.")
-    print("  If it is 0, the cell certifies 90% ONLY when flawless; one error kills it")
-    print("  and you need a larger n, not a different conclusion.")
+    print("\n  S8 is never called CERTIFIED by this analyzer: hub pairs are clustered by")
+    print("  construction, so a plain Wilson interval over rows overstates independence.")
 
 
 def report_weight_caveats(manifest: dict, sampled: Counter) -> None:
-    """Наскільки ваги N_s/n_s можна вважати чесними.
-
-    Ваги припускають, що n_s — випадкова підвибірка страти. Кап на повторне
-    використання claim цього припущення трохи не дотримує: пари з "зайнятими"
-    claims систематично пропускались. Якщо пропусків мало — ефект нехтовний;
-    якщо багато — читача треба про це попередити, а не мовчати.
-    """
     fill = manifest.get("fill_stats") or {}
     if not fill:
         return
@@ -380,19 +392,16 @@ def report_weight_caveats(manifest: dict, sampled: Counter) -> None:
             continue
         rate = skipped / (taken + skipped) if (taken + skipped) else 0.0
         marker = ""
-        if rate > 0.5:
-            marker = "  <-- weights approximate"
+        if skipped:
+            marker = "  <-- cap changed inclusion probabilities"
             flagged.append(stratum)
         print(f"  {stratum:<32} taken={taken:>3} cap-skipped={skipped:>4} "
               f"({100 * rate:4.0f}%){marker}")
     if flagged:
-        print("\n  In the flagged strata the cap rejected most candidates, so the")
-        print("  labeled rows are a random sample CONDITIONAL ON the cap, not a plain")
-        print("  random sample of the stratum. Weighted estimates there carry an extra,")
-        print("  unquantified bias (pairs built from frequently-recurring claims are")
-        print("  under-represented). Treat those population numbers as indicative.")
+        print("\n  Any cap-skips make N_s/n_s weights approximate because inclusion is")
+        print("  conditional on claim reuse. Prefer an uncapped inferential sample.")
     else:
-        print("  cap rejected only a minority everywhere; weights are sound")
+        print("  no cap-skips: simple within-stratum inclusion weights are appropriate")
 
 
 def report_2d(primary: list[dict], weights: dict) -> None:
@@ -418,7 +427,7 @@ def report_2d(primary: list[dict], weights: dict) -> None:
 
     for title, predicate in (("different referent", common.is_different_referent),
                              ("positive relation", common.is_positive_relation)):
-        print(f"\n--- {title}: raw k/n  and  (weighted %) ---")
+        print(f"\n--- {title}: raw k/n and weighted sampled-envelope % ---")
         print(header)
         for r_i in range(len(CLAIM_BINS)):
             cells = []
@@ -433,33 +442,15 @@ def report_2d(primary: list[dict], weights: dict) -> None:
                 cells.append(f"{k}/{len(rows)} ({est_s})".rjust(14))
             print(f"{bin_label(CLAIM_BINS, r_i):<18}" + "".join(cells))
 
-    # Скільки страт змішується в одній 2D-комірці — це і є міра того,
-    # наскільки сирий k/n у цій комірці можна читати без ваг.
-    mixed = []
-    for r_i in range(len(CLAIM_BINS)):
-        for c_i in range(len(CONTENT_BINS)):
-            rows = cell_rows(r_i, c_i)
-            strata = {r["stratum"] for r in rows}
-            if len(strata) > 1:
-                mixed.append((bin_label(CLAIM_BINS, r_i), bin_label(CONTENT_BINS, c_i), sorted(strata)))
-
     print("\nHOW TO READ THIS TABLE:")
-    print("  Raw k/n is a count inside the SAMPLE, not a population rate. 2D bins do")
-    print("  not coincide with strata (S7 near-dup and S8 hub x hub cut across them),")
-    print("  so a cell can mix strata sampled at very different rates. The weighted %")
-    print("  in parentheses corrects for that and is the number to quote.")
-    if mixed:
-        print(f"\n  cells mixing >1 stratum (raw k/n there is biased): {len(mixed)}")
-        for claim_lab, content_lab, strata in mixed[:6]:
-            print(f"    claim {claim_lab} x content {content_lab}: {', '.join(s.split('_')[0] for s in strata)}")
-    else:
-        print("\n  no cell mixes strata in this sample; raw and weighted agree by construction")
+    print("  The sample is stratified on these signals. Raw k/n is descriptive only;")
+    print("  weighted values correct stratum sampling rates within the sampled envelope.")
 
 
 def report_rules(primary: list[dict], weights: dict) -> None:
     print()
     print("=" * 78)
-    print("6. SIMPLE DETERMINISTIC RULES (weighted precision / recall)")
+    print("6. SIMPLE DETERMINISTIC RULE PROBES")
     print("=" * 78)
     labeled = [r for r in primary if r["status"] == "labeled" and r["frame"] == common.MAIN_FRAME]
     if not labeled:
@@ -467,8 +458,6 @@ def report_rules(primary: list[dict], weights: dict) -> None:
         return
 
     total_pos_weight = sum(weights.get(r["stratum"], 0.0) for r in labeled if common.is_positive_relation(r))
-    if total_pos_weight <= 0:
-        print("no positive relations in the labeled set — cannot compute recall")
 
     def evaluate(name: str, accept) -> None:
         acc = [r for r in labeled if accept(r)]
@@ -478,13 +467,13 @@ def report_rules(primary: list[dict], weights: dict) -> None:
         w_acc = sum(weights.get(r["stratum"], 0.0) for r in acc)
         w_acc_pos = sum(weights.get(r["stratum"], 0.0) for r in acc if common.is_positive_relation(r))
         precision = w_acc_pos / w_acc if w_acc else float("nan")
-        recall = w_acc_pos / total_pos_weight if total_pos_weight else float("nan")
+        recall_probe = w_acc_pos / total_pos_weight if total_pos_weight else float("nan")
         n_pos = sum(1 for r in acc if common.is_positive_relation(r))
-        print(f"{name:<44} P={fmt_pct(precision)} R={fmt_pct(recall)} "
+        print(f"{name:<44} P={fmt_pct(precision)} envelope-R={fmt_pct(recall_probe)} "
               f"(n={len(acc)}, pos={n_pos}, est_pairs={w_acc:,.0f})")
 
-    print("\n--- baseline: current retrieval ---")
-    evaluate("claim>=0.80 (candidate v1 retrieval)", lambda r: r["claim_score"] >= 0.80)
+    print("\n--- current retrieval region ---")
+    evaluate("claim>=0.80", lambda r: r["claim_score"] >= 0.80)
 
     print("\n--- claim>=0.80 + content threshold ---")
     for t in CONTENT_THRESHOLDS:
@@ -494,60 +483,58 @@ def report_rules(primary: list[dict], weights: dict) -> None:
     print("\n--- hub suppression ---")
     evaluate("claim>=0.80 AND NOT(hub_a AND hub_b)",
              lambda r: r["claim_score"] >= 0.80 and not (r["hub_a"] and r["hub_b"]))
-    evaluate("claim>=0.80 AND NOT(hub_a AND hub_b) AND content>=0.50",
-             lambda r: r["claim_score"] >= 0.80 and not (r["hub_a"] and r["hub_b"])
-             and r["content_score"] >= 0.50)
 
-    print("\n--- content-led retrieval (tests the 0.80 floor itself) ---")
+    print("\n--- below-floor retrieval probes ---")
     for t in (0.60, 0.65, 0.70):
         evaluate(f"content>={t:.2f} AND claim>=0.65",
                  lambda r, t=t: r["content_score"] >= t and r["claim_score"] >= 0.65)
-    evaluate("claim>=0.65 (lower retrieval floor)", lambda r: r["claim_score"] >= 0.65)
 
-    print("\nRecall is measured RELATIVE TO the sampled frame (cross-source-group,")
-    print("claim>=0.50). Pairs below claim 0.50 were never sampled, so absolute")
-    print("recall over the whole corpus is NOT estimated here — see report section 7.")
+    print("\n'envelope-R' is recall only relative to this sampled measurement envelope.")
+    print("It is NOT absolute corpus recall and must not be quoted as such.")
 
 
 def report_recall_loss(primary: list[dict], weights: dict) -> None:
     print()
     print("=" * 78)
-    print("7. WHAT THE 0.80 RETRIEVAL FLOOR MISSES")
+    print("7. BELOW-0.80 RECALL PROBES")
     print("=" * 78)
     labeled = [r for r in primary if r["status"] == "labeled" and r["frame"] == common.MAIN_FRAME]
     below = [r for r in labeled if r["claim_score"] < 0.80]
     if not below:
-        print("no labeled pairs below claim 0.80")
+        print("no labeled probe pairs below claim 0.80")
         return
     pos_below = [r for r in below if common.is_positive_relation(r)]
-    print(f"labeled pairs with claim<0.80 : {len(below)}")
-    print(f"  of which positive relation  : {pct_ci(len(pos_below), len(below))}")
+    print(f"labeled probe pairs with claim<0.80 : {len(below)}")
+    print(f"  positive relation in probes        : {pct_ci(len(pos_below), len(below))}")
 
     w_pos_below = sum(weights.get(r["stratum"], 0.0) for r in pos_below)
-    w_pos_all = sum(weights.get(r["stratum"], 0.0) for r in labeled if common.is_positive_relation(r))
-    share = w_pos_below / w_pos_all if w_pos_all else float("nan")
-    print(f"\n  weighted share of ALL positive relations that sit below claim 0.80:")
-    print(f"    {fmt_pct(share)}  (estimated {w_pos_below:,.0f} of {w_pos_all:,.0f} pairs)")
-    print("\n  This is the headline recall answer: if it is small, the 0.80 floor is")
-    print("  defensible; if it is large, claim cosine is the wrong retrieval signal.")
+    w_pos_envelope = sum(weights.get(r["stratum"], 0.0) for r in labeled if common.is_positive_relation(r))
+    share = w_pos_below / w_pos_envelope if w_pos_envelope else float("nan")
+    print("\n  weighted share of positive relations INSIDE THE SAMPLED ENVELOPE")
+    print(f"  contributed by below-0.80 probe strata: {fmt_pct(share)}")
+    print(f"  (estimated {w_pos_below:,.0f} of {w_pos_envelope:,.0f} envelope pairs)")
 
     by_stratum = defaultdict(list)
     for r in below:
         by_stratum[r["stratum"]].append(r)
-    print("\n  breakdown by stratum:")
+    print("\n  breakdown by recall-probe stratum:")
     for stratum, rows in sorted(by_stratum.items()):
         pos = sum(1 for r in rows if common.is_positive_relation(r))
         print(f"    {stratum:<32} {pct_ci(pos, len(rows))}")
 
-    print("\n  LIMITATION (must be stated in any writeup): pairs with claim<0.50 were")
-    print("  never sampled. Positive relations there are invisible to this instrument,")
-    print("  so the number above is a LOWER BOUND on what the 0.80 floor misses.")
+    print("\n  INTERPRETATION:")
+    print("  * any credible positive in S4/S5/S6 proves that claim>=0.80 misses some")
+    print("    usable relations and tells us where to investigate retrieval expansion;")
+    print("  * absence of positives in these probes does NOT prove high absolute recall;")
+    print("  * unsampled regions include claim 0.65-0.80 with content<0.50,")
+    print("    claim 0.50-0.65 with content<0.70, and every pair with claim<0.50.")
+    print("  Therefore this instrument cannot estimate absolute corpus recall.")
 
 
 def report_signal_comparison(primary: list[dict]) -> None:
     print()
     print("=" * 78)
-    print("8. IS content_score AN INDEPENDENT SIGNAL?")
+    print("8. CLAIM_SCORE vs CONTENT_SCORE — DIAGNOSTIC ONLY")
     print("=" * 78)
     labeled = [r for r in primary if r["status"] == "labeled" and r["frame"] == common.MAIN_FRAME]
     pos = [r for r in labeled if common.is_positive_relation(r)]
@@ -571,8 +558,6 @@ def report_signal_comparison(primary: list[dict]) -> None:
     summarize("positive relation", pos, "content_score")
     summarize("different referent", neg, "content_score")
 
-    # AUC (Mann-Whitney) для кожного сигналу окремо: наскільки він взагалі
-    # відділяє позитив від різного референта. Без навчання моделі.
     def auc(field: str) -> float:
         p = [r[field] for r in pos]
         q = [r[field] for r in neg]
@@ -580,15 +565,13 @@ def report_signal_comparison(primary: list[dict]) -> None:
         ties = sum(1 for x in p for y in q if x == y)
         return (wins + 0.5 * ties) / (len(p) * len(q))
 
-    print(f"\nseparation AUC (positive vs different-referent), SAMPLE-LEVEL:")
+    print("\nseparation AUC on the STRATIFIED SAMPLE (descriptive, not inferential):")
     print(f"  claim_score   AUC = {auc('claim_score'):.3f}")
     print(f"  content_score AUC = {auc('content_score'):.3f}")
-    print("\n  AUC 0.5 = no signal. CAVEAT: this AUC is computed on the stratified")
-    print("  sample without weights, so its MAGNITUDE is not a population estimate")
-    print("  (strata are sampled at very different rates by design). What is robust")
-    print("  is the DIRECTION and the gap: if content_score clearly beats claim_score")
-    print("  here, the dual-score hypothesis is supported by labels, not anecdotes.")
-    print("  The per-stratum tables in section 4 are the unbiased view.")
+    print("\n  IMPORTANT: the sample was deliberately stratified using claim/content")
+    print("  scores, so neither the AUC magnitude nor the gap proves that content is an")
+    print("  independent discriminator. Incremental value must be judged within narrow")
+    print("  claim-score regions / strata and by the labeled error patterns.")
 
 
 def report_exploratory(primary: list[dict]) -> None:
@@ -605,10 +588,8 @@ def report_exploratory(primary: list[dict]) -> None:
     print(f"labeled same-group pairs : {len(rows)}")
     print(f"  positive relation      : {pct_ci(pos, len(rows))}")
     print(f"  different referent     : {pct_ci(diff, len(rows))}")
-    print("\n  These rows are NOT part of the main population and were excluded from")
-    print("  every weighted estimate above. They answer one question only: does")
-    print("  cross-source-only eligibility discard usable within-group relations?")
-    print("  A high positive rate here means the pilot scope is costing real events.")
+    print("\n  These rows are not part of the main envelope and are never mixed into")
+    print("  weighted main-frame estimates.")
 
 
 # ---------------------------------------------------------------------------
@@ -637,7 +618,8 @@ def main(argv=None) -> int:
     sampled = Counter(r["stratum"] for r in primary if r["status"] == "labeled")
     weights = common.stratum_weights(populations, sampled)
 
-    print(f"Relation Gold Set v1 analysis")
+    print("Relation Gold Set v1 analysis")
+    print(f"dataset_id={dataset_fingerprint(dataset)}")
     print(f"seed={manifest.get('seed')} code_revision={manifest.get('code_revision')}")
     print(f"embedding_model_id={manifest.get('embedding_model_id')}")
     print(f"time_signal: {manifest.get('time_signal')}")
