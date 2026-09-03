@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relation Gold Set v1 — labeler</title>
+<title>Еталонна розмітка зв'язків v1</title>
 <style>
   :root{
     --bg:#12141a; --panel:#191c24; --panel2:#1f232d; --line:#2b3040;
@@ -16,10 +16,10 @@
     font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif}
   header{position:sticky;top:0;z-index:10;background:var(--panel);
     border-bottom:1px solid var(--line);padding:10px 16px;
-    display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-  header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.02em}
+    display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:14px;margin:0;font-weight:700;letter-spacing:.02em}
   .grow{flex:1}
-  .prog{font:12px/1 var(--mono);color:var(--dim)}
+  .prog{font:12px/1.35 var(--mono);color:var(--dim)}
   .bar{height:4px;background:var(--line);border-radius:2px;width:180px;overflow:hidden}
   .bar>div{height:100%;background:var(--accent);width:0%}
   button,label.btn{background:var(--panel2);color:var(--ink);border:1px solid var(--line);
@@ -27,6 +27,10 @@
   button:hover,label.btn:hover{border-color:var(--focus)}
   button:disabled{opacity:.4;cursor:not-allowed}
   main{max-width:1180px;margin:0 auto;padding:18px 16px 120px}
+  .intro{background:#171d28;border:1px solid #2d3950;border-radius:10px;padding:13px 15px;
+    margin-bottom:14px;color:#d5dbea}
+  .intro b{color:#fff}
+  .intro .sub{color:var(--dim);font-size:13px;margin-top:4px}
   .pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:900px){.pair{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
@@ -35,7 +39,7 @@
   .claim{font-size:17px;line-height:1.45;margin-bottom:12px}
   .field{margin-top:10px}
   .field .k{font:11px/1.4 var(--mono);color:var(--dim);text-transform:uppercase;
-    letter-spacing:.06em;margin-bottom:3px}
+    letter-spacing:.05em;margin-bottom:3px}
   .field .v{color:#cdd4e2;font-size:13.5px}
   .snip{max-height:190px;overflow:auto;background:var(--panel2);border:1px solid var(--line);
     border-radius:6px;padding:9px 10px;font-size:13px;color:#c3cbdb;white-space:pre-wrap}
@@ -43,9 +47,11 @@
     padding:7px 9px;border-radius:0 5px 5px 0;font-size:13.5px}
   .panel{margin-top:18px;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;padding:14px}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:9px 0}
-  .row .lab{min-width:150px;font-size:12px;color:var(--dim);
-    text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .step{padding:10px 0;border-bottom:1px solid rgba(43,48,64,.7)}
+  .step:last-of-type{border-bottom:0}
+  .stephead{font-size:13px;font-weight:700;margin-bottom:2px}
+  .stephelp{font-size:12.5px;color:var(--dim);margin:0 0 8px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:7px 0}
   .opt{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
     padding:7px 12px;font-size:13.5px;cursor:pointer;user-select:none}
   .opt kbd{font:11px/1 var(--mono);background:var(--bg);border:1px solid var(--line);
@@ -55,6 +61,7 @@
   .opt.off{opacity:.3;cursor:not-allowed}
   .opt.neg.on{background:var(--bad);border-color:var(--bad)}
   .opt.warn.on{background:var(--warn);border-color:var(--warn)}
+  .opt .desc{font-size:11.5px;opacity:.78;margin-left:4px}
   input[type=text]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
     border-radius:6px;padding:7px 10px;font-size:13.5px;flex:1;min-width:240px}
   .foot{position:fixed;bottom:0;left:0;right:0;background:var(--panel);
@@ -64,6 +71,7 @@
   .note{color:var(--warn);font-size:12.5px}
   .center{text-align:center;padding:70px 20px;color:var(--dim)}
   .center h2{color:var(--ink);font-size:19px}
+  #row_conflict{transition:opacity .15s}
   #book{display:none;position:fixed;inset:0;background:rgba(8,10,14,.94);z-index:50;
     overflow:auto;padding:36px 20px}
   #book.show{display:block}
@@ -81,99 +89,119 @@
 <body>
 
 <header>
-  <h1>RELATION GOLD SET v1</h1>
+  <h1>ЕТАЛОННА РОЗМІТКА ЗВ'ЯЗКІВ v1</h1>
   <div class="bar"><div id="barfill"></div></div>
-  <div class="prog" id="prog">no dataset</div>
+  <div class="prog" id="prog">набір не завантажено</div>
   <div class="grow"></div>
-  <label class="btn">load dataset<input id="fdata" type="file" accept=".jsonl,.json" hidden></label>
-  <label class="btn">resume from export<input id="fann" type="file" accept=".jsonl" hidden></label>
-  <button id="bexport">export annotations</button>
-  <button id="bbook">handbook (?)</button>
+  <label class="btn">Завантажити набір<input id="fdata" type="file" accept=".jsonl,.json" hidden></label>
+  <label class="btn">Продовжити з файлу<input id="fann" type="file" accept=".jsonl" hidden></label>
+  <button id="bexport">Зберегти розмітку у файл</button>
+  <button id="bbook">Інструкція (?)</button>
 </header>
 
 <div class="flash" id="flash"></div>
 
 <main>
   <div id="empty" class="center">
-    <h2>Завантаж <code>gold_set_v1_dataset.jsonl</code></h2>
-    <p>Розмітка зберігається в браузері автоматично <b>окремо для кожного dataset</b>.
-       Періодично тисни <b>export annotations</b> — це артефакт для аналізатора.</p>
-    <p class="hint">Порядок пар зафіксовано семплером. Можна зупинитись будь-коли:
-       послідовність prefix-balanced, тому навіть неповна розмітка аналізовна.</p>
+    <h2>Завантажте файл із парами тверджень</h2>
+    <p>Оберіть <code>gold_set_v1_dataset.jsonl</code>. Прогрес зберігається у браузері
+       автоматично й окремо для кожного набору.</p>
+    <p>Періодично натискайте <b>«Зберегти розмітку у файл»</b>, щоб мати резервну копію.</p>
   </div>
 
   <div id="work" style="display:none">
+    <div class="intro">
+      <b>Що потрібно зробити:</b> порівняйте два твердження та дайте три послідовні відповіді:
+      чи йдеться про той самий конкретний епізод або факт, який між ними зв'язок,
+      і наскільки ви впевнені у своєму рішенні.
+      <div class="sub">Оцінюйте лише те, що видно в показаному тексті. Не намагайтеся вгадати,
+      як «має» відповісти система. Якщо даних недостатньо — так і позначайте.</div>
+    </div>
+
     <div class="pair">
       <div class="card">
-        <h2>Claim A</h2>
+        <h2>Твердження A</h2>
         <div class="claim" id="a_claim"></div>
-        <div class="field"><div class="k">evidence span</div><div class="ev" id="a_ev"></div></div>
-        <div class="field"><div class="k">title</div><div class="v" id="a_title"></div></div>
-        <div class="field"><div class="k">source</div><div class="v" id="a_src"></div></div>
-        <div class="field"><div class="k">context</div><div class="snip" id="a_ctx"></div></div>
+        <div class="field"><div class="k">Фрагмент, з якого взято твердження</div><div class="ev" id="a_ev"></div></div>
+        <div class="field"><div class="k">Заголовок матеріалу</div><div class="v" id="a_title"></div></div>
+        <div class="field"><div class="k">Джерело</div><div class="v" id="a_src"></div></div>
+        <div class="field"><div class="k">Контекст</div><div class="snip" id="a_ctx"></div></div>
       </div>
       <div class="card">
-        <h2>Claim B</h2>
+        <h2>Твердження B</h2>
         <div class="claim" id="b_claim"></div>
-        <div class="field"><div class="k">evidence span</div><div class="ev" id="b_ev"></div></div>
-        <div class="field"><div class="k">title</div><div class="v" id="b_title"></div></div>
-        <div class="field"><div class="k">source</div><div class="v" id="b_src"></div></div>
-        <div class="field"><div class="k">context</div><div class="snip" id="b_ctx"></div></div>
+        <div class="field"><div class="k">Фрагмент, з якого взято твердження</div><div class="ev" id="b_ev"></div></div>
+        <div class="field"><div class="k">Заголовок матеріалу</div><div class="v" id="b_title"></div></div>
+        <div class="field"><div class="k">Джерело</div><div class="v" id="b_src"></div></div>
+        <div class="field"><div class="k">Контекст</div><div class="snip" id="b_ctx"></div></div>
       </div>
     </div>
 
     <div class="panel">
-      <div class="row">
-        <div class="lab">1. Той самий епізод</div>
-        <div class="opt" data-g="ref" data-v="yes"><kbd>1</kbd>так</div>
-        <div class="opt neg" data-g="ref" data-v="no"><kbd>2</kbd>ні</div>
-        <div class="opt warn" data-g="ref" data-v="uncertain"><kbd>3</kbd>невизначено</div>
+      <div class="step">
+        <div class="stephead">1. Чи це той самий конкретний епізод або факт?</div>
+        <div class="stephelp">Спільна тема, місто, організація чи об'єкт самі по собі ще не означають, що це одна й та сама подія.</div>
+        <div class="row">
+          <div class="opt" data-g="ref" data-v="yes"><kbd>1</kbd>Так</div>
+          <div class="opt neg" data-g="ref" data-v="no"><kbd>2</kbd>Ні</div>
+          <div class="opt warn" data-g="ref" data-v="uncertain"><kbd>3</kbd>Неможливо визначити</div>
+        </div>
       </div>
 
-      <div class="row" id="row_conflict">
-        <div class="lab">1b. Що саме різне</div>
-        <div class="opt" data-g="conf" data-v="location"><kbd>L</kbd>локація</div>
-        <div class="opt" data-g="conf" data-v="person_entity"><kbd>P</kbd>особа/суб'єкт</div>
-        <div class="opt" data-g="conf" data-v="object_facility"><kbd>O</kbd>об'єкт</div>
-        <div class="opt" data-g="conf" data-v="chronology"><kbd>C</kbd>час</div>
-        <div class="opt" data-g="conf" data-v="other"><kbd>X</kbd>інше</div>
-        <div class="opt" data-g="conf" data-v="not_obvious"><kbd>N</kbd>не видно з тексту</div>
+      <div class="step" id="row_conflict">
+        <div class="stephead">1б. Що саме відрізняється?</div>
+        <div class="stephelp">Заповнюйте лише якщо ви обрали «Ні». <b>Можна вибрати кілька причин одночасно.</b></div>
+        <div class="row">
+          <div class="opt" data-g="conf" data-v="location"><kbd>L</kbd>Місце</div>
+          <div class="opt" data-g="conf" data-v="person_entity"><kbd>P</kbd>Особа / суб'єкт</div>
+          <div class="opt" data-g="conf" data-v="object_facility"><kbd>O</kbd>Об'єкт / установа</div>
+          <div class="opt" data-g="conf" data-v="chronology"><kbd>C</kbd>Час / період</div>
+          <div class="opt" data-g="conf" data-v="other"><kbd>X</kbd>Інша відмінність</div>
+          <div class="opt" data-g="conf" data-v="not_obvious"><kbd>N</kbd>Конкретну відмінність не видно з тексту</div>
+        </div>
       </div>
 
-      <div class="row">
-        <div class="lab">2. Відношення</div>
-        <div class="opt" data-g="rel" data-v="same_fact"><kbd>Q</kbd>same_fact</div>
-        <div class="opt" data-g="rel" data-v="same_event"><kbd>W</kbd>same_event</div>
-        <div class="opt" data-g="rel" data-v="contradiction"><kbd>E</kbd>contradiction</div>
-        <div class="opt" data-g="rel" data-v="related"><kbd>R</kbd>related</div>
-        <div class="opt" data-g="rel" data-v="unrelated"><kbd>T</kbd>unrelated</div>
+      <div class="step">
+        <div class="stephead">2. Який зв'язок між твердженнями?</div>
+        <div class="stephelp">Оберіть один варіант, який найточніше описує змістовний зв'язок.</div>
+        <div class="row">
+          <div class="opt" data-g="rel" data-v="same_fact" title="Обидва твердження повідомляють фактично одне й те саме"><kbd>Q</kbd>Той самий факт</div>
+          <div class="opt" data-g="rel" data-v="same_event" title="Йдеться про одну подію, але про різні її аспекти або деталі"><kbd>W</kbd>Та сама подія, різні деталі</div>
+          <div class="opt" data-g="rel" data-v="contradiction" title="Йдеться про той самий епізод або факт, але твердження несумісні"><kbd>E</kbd>Суперечать одне одному</div>
+          <div class="opt" data-g="rel" data-v="related" title="Є змістовний зв'язок, але це не той самий конкретний епізод або факт"><kbd>R</kbd>Пов'язані, але різні</div>
+          <div class="opt" data-g="rel" data-v="unrelated" title="Змістовного зв'язку між твердженнями немає"><kbd>T</kbd>Не пов'язані</div>
+        </div>
       </div>
 
-      <div class="row">
-        <div class="lab">3. Впевненість</div>
-        <div class="opt" data-g="cnf" data-v="high"><kbd>A</kbd>висока</div>
-        <div class="opt" data-g="cnf" data-v="medium"><kbd>S</kbd>середня</div>
-        <div class="opt" data-g="cnf" data-v="low"><kbd>D</kbd>низька</div>
+      <div class="step">
+        <div class="stephead">3. Наскільки ви впевнені у своєму рішенні?</div>
+        <div class="stephelp">Це оцінка <b>вашої впевненості в розмітці</b>, а не сили зв'язку між текстами.</div>
+        <div class="row">
+          <div class="opt" data-g="cnf" data-v="high" title="Рішення майже однозначне за показаним текстом"><kbd>A</kbd>Висока <span class="desc">— майже однозначно</span></div>
+          <div class="opt" data-g="cnf" data-v="medium" title="Є помітна неоднозначність, але один варіант виглядає кращим"><kbd>S</kbd>Середня <span class="desc">— є сумнів</span></div>
+          <div class="opt" data-g="cnf" data-v="low" title="Рішення дуже неоднозначне; інформації мало"><kbd>D</kbd>Низька <span class="desc">— дуже неоднозначно</span></div>
+        </div>
       </div>
 
-      <div class="row">
-        <div class="lab">нотатка</div>
-        <input id="note" type="text" placeholder="необов'язково; Esc — вийти з поля">
-      </div>
-
-      <div class="row">
-        <button id="bunusable">позначити unusable (U)</button>
-        <span class="note" id="unote"></span>
+      <div class="step">
+        <div class="stephead">Примітка <span style="font-weight:400;color:var(--dim)">(необов'язково)</span></div>
+        <div class="row">
+          <input id="note" type="text" placeholder="Коротко поясніть сумнів або нетиповий випадок, якщо потрібно">
+        </div>
+        <div class="row">
+          <button id="bunusable" title="Використовуйте, якщо текст порожній, пошкоджений або пару неможливо чесно оцінити">Неможливо розмітити (U)</button>
+          <span class="note" id="unote"></span>
+        </div>
       </div>
     </div>
   </div>
 </main>
 
 <div class="foot">
-  <button id="bprev">← попередня</button>
-  <button id="bnext">наступна →</button>
+  <button id="bprev">← Попередня пара</button>
+  <button id="bnext">Наступна пара →</button>
   <div class="grow"></div>
-  <div class="hint" id="hint">1/2/3 епізод · Q/W/E/R/T відношення · A/S/D впевненість · Enter зберегти й далі</div>
+  <div class="hint" id="hint">Швидкі клавіші: 1/2/3 · Q/W/E/R/T · L/P/O/C/X/N · A/S/D · Enter — зберегти й далі</div>
 </div>
 
 <div id="book"><div class="inner" id="bookinner"></div></div>
@@ -181,9 +209,10 @@
 <script>
 "use strict";
 const STORAGE_PREFIX = "mip_relation_gold_set_v1:";
+const CONFLICT_VALUES = ["location","person_entity","object_facility","chronology","other","not_obvious"];
 let DATA = [];
 let DATASET_ID = null;
-let ANN = {};           // interaction_id -> annotation; кожен запис містить dataset_id + pair_key
+let ANN = {};
 let idx = 0;
 let draft = null;
 
@@ -197,9 +226,6 @@ const $ = id => document.getElementById(id);
 function flash(msg){ const f=$("flash"); f.textContent=msg; f.classList.add("on");
   clearTimeout(f._t); f._t=setTimeout(()=>f.classList.remove("on"),1800); }
 
-// ---------- dataset identity / persistence ----------
-// FNV-1a 64 over schema_version + ordered interaction_id/pair_key tuples.
-// Це не security hash; він лише стабільно ізолює progress різних dataset-ів.
 function datasetFingerprint(rows){
   const parts = rows.map(r => `${r.schema_version||""}\x1f${r.interaction_id}\x1f${r.pair_key}`);
   const bytes = new TextEncoder().encode(parts.join("\x1e"));
@@ -210,10 +236,23 @@ function datasetFingerprint(rows){
 }
 function storageKey(){ return DATASET_ID ? STORAGE_PREFIX + DATASET_ID : null; }
 
+function normalizeAnnotation(a){
+  if(!a) return a;
+  if(!Array.isArray(a.conflict_types)){
+    a.conflict_types = a.conflict_type ? [a.conflict_type] : [];
+  }
+  a.conflict_types = a.conflict_types.filter(v=>CONFLICT_VALUES.includes(v));
+  if(a.conflict_types.includes("not_obvious") && a.conflict_types.length>1){
+    a.conflict_types = ["not_obvious"];
+  }
+  a.conflict_type = a.conflict_types[0] || null; // backward compatibility for analyzer v1
+  return a;
+}
+
 function save(){
   const key = storageKey(); if(!key) return;
   try{ localStorage.setItem(key, JSON.stringify({dataset_id:DATASET_ID,ann:ANN,idx:idx})); }
-  catch(e){ /* file:// може блокувати localStorage — export лишається робочим */ }
+  catch(e){}
 }
 function restore(){
   ANN = {}; idx = 0;
@@ -223,21 +262,19 @@ function restore(){
     const s = JSON.parse(raw);
     if(s.dataset_id !== DATASET_ID) return;
     const byId = new Map(DATA.map(r=>[r.interaction_id,r]));
-    for(const [iid,a] of Object.entries(s.ann||{})){
-      const row = byId.get(iid);
+    for(const [iid,a0] of Object.entries(s.ann||{})){
+      const row = byId.get(iid), a=normalizeAnnotation(a0);
       if(row && a.dataset_id===DATASET_ID && a.pair_key===row.pair_key) ANN[iid]=a;
     }
     idx = Number.isInteger(s.idx) ? s.idx : 0;
   }catch(e){ ANN={}; idx=0; }
 }
 
-// ---------- rendering ----------
 function render(){
   if(!DATA.length){ $("empty").style.display="block"; $("work").style.display="none"; return; }
   $("empty").style.display="none"; $("work").style.display="block";
   idx = Math.max(0, Math.min(idx, DATA.length-1));
   const row = DATA[idx];
-
   const A = row.display.A, B = row.display.B;
   $("a_claim").textContent = A.claim_text || "";
   $("a_ev").textContent    = A.evidence_span || "—";
@@ -251,16 +288,16 @@ function render(){
   $("b_ctx").textContent   = B.context_snippet || "—";
 
   const saved = ANN[row.interaction_id];
-  draft = saved ? JSON.parse(JSON.stringify(saved))
+  draft = saved ? normalizeAnnotation(JSON.parse(JSON.stringify(saved)))
                 : {dataset_id:DATASET_ID, interaction_id:row.interaction_id, pair_key:row.pair_key,
                    status:"labeled", same_referent:null, relation_label:null,
-                   conflict_type:null, confidence:null, note:""};
+                   conflict_types:[], conflict_type:null, confidence:null, note:""};
   $("note").value = draft.note || "";
-  $("unote").textContent = draft.status==="unusable" ? ("unusable: "+(draft.unusable_reason||"")) : "";
+  $("unote").textContent = draft.status==="unusable" ? ("Неможливо розмітити: "+(draft.unusable_reason||"")) : "";
 
   paint();
   const done = Object.keys(ANN).length;
-  $("prog").textContent = `${idx+1} / ${DATA.length} · розмічено ${done} · ${DATASET_ID}`;
+  $("prog").textContent = `Пара ${idx+1} з ${DATA.length} · розмічено ${done} · ${DATASET_ID}`;
   $("barfill").style.width = (100*done/DATA.length).toFixed(1)+"%";
 }
 
@@ -276,53 +313,71 @@ function paint(){
     }
     if(g==="conf"){
       if(draft.same_referent!=="no") el.classList.add("off");
-      if(draft.conflict_type===v) el.classList.add("on");
+      if((draft.conflict_types||[]).includes(v)) el.classList.add("on");
     }
     if(g==="cnf" && draft.confidence===v) el.classList.add("on");
   });
-  $("row_conflict").style.opacity = draft.same_referent==="no" ? "1" : ".35";
+  $("row_conflict").style.opacity = draft.same_referent==="no" ? "1" : ".42";
 }
 
 function valid(){
   if(!draft) return false;
   if(draft.dataset_id!==DATASET_ID) return false;
-  const row=DATA[idx]; if(!row || draft.pair_key!==row.pair_key || draft.interaction_id!==row.interaction_id) return false;
+  const row=DATA[idx];
+  if(!row || draft.pair_key!==row.pair_key || draft.interaction_id!==row.interaction_id) return false;
   if(draft.status==="unusable") return !!draft.unusable_reason;
   if(!draft.same_referent || !draft.relation_label || !draft.confidence) return false;
   if(!ALLOWED[draft.same_referent].includes(draft.relation_label)) return false;
-  if(draft.same_referent==="no" && !draft.conflict_type) return false;
+  if(draft.same_referent==="no" && (!Array.isArray(draft.conflict_types) || !draft.conflict_types.length)) return false;
   return true;
 }
 
 function commit(advance){
-  if(!valid()){ flash("заповни: епізод → відношення → впевненість"); return false; }
+  if(!valid()){
+    const extra = draft && draft.same_referent==="no" && !(draft.conflict_types||[]).length
+      ? " · для відповіді «Ні» оберіть хоча б одну відмінність" : "";
+    flash("Заповніть усі обов'язкові кроки"+extra);
+    return false;
+  }
   draft.note = $("note").value.trim();
+  normalizeAnnotation(draft);
   draft.labeled_at = new Date().toISOString();
   ANN[draft.interaction_id] = JSON.parse(JSON.stringify(draft));
   save();
   if(advance){
     if(idx < DATA.length-1){ idx++; render(); }
-    else { flash("це остання пара — не забудь export"); render(); }
+    else { flash("Це остання пара — збережіть розмітку у файл"); render(); }
   }
   return true;
 }
 
-// ---------- input ----------
+function toggleConflict(value){
+  let values = Array.isArray(draft.conflict_types) ? [...draft.conflict_types] : [];
+  if(value==="not_obvious"){
+    values = values.includes(value) ? [] : [value];
+  }else{
+    values = values.filter(v=>v!=="not_obvious");
+    values = values.includes(value) ? values.filter(v=>v!==value) : [...values,value];
+  }
+  draft.conflict_types = values;
+  draft.conflict_type = values[0] || null;
+}
+
 function setVal(group, value){
   if(!draft) return;
   if(group==="ref"){
     draft.same_referent = value;
     if(draft.relation_label && !ALLOWED[value].includes(draft.relation_label)) draft.relation_label=null;
-    if(value!=="no") draft.conflict_type=null;
+    if(value!=="no"){ draft.conflict_types=[]; draft.conflict_type=null; }
   } else if(group==="rel"){
-    if(!draft.same_referent){ flash("спершу вкажи, чи це той самий епізод (1/2/3)"); return; }
+    if(!draft.same_referent){ flash("Спочатку дайте відповідь на крок 1"); return; }
     if(!ALLOWED[draft.same_referent].includes(value)){
-      flash(`${value} недоступне при відповіді «${draft.same_referent}»`); return;
+      flash("Цей тип зв'язку несумісний з відповіддю на крок 1"); return;
     }
     draft.relation_label = value;
   } else if(group==="conf"){
-    if(draft.same_referent!=="no"){ flash("тип розбіжності — лише коли епізод «ні»"); return; }
-    draft.conflict_type = value;
+    if(draft.same_referent!=="no"){ flash("Причини відмінності заповнюються лише після відповіді «Ні»"); return; }
+    toggleConflict(value);
   } else if(group==="cnf"){
     draft.confidence = value;
   }
@@ -366,12 +421,12 @@ document.addEventListener("keydown", ev=>{
 });
 
 function markUnusable(){
-  const reason = prompt("Чому пару не можна розмітити? (порожній текст = скасувати)");
+  const reason = prompt("Чому цю пару неможливо чесно розмітити? (порожня відповідь — скасувати)");
   if(!reason) return;
   draft.status="unusable"; draft.unusable_reason=reason;
   draft.same_referent=null; draft.relation_label=null;
-  draft.conflict_type=null; draft.confidence=null;
-  $("unote").textContent = "unusable: "+reason;
+  draft.conflict_types=[]; draft.conflict_type=null; draft.confidence=null;
+  $("unote").textContent = "Неможливо розмітити: "+reason;
   paint(); commit(true);
 }
 
@@ -381,7 +436,6 @@ $("bunusable").onclick = markUnusable;
 $("bbook").onclick = ()=>$("book").classList.add("show");
 $("book").onclick = ev=>{ if(ev.target.id==="book") $("book").classList.remove("show"); };
 
-// ---------- files ----------
 function parseJsonl(text){
   return text.split(/\r?\n/).filter(l=>l.trim()).map((l,i)=>{
     try{ return JSON.parse(l); }
@@ -389,15 +443,15 @@ function parseJsonl(text){
   });
 }
 function validateDataset(rows){
-  if(!rows.length) throw new Error("порожній файл");
+  if(!rows.length) throw new Error("файл порожній");
   const ids=new Set(), keys=new Set();
   for(const row of rows){
     if(!row.display || !row.interaction_id || !row.pair_key || !row.schema_version)
-      throw new Error("не схоже на gold-set dataset");
-    if(ids.has(row.interaction_id)) throw new Error("duplicate interaction_id: "+row.interaction_id);
+      throw new Error("файл не схожий на набір для розмітки");
+    if(ids.has(row.interaction_id)) throw new Error("повторюється interaction_id: "+row.interaction_id);
     ids.add(row.interaction_id);
     if(!row.is_repeat){
-      if(keys.has(row.pair_key)) throw new Error("duplicate primary pair_key: "+row.pair_key);
+      if(keys.has(row.pair_key)) throw new Error("повторюється основна пара: "+row.pair_key);
       keys.add(row.pair_key);
     }
   }
@@ -414,41 +468,42 @@ $("fdata").onchange = ev=>{
       DATASET_ID = datasetFingerprint(rows);
       restore();
       render();
-      flash(`завантажено ${rows.length} інтеракцій · ${DATASET_ID}`);
-    }catch(e){ alert("Не вдалося прочитати dataset: "+e.message); }
+      flash(`Завантажено ${rows.length} пар для перегляду`);
+    }catch(e){ alert("Не вдалося прочитати набір: "+e.message); }
   };
   r.readAsText(f, "utf-8");
 };
 
 $("fann").onchange = ev=>{
   const f = ev.target.files[0]; if(!f) return;
-  if(!DATA.length || !DATASET_ID){ alert("Спершу завантаж dataset, до якого належать annotations."); return; }
+  if(!DATA.length || !DATASET_ID){ alert("Спочатку завантажте набір, до якого належить файл розмітки."); return; }
   const r = new FileReader();
   r.onload = () => {
     try{
       const rows = parseJsonl(r.result);
       const byId = new Map(DATA.map(row=>[row.interaction_id,row]));
       const next = {};
-      for(const a of rows){
+      for(const a0 of rows){
+        const a=normalizeAnnotation(a0);
         const row = byId.get(a.interaction_id);
-        if(!row) throw new Error("unknown interaction_id: "+a.interaction_id);
-        if(a.dataset_id!==DATASET_ID) throw new Error(`dataset_id mismatch for ${a.interaction_id}`);
-        if(a.pair_key!==row.pair_key) throw new Error(`pair_key mismatch for ${a.interaction_id}`);
-        if(next[a.interaction_id]) throw new Error("duplicate annotation: "+a.interaction_id);
+        if(!row) throw new Error("невідомий interaction_id: "+a.interaction_id);
+        if(a.dataset_id!==DATASET_ID) throw new Error(`файл належить іншому набору (${a.interaction_id})`);
+        if(a.pair_key!==row.pair_key) throw new Error(`не збігається пара для ${a.interaction_id}`);
+        if(next[a.interaction_id]) throw new Error("повторюється розмітка: "+a.interaction_id);
         next[a.interaction_id]=a;
       }
       ANN = next;
       const firstMissing = DATA.findIndex(row=>!ANN[row.interaction_id]);
       idx = firstMissing>=0 ? firstMissing : Math.max(0,DATA.length-1);
-      save(); render(); flash("відновлено "+rows.length+" міток");
-    }catch(e){ alert("Не вдалося прочитати annotations: "+e.message); }
+      save(); render(); flash("Відновлено "+rows.length+" відповідей");
+    }catch(e){ alert("Не вдалося відновити розмітку: "+e.message); }
   };
   r.readAsText(f, "utf-8");
 };
 
 $("bexport").onclick = ()=>{
-  const rows = DATA.filter(r=>ANN[r.interaction_id]).map(r=>ANN[r.interaction_id]);
-  if(!rows.length){ flash("ще немає жодної мітки"); return; }
+  const rows = DATA.filter(r=>ANN[r.interaction_id]).map(r=>normalizeAnnotation(ANN[r.interaction_id]));
+  if(!rows.length){ flash("Ще немає збережених відповідей"); return; }
   const blob = new Blob([rows.map(r=>JSON.stringify(r)).join("\n")+"\n"],
                         {type:"application/x-ndjson"});
   const a = document.createElement("a");
@@ -461,62 +516,61 @@ $("bexport").onclick = ()=>{
 let lastReminder = 0;
 setInterval(()=>{
   const n = Object.keys(ANN).length;
-  if(n>0 && n%25===0 && n!==lastReminder){ lastReminder=n; flash("зроби export ("+n+" міток)"); }
+  if(n>0 && n%25===0 && n!==lastReminder){ lastReminder=n; flash("Рекомендація: збережіть резервну копію ("+n+" відповідей)"); }
 }, 3000);
 
-// ---------- handbook ----------
 $("bookinner").innerHTML = `
-<h2 style="margin-top:0">Пам'ятка анотатора</h2>
-<p><b>Порядок рішень фіксований:</b> спершу виріши, чи обидва claims описують
-один і той самий конкретний епізод / факт, і лише потім тип відношення.
-Це human gold-контракт для вимірювання identity; він не просить копіювати
-внутрішню відповідь production-моделі.</p>
+<h2 style="margin-top:0">Як розмічати пари тверджень</h2>
+<p><b>Завдання:</b> для кожної пари визначте, чи описують твердження один і той самий
+конкретний епізод або факт, який між ними змістовний зв'язок і наскільки ви
+впевнені у своєму рішенні.</p>
+<p>Працюйте лише з показаним текстом. Не використовуйте здогадки про те, як працює
+система, і не намагайтеся «підлаштувати» відповіді під алгоритм.</p>
 
-<h3>1. Той самий конкретний епізод / факт</h3>
-<p><b>так</b> — з показаного тексту є ознака, що прив'язує обидва claims до
-одного екземпляра події або одного конкретного факту.</p>
-<p><b>ні</b> — видно, що це різні епізоди/факти (інша локація, особа, час,
-об'єкт або інша конкретна розбіжність).</p>
-<p><b>невизначено</b> — з наданого тексту неможливо вирішити. Це НЕ «ні».
-Не вгадуй: «невизначено» — корисний сигнал.</p>
-<p class="note"><b>Спільний об'єкт, місто, організація або шаблонна фраза самі по собі
-НЕ означають «так».</b> Два повідомлення про ЗАЕС можуть стосуватися різних подій;
-«вибухи в Києві» без ознаки одного конкретного обстрілу теж не доводять identity.</p>
+<h3>1. Чи це той самий конкретний епізод або факт?</h3>
+<p><b>Так</b> — є ознаки, що обидва твердження стосуються саме одного екземпляра події
+або одного конкретного факту.</p>
+<p><b>Ні</b> — видно, що це різні події або факти.</p>
+<p><b>Неможливо визначити</b> — показаного тексту недостатньо. Це нормальна й корисна відповідь.</p>
+<p class="note"><b>Важливо:</b> однакове місто, організація, об'єкт, тема чи схожа фраза
+ще не доводять, що подія одна й та сама.</p>
 
-<h3>2. Тип відношення</h3>
-<p><b>same_fact</b> — одне й те саме твердження про той самий епізод/факт.</p>
-<p><b>same_event</b> — той самий конкретний епізод, але різні аспекти/деталі.</p>
-<p><b>contradiction</b> — той самий епізод/факт, але твердження несумісні.</p>
-<p><b>related</b> — змістовний зв'язок є, але це не той самий конкретний епізод/факт.</p>
-<p><b>unrelated</b> — змістовного зв'язку немає; спільна шаблонна форма не рахується.</p>
+<h3>1б. Що саме відрізняється?</h3>
+<p>Цей крок потрібен лише після відповіді <b>«Ні»</b>. Можна вибрати <b>кілька</b>
+відмінностей одночасно: місце, особу/суб'єкт, об'єкт/установу, час/період або іншу ознаку.</p>
+<p><b>«Конкретну відмінність не видно з тексту»</b> — окремий взаємовиключний варіант:
+обирайте його, якщо ви бачите, що це різні речі, але не можете вказати конкретну ознаку
+з наведеного тексту.</p>
 
-<h3>related vs unrelated</h3>
-<p>Питай себе: чи аналітик, читаючи один claim, захотів би побачити другий?
-Якщо так — related. Якщо єдине спільне — граматична форма — unrelated.</p>
+<h3>2. Який зв'язок між твердженнями?</h3>
+<p><b>Той самий факт</b> — обидва твердження повідомляють фактично одне й те саме.</p>
+<p><b>Та сама подія, різні деталі</b> — одна подія, але твердження описують різні її аспекти.</p>
+<p><b>Суперечать одне одному</b> — йдеться про той самий епізод/факт, але твердження несумісні.</p>
+<p><b>Пов'язані, але різні</b> — змістовний зв'язок є, але це не той самий конкретний епізод/факт.</p>
+<p><b>Не пов'язані</b> — змістовного зв'язку немає.</p>
 
-<h3>3. Що саме різне (лише при «ні»)</h3>
-<p>Вибирай ознаку, яка першою доводить, що це різні епізоди. <code>не видно з тексту</code>
-— якщо конкретної суперечності в показаному тексті немає.</p>
-
-<h3>Впевненість</h3>
-<p><b>висока</b> — переконаний. <b>середня</b> — схиляюсь. <b>низька</b> — майже монетка.
-Не соромся низької впевненості: вона потрібна для оцінки неоднозначної зони.</p>
-
-<h3>Правила чесності</h3>
+<h3>3. Наскільки ви впевнені у своєму рішенні?</h3>
+<p>Це не «сила зв'язку». Це ваша впевненість у тому, що ви правильно розмітили пару.</p>
 <ul>
-<li>Не вгадуй, що «хотіла б» система. Розмічай лише те, що видно.</li>
-<li>Scores, strata, hub flags і технічна діагностика <b>не показуються протягом усієї розмітки</b>.
-    Дивимось їх тільки після завершення через analyzer.</li>
-<li>Деякі пари повторюються приховано зі зміненими місцями A/B. Не намагайся їх упізнати.</li>
-<li>Якщо контекст битий/порожній — <code>U</code> (unusable), а не вгадування.</li>
-<li>Вибір confidence нічого не зберігає автоматично: перевір відповідь і натисни <code>Enter</code>.</li>
+<li><b>Висока</b> — рішення майже однозначне за показаним текстом.</li>
+<li><b>Середня</b> — є помітний сумнів, але один варіант виглядає кращим.</li>
+<li><b>Низька</b> — випадок дуже неоднозначний або інформації мало.</li>
 </ul>
 
-<h3>Клавіші</h3>
-<p><code>1/2/3</code> епізод · <code>Q/W/E/R/T</code> відношення ·
-<code>L/P/O/C/X/N</code> тип розбіжності · <code>A/S/D</code> впевненість ·
-<code>Enter</code> зберегти й перейти далі · <code>←/→</code> навігація ·
-<code>U</code> unusable · <code>?</code> ця пам'ятка</p>
+<h3>Правила чесної розмітки</h3>
+<ul>
+<li>Не вгадуйте відсутні факти.</li>
+<li>Якщо текст порожній, пошкоджений або пару неможливо оцінити — використовуйте <b>«Неможливо розмітити»</b>.</li>
+<li>Деякі пари можуть повторюватися з переставленими сторонами A/B. Не намагайтеся їх упізнавати.</li>
+<li>Службові оцінки, технічні групи та інші параметри навмисно приховані протягом усієї розмітки.</li>
+<li>Вибір варіантів не зберігає відповідь автоматично. Перевірте її та натисніть <b>Enter</b>.</li>
+</ul>
+
+<h3>Швидкі клавіші</h3>
+<p><code>1/2/3</code> — крок 1 · <code>Q/W/E/R/T</code> — тип зв'язку ·
+<code>L/P/O/C/X/N</code> — відмінності · <code>A/S/D</code> — впевненість ·
+<code>Enter</code> — зберегти й перейти далі · <code>←/→</code> — навігація ·
+<code>U</code> — неможливо розмітити · <code>?</code> — ця інструкція.</p>
 `;
 
 render();
