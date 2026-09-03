@@ -39,8 +39,35 @@ class TestLabelerStatic(unittest.TestCase):
         )
 
     def test_human_identity_contract_is_explicit(self):
-        self.assertIn("один і той самий конкретний епізод / факт", self.html)
-        self.assertIn("Спільний об'єкт, місто, організація", self.html)
+        self.assertIn("Чи це той самий конкретний епізод або факт?", self.html)
+        self.assertIn("Спільна тема, місто, організація чи об'єкт", self.html)
+
+    def test_interface_is_ukrainian_and_self_explanatory(self):
+        for token in (
+            "Завантажити набір",
+            "Продовжити з файлу",
+            "Зберегти розмітку у файл",
+            "Твердження A",
+            "Фрагмент, з якого взято твердження",
+            "Який зв'язок між твердженнями?",
+            "Наскільки ви впевнені у своєму рішенні?",
+        ):
+            self.assertIn(token, self.html)
+        for legacy in ("load dataset", "resume from export", "export annotations", "handbook (?)"):
+            self.assertNotIn(legacy, self.html)
+
+    def test_conflict_reason_is_multiselect(self):
+        self.assertIn("conflict_types:[]", self.html)
+        self.assertIn("toggleConflict(value)", self.html)
+        self.assertIn("Можна вибрати кілька причин одночасно", self.html)
+        self.assertIn('value==="not_obvious"', self.html)
+        # Legacy scalar remains only as compatibility projection for analyzer v1.
+        self.assertIn("draft.conflict_type = values[0] || null", self.html)
+
+    def test_confidence_meaning_is_explained(self):
+        self.assertIn("Це оцінка <b>вашої впевненості в розмітці</b>", self.html)
+        self.assertIn("майже однозначно", self.html)
+        self.assertIn("дуже неоднозначно", self.html)
 
 
 if __name__ == "__main__":
