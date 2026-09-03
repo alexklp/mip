@@ -70,5 +70,21 @@ class TestLabelerStatic(unittest.TestCase):
         self.assertIn("дуже неоднозначно", self.html)
 
 
+    def test_annotation_view_hides_source_and_time(self):
+        for token in (
+            'id="a_src"',
+            'id="b_src"',
+            'A.source',
+            'B.source',
+            'first_seen',
+        ):
+            self.assertNotIn(token, self.html)
+
+    def test_visible_save_button_commits_and_advances(self):
+        self.assertIn('id="bsave"', self.html)
+        self.assertIn('Зберегти й перейти далі', self.html)
+        self.assertIn('$("bsave").onclick = ()=>commit(true);', self.html)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

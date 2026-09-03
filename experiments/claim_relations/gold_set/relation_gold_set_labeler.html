@@ -124,7 +124,6 @@
         <div class="claim" id="a_claim"></div>
         <div class="field"><div class="k">Фрагмент, з якого взято твердження</div><div class="ev" id="a_ev"></div></div>
         <div class="field"><div class="k">Заголовок матеріалу</div><div class="v" id="a_title"></div></div>
-        <div class="field"><div class="k">Джерело</div><div class="v" id="a_src"></div></div>
         <div class="field"><div class="k">Контекст</div><div class="snip" id="a_ctx"></div></div>
       </div>
       <div class="card">
@@ -132,7 +131,6 @@
         <div class="claim" id="b_claim"></div>
         <div class="field"><div class="k">Фрагмент, з якого взято твердження</div><div class="ev" id="b_ev"></div></div>
         <div class="field"><div class="k">Заголовок матеріалу</div><div class="v" id="b_title"></div></div>
-        <div class="field"><div class="k">Джерело</div><div class="v" id="b_src"></div></div>
         <div class="field"><div class="k">Контекст</div><div class="snip" id="b_ctx"></div></div>
       </div>
     </div>
@@ -200,8 +198,9 @@
 <div class="foot">
   <button id="bprev">← Попередня пара</button>
   <button id="bnext">Наступна пара →</button>
+  <button id="bsave"><b>Зберегти й перейти далі</b></button>
   <div class="grow"></div>
-  <div class="hint" id="hint">Швидкі клавіші: 1/2/3 · Q/W/E/R/T · L/P/O/C/X/N · A/S/D · Enter — зберегти й далі</div>
+  <div class="hint" id="hint">Заповніть відповідь і натисніть «Зберегти й перейти далі» або Enter</div>
 </div>
 
 <div id="book"><div class="inner" id="bookinner"></div></div>
@@ -279,12 +278,10 @@ function render(){
   $("a_claim").textContent = A.claim_text || "";
   $("a_ev").textContent    = A.evidence_span || "—";
   $("a_title").textContent = A.title || "—";
-  $("a_src").textContent   = A.source || "—";
   $("a_ctx").textContent   = A.context_snippet || "—";
   $("b_claim").textContent = B.claim_text || "";
   $("b_ev").textContent    = B.evidence_span || "—";
   $("b_title").textContent = B.title || "—";
-  $("b_src").textContent   = B.source || "—";
   $("b_ctx").textContent   = B.context_snippet || "—";
 
   const saved = ANN[row.interaction_id];
@@ -432,6 +429,7 @@ function markUnusable(){
 
 $("bprev").onclick = ()=>{ if(idx>0){idx--;render();} };
 $("bnext").onclick = ()=>{ if(idx<DATA.length-1){idx++;render();} };
+$("bsave").onclick = ()=>commit(true);
 $("bunusable").onclick = markUnusable;
 $("bbook").onclick = ()=>$("book").classList.add("show");
 $("book").onclick = ev=>{ if(ev.target.id==="book") $("book").classList.remove("show"); };
@@ -563,7 +561,7 @@ $("bookinner").innerHTML = `
 <li>Якщо текст порожній, пошкоджений або пару неможливо оцінити — використовуйте <b>«Неможливо розмітити»</b>.</li>
 <li>Деякі пари можуть повторюватися з переставленими сторонами A/B. Не намагайтеся їх упізнавати.</li>
 <li>Службові оцінки, технічні групи та інші параметри навмисно приховані протягом усієї розмітки.</li>
-<li>Вибір варіантів не зберігає відповідь автоматично. Перевірте її та натисніть <b>Enter</b>.</li>
+<li>Вибір варіантів не зберігає відповідь автоматично. Перевірте її та натисніть <b>«Зберегти й перейти далі»</b> або <b>Enter</b>.</li>
 </ul>
 
 <h3>Швидкі клавіші</h3>
