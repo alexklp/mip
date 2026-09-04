@@ -431,13 +431,14 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="максимум occurrences за прогін (обов'язковий стеля, немає режиму 'всі')")
     parser.add_argument("--max-attempts", type=int, default=DEFAULT_MAX_ATTEMPTS)
     parser.add_argument("--dry-run", action="store_true", help="показати eligible occurrences, нічого не писати в БД і не ходити в мережу")
+    parser.add_argument("--occurrence-id", type=str, default=None, help="точковий прогін одного occurrence (testability-фільтр, вже підтримується fetch_eligible_occurrences)")
     args = parser.parse_args()
 
     code_revision = get_code_revision()
 
     conn = psycopg.connect(DB_DSN)
     try:
-        eligible = fetch_eligible_occurrences(conn, max_attempts=args.max_attempts, limit=args.limit)
+        eligible = fetch_eligible_occurrences(conn, max_attempts=args.max_attempts, limit=args.limit, occurrence_id=args.occurrence_id)
     finally:
         conn.close()
 
