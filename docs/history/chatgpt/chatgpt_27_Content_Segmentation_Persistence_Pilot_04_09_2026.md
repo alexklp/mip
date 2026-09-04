@@ -1,6 +1,6 @@
 # МІП — Content Segmentation v1: persistence pilot
 
-**Дата:** 04.09.2026  
+**Дата:** 04.09.2026
 **Статус:** vertical slice PASS.
 
 ## Рішення
