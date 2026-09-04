@@ -25,6 +25,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from uuid import UUID
 
 import numpy as np
 import psycopg
@@ -84,23 +85,45 @@ def load_model() -> SentenceTransformer:
     return SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION, device="cpu", local_files_only=True)
 
 
-def fetch_batch(conn, limit: int) -> list[tuple]:
-    """Idempotent eligibility: claims без існуючого embedding для поточної
-    embedding_model_id. Той самий паттерн, що fetch_batch() в routing_worker.py."""
+def fetch_batch(conn, limit: int, run_id: UUID | None = None) -> list[tuple]:
+    """Idempotent eligibility for claims missing the current embedding.
+
+    run_id=None preserves the historical global-backfill behavior.
+    run_id=<UUID> restricts processing to one exact claim extraction run,
+    which is the safe mode for bounded live orchestration.
+    """
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT c.claim_id, c.claim_text
-            FROM claims c
-            WHERE NOT EXISTS (
-                SELECT 1 FROM claim_embeddings ce
-                WHERE ce.claim_id = c.claim_id AND ce.embedding_model_id = %s
+        if run_id is None:
+            cur.execute(
+                """
+                SELECT c.claim_id, c.claim_text
+                FROM claims c
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM claim_embeddings ce
+                    WHERE ce.claim_id = c.claim_id
+                      AND ce.embedding_model_id = %s
+                )
+                ORDER BY c.created_at
+                LIMIT %s
+                """,
+                (EMBEDDING_MODEL_ID, limit),
             )
-            ORDER BY c.created_at
-            LIMIT %s
-            """,
-            (EMBEDDING_MODEL_ID, limit),
-        )
+        else:
+            cur.execute(
+                """
+                SELECT c.claim_id, c.claim_text
+                FROM claims c
+                WHERE c.run_id = %s
+                  AND NOT EXISTS (
+                      SELECT 1 FROM claim_embeddings ce
+                      WHERE ce.claim_id = c.claim_id
+                        AND ce.embedding_model_id = %s
+                  )
+                ORDER BY c.created_at
+                LIMIT %s
+                """,
+                (run_id, EMBEDDING_MODEL_ID, limit),
+            )
         return cur.fetchall()
 
 
@@ -123,7 +146,7 @@ def process_batch(conn, batch, model: SentenceTransformer) -> int:
     return len(claim_ids)
 
 
-def run(limit: int | None) -> int:
+def run(limit: int | None, run_id: UUID | None = None) -> int:
     code_revision = get_code_revision()
 
     with psycopg.connect(DB_DSN) as conn:
@@ -139,7 +162,7 @@ def run(limit: int | None) -> int:
             batch_limit = BATCH_SIZE if limit is None else min(BATCH_SIZE, limit - processed)
             if batch_limit <= 0:
                 break
-            batch = fetch_batch(conn, batch_limit)
+            batch = fetch_batch(conn, batch_limit, run_id=run_id)
             if not batch:
                 break
             try:
@@ -153,17 +176,24 @@ def run(limit: int | None) -> int:
             processed += n
             print(f"batch committed: {n} claims, total processed={processed}")
 
-        print(f"\nSUMMARY: processed={processed}")
+        scope = f"run_id={run_id}" if run_id is not None else "scope=global"
+        print(f"\nSUMMARY: processed={processed} {scope}")
         return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Claim embeddings backfill worker (embedding_model_id=1)")
-    parser.add_argument("--limit", type=int, default=None, help="max claims to process (default: whole backlog)")
+    parser.add_argument("--limit", type=int, default=None, help="max claims to process (default: whole selected scope)")
+    parser.add_argument(
+        "--run-id",
+        type=UUID,
+        default=None,
+        help="restrict processing to claims from one exact claim_extraction_runs.run_id",
+    )
     args = parser.parse_args()
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be > 0")
-    return run(args.limit)
+    return run(args.limit, run_id=args.run_id)
 
 
 if __name__ == "__main__":
