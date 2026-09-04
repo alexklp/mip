@@ -184,10 +184,16 @@ def fetch_claims_meta(conn, claim_ids: list) -> dict:
         cur.execute(
             """
             SELECT c.claim_id, c.claim_text, c.evidence_span, c.evidence_start, c.evidence_end,
-                   r.content_id, ci.title, ci.text_content
+                   r.content_id,
+                   ci.title,
+                   CASE
+                       WHEN r.segment_id IS NULL THEN ci.text_content
+                       ELSE cs.text_content
+                   END AS evidence_text
             FROM claims c
             JOIN claim_extraction_runs r ON r.run_id = c.run_id
             JOIN content_items ci ON ci.content_id = r.content_id
+            LEFT JOIN content_segments cs ON cs.segment_id = r.segment_id
             WHERE c.claim_id = ANY(%s)
             """,
             (claim_ids,),
