@@ -39,3 +39,4 @@
 | `chatgpt_27_Content_Segmentation_Persistence_Pilot_04_09_2026.md` | Content Segmentation v1 persistence vertical slice: DDL/registry, minimal writer, atomic segment persistence, live single/multi-section verification та idempotency PASS. |
 | `chatgpt_28_Segment_Embeddings_and_Routing_V1_04_09_2026.md` | Segment embeddings persistence, segment-level routing calibration, `T_SKIP=-0.07`, `T_ANALYZE=0.095`, routing persistence та idempotency PASS. |
 | `chatgpt_29_Segment_Claim_Extraction_V1_04_09_2026.md` | Segment-aware claim persistence, whole-content compatibility, first live Mamay segment claim PASS, idempotency, 8/8 claim embeddings, relation-context scope fix та candidate-space compatibility measurement. |
+| `chatgpt_30_Live_Segment_Pipeline_V1_04_09_2026.md` | Bounded live segment orchestrator, strict grounding negative result, 4000-char safety guard, live measurements, ops wrapper та cron scheduling. |
