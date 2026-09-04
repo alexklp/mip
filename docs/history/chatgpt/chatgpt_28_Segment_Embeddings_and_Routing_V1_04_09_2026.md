@@ -1,6 +1,6 @@
 # МІП — Segment Embeddings + Routing v1
 
-**Дата:** 04.09.2026  
+**Дата:** 04.09.2026
 **Статус:** vertical slice PASS.
 
 ## Контекст
