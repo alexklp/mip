@@ -9,6 +9,7 @@ Policy v1:
 - point-run existing workers, no duplicated processing logic;
 - Mamay workloads serialized with the existing mamay.lock;
 - segment claims: analyze only and bounded by explicit max input chars;
+- valid segment claims are embedded by exact claim run_id;
 - explicit occurrence and claim budgets;
 - no scheduler in this module.
 """
@@ -59,6 +60,7 @@ SEGMENTATION_WORKER = REPO / "experiments/content_segmentation/segmentation_work
 SEGMENT_EMBED_WORKER = REPO / "experiments/segment_embeddings/segment_embedding_worker.py"
 SEGMENT_ROUTING_WORKER = REPO / "experiments/segment_routing/segment_routing_worker.py"
 SEGMENT_CLAIM_WORKER = REPO / "experiments/segment_claim_extraction/segment_claim_extract_worker.py"
+CLAIM_EMBED_WORKER = REPO / "experiments/claim_embeddings/claim_embedding_worker.py"
 
 MAMAY_LOCK = Path.home() / ".local/state/mip/locks/mamay.lock"
 MAMAY_HEALTH = "http://127.0.0.1:8080/health"
@@ -241,6 +243,22 @@ def fetch_work_items(conn, limit, max_claim_chars):
                                     AND r.status IN ('valid', 'invalid')
                               )
                           )
+                          OR EXISTS (
+                              SELECT 1
+                              FROM claim_extraction_runs r
+                              JOIN claims c
+                                ON c.run_id = r.run_id
+                              WHERE r.segment_id = cs.segment_id
+                                AND r.llm_model_id = %s
+                                AND r.prompt_id = %s
+                                AND r.status = 'valid'
+                                AND NOT EXISTS (
+                                    SELECT 1
+                                    FROM claim_embeddings ce
+                                    WHERE ce.claim_id = c.claim_id
+                                      AND ce.embedding_model_id = %s
+                                )
+                          )
                       )
                 )
             ORDER BY b.stage_rank, b.collected_at DESC
@@ -265,6 +283,9 @@ def fetch_work_items(conn, limit, max_claim_chars):
                 max_claim_chars,
                 CLAIM_LLM_MODEL_ID,
                 CLAIM_PROMPT_ID,
+                CLAIM_LLM_MODEL_ID,
+                CLAIM_PROMPT_ID,
+                EMBEDDING_MODEL_ID,
                 limit,
             ),
         )
@@ -300,6 +321,41 @@ def missing_analyze_segments(conn, segmentation_run_id):
                 segmentation_run_id,
                 CLAIM_LLM_MODEL_ID,
                 CLAIM_PROMPT_ID,
+            ),
+        )
+        return cur.fetchall()
+
+
+def claim_runs_missing_embeddings(conn, segmentation_run_id):
+    """Return exact valid segment claim runs with incomplete embedding coverage."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT
+                r.run_id,
+                cs.segment_index
+            FROM content_segments cs
+            JOIN claim_extraction_runs r
+              ON r.segment_id = cs.segment_id
+             AND r.llm_model_id = %s
+             AND r.prompt_id = %s
+             AND r.status = 'valid'
+            JOIN claims c
+              ON c.run_id = r.run_id
+            WHERE cs.segmentation_run_id = %s
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM claim_embeddings ce
+                  WHERE ce.claim_id = c.claim_id
+                    AND ce.embedding_model_id = %s
+              )
+            ORDER BY cs.segment_index, r.run_id
+            """,
+            (
+                CLAIM_LLM_MODEL_ID,
+                CLAIM_PROMPT_ID,
+                segmentation_run_id,
+                EMBEDDING_MODEL_ID,
             ),
         )
         return cur.fetchall()
@@ -346,6 +402,30 @@ def run_worker(script, args, *, mamay=False):
         raise MamayBusy("another Mamay workload owns mamay.lock")
 
     return result.returncode
+
+
+def embed_missing_claim_runs(segmentation_run_id):
+    """Embed only exact valid claim runs belonging to one segmentation run."""
+    with psycopg.connect(DB_DSN) as conn:
+        runs = claim_runs_missing_embeddings(
+            conn,
+            segmentation_run_id,
+        )
+
+    for run_id, segment_index in runs:
+        print(
+            f"[segment_pipeline] claim embeddings "
+            f"segment_index={segment_index} "
+            f"run_id={run_id}"
+        )
+        rc = run_worker(
+            CLAIM_EMBED_WORKER,
+            ["--run-id", str(run_id)],
+        )
+        if rc != 0:
+            return rc
+
+    return 0
 
 
 def run(occurrence_limit, claim_limit, max_claim_chars, dry_run):
@@ -447,6 +527,15 @@ def run(occurrence_limit, claim_limit, max_claim_chars, dry_run):
                 print(f"[segment_pipeline] segment routing rc={rc}; continue")
                 continue
 
+            # Resume cheap deterministic downstream state before starting
+            # any new Mamay claim extraction.
+            rc = embed_missing_claim_runs(segmentation_run_id)
+            if rc != 0:
+                print(
+                    f"[segment_pipeline] claim embeddings rc={rc}; continue"
+                )
+                continue
+
             with psycopg.connect(DB_DSN) as conn:
                 segments = missing_analyze_segments(
                     conn,
@@ -485,6 +574,15 @@ def run(occurrence_limit, claim_limit, max_claim_chars, dry_run):
                         f"[segment_pipeline] segment claim rc={rc}; "
                         "continuing with bounded run"
                     )
+
+            # Embed claims created successfully during this occurrence.
+            # INVALID/transport-error runs have no eligible persisted claims.
+            rc = embed_missing_claim_runs(segmentation_run_id)
+            if rc != 0:
+                print(
+                    f"[segment_pipeline] claim embeddings rc={rc}; continue"
+                )
+                continue
 
         print(
             f"\n[segment_pipeline] done "
