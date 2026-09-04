@@ -145,6 +145,7 @@ def fetch_batch(
                         ) AS has_terminal
                     FROM claim_extraction_runs r
                     WHERE r.content_id = ci.content_id
+                      AND r.segment_id IS NULL
                       AND r.llm_model_id = %s
                       AND r.prompt_id = %s
                 ) history
@@ -191,6 +192,7 @@ def fetch_batch(
                     ) AS has_terminal
                 FROM claim_extraction_runs r
                 WHERE r.content_id = ci.content_id
+                  AND r.segment_id IS NULL
                   AND r.llm_model_id = %s
                   AND r.prompt_id = %s
             ) history
