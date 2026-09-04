@@ -8,7 +8,7 @@ Policy v1:
 - resume deepest partial state first;
 - point-run existing workers, no duplicated processing logic;
 - Mamay workloads serialized with the existing mamay.lock;
-- segment claims: analyze only;
+- segment claims: analyze only and bounded by explicit max input chars;
 - explicit occurrence and claim budgets;
 - no scheduler in this module.
 """
@@ -128,7 +128,7 @@ def current_segmentation(conn, occurrence_content_id):
         return row[0] if row else None
 
 
-def fetch_work_items(conn, limit):
+def fetch_work_items(conn, limit, max_claim_chars):
     """
     Finish deeper partial states before fetching fresh articles:
       rank 0: segmentation already exists but downstream is incomplete
@@ -231,6 +231,7 @@ def fetch_work_items(conn, limit):
                                     AND srd.routing_version = %s
                                     AND srd.decision = 'analyze'
                               )
+                              AND length(cs.text_content) <= %s
                               AND NOT EXISTS (
                                   SELECT 1
                                   FROM claim_extraction_runs r
@@ -261,6 +262,7 @@ def fetch_work_items(conn, limit):
                 EMBEDDING_MODEL_ID,
                 ROUTING_VERSION,
                 ROUTING_VERSION,
+                max_claim_chars,
                 CLAIM_LLM_MODEL_ID,
                 CLAIM_PROMPT_ID,
                 limit,
@@ -273,7 +275,10 @@ def missing_analyze_segments(conn, segmentation_run_id):
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT cs.segment_id, cs.segment_index
+            SELECT
+                cs.segment_id,
+                cs.segment_index,
+                length(cs.text_content) AS segment_chars
             FROM content_segments cs
             JOIN segment_routing_decisions srd
               ON srd.segment_id = cs.segment_id
@@ -343,14 +348,15 @@ def run_worker(script, args, *, mamay=False):
     return result.returncode
 
 
-def run(occurrence_limit, claim_limit, dry_run):
+def run(occurrence_limit, claim_limit, max_claim_chars, dry_run):
     with psycopg.connect(DB_DSN) as conn:
-        items = fetch_work_items(conn, occurrence_limit)
+        items = fetch_work_items(conn, occurrence_limit, max_claim_chars)
 
     print(
         f"[segment_pipeline] selected={len(items)} "
         f"occurrence_limit={occurrence_limit} "
-        f"claim_limit={claim_limit}"
+        f"claim_limit={claim_limit} "
+        f"max_claim_chars={max_claim_chars}"
     )
 
     stage_names = {
@@ -447,7 +453,17 @@ def run(occurrence_limit, claim_limit, dry_run):
                     segmentation_run_id,
                 )
 
-            for segment_id, segment_index in segments:
+            for segment_id, segment_index, segment_chars in segments:
+                if segment_chars > max_claim_chars:
+                    print(
+                        f"[segment_pipeline] DEFER oversized "
+                        f"segment_index={segment_index} "
+                        f"segment_id={segment_id} "
+                        f"chars={segment_chars} "
+                        f"max_claim_chars={max_claim_chars}"
+                    )
+                    continue
+
                 if claims_started >= claim_limit:
                     print("[segment_pipeline] claim budget exhausted")
                     break
@@ -489,6 +505,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--occurrence-limit", type=int, required=True)
     parser.add_argument("--claim-limit", type=int, required=True)
+    parser.add_argument("--max-claim-chars", type=int, required=True)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -496,10 +513,13 @@ def main():
         parser.error("--occurrence-limit must be > 0")
     if args.claim_limit <= 0:
         parser.error("--claim-limit must be > 0")
+    if args.max_claim_chars <= 0:
+        parser.error("--max-claim-chars must be > 0")
 
     return run(
         occurrence_limit=args.occurrence_limit,
         claim_limit=args.claim_limit,
+        max_claim_chars=args.max_claim_chars,
         dry_run=args.dry_run,
     )
 
