@@ -2,19 +2,46 @@
 <html lang="uk">
 <head>
     <meta charset="utf-8">
-    <title>{% block title %}МІП — Web MVP{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}МІП — Моніторинг інформаційного простору{% endblock %}</title>
+    <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-    <header>
-        <h1>МІП</h1>
-        <p>Web MVP</p>
-        <nav>
-            <a href="/">Головна</a>
-            <a href="/materials">Матеріали</a>
+    <div class="app-shell">
+        <div class="mobile-topbar">
+            <span class="brand-mark">МІП</span>
+            <button
+                type="button"
+                class="nav-toggle"
+                aria-expanded="false"
+                aria-controls="sidebar-nav"
+                onclick="var s=document.getElementById('sidebar-nav'); var open=s.classList.toggle('nav-open'); this.setAttribute('aria-expanded', open);"
+            >
+                Меню
+            </button>
+        </div>
+        <nav class="sidebar" id="sidebar-nav" aria-label="Основна навігація">
+            <div class="brand">
+                <span class="brand-mark">МІП</span>
+                <span class="brand-full">Моніторинг інформаційного простору</span>
+            </div>
+            <div class="status-pills">
+                <span class="pill">Тестова версія</span>
+                <span class="pill">Лише перегляд</span>
+                <span class="pill">Час — UTC</span>
+            </div>
+            <ul class="nav-list">
+                <li>
+                    <a class="nav-link" href="/" {% if active_page == "overview" %}aria-current="page"{% endif %}>Огляд</a>
+                </li>
+                <li>
+                    <a class="nav-link" href="/materials" {% if active_page == "materials" %}aria-current="page"{% endif %}>Матеріали</a>
+                </li>
+            </ul>
         </nav>
-    </header>
-    <main>
-        {% block content %}{% endblock %}
-    </main>
+        <main class="main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
 </body>
 </html>

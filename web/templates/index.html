@@ -1,6 +1,151 @@
 {% extends "base.html" %}
 
+{% block title %}Огляд — МІП{% endblock %}
+
 {% block content %}
-    <p>Інтерфейс працює.</p>
-    <p><a href="/materials">Переглянути матеріали</a></p>
+    <h1 class="page-title">Огляд інформаційного простору</h1>
+    <p class="page-lede">Стан надходження та опрацювання матеріалів за вибраний період.</p>
+
+    <div class="period-switch" role="group" aria-label="Період">
+        {% for value, label in periods %}
+            <a
+                href="/?period={{ value.value }}"
+                role="button"
+                {% if value == current_period %}aria-current="true"{% endif %}
+            >{{ label }}</a>
+        {% endfor %}
+    </div>
+
+    <div class="stat-cards">
+        <div class="stat-card">
+            <div class="stat-card-label">
+                Публікації
+                <span class="info-tip">
+                    <button type="button" class="info-tip-trigger" aria-describedby="tip-pub">ⓘ<span class="sr-only"> пояснення</span></button>
+                    <span role="tooltip" id="tip-pub" class="info-tip-bubble">Кількість появ матеріалів у джерелах за вибраний період (без усунення дублікатів тексту).</span>
+                </span>
+            </div>
+            <div class="stat-card-value">{{ stats.publications_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">
+                Унікальні матеріали
+                <span class="info-tip">
+                    <button type="button" class="info-tip-trigger" aria-describedby="tip-uniq">ⓘ<span class="sr-only"> пояснення</span></button>
+                    <span role="tooltip" id="tip-uniq" class="info-tip-bubble">Кількість матеріалів після усунення точних текстових повторів у межах періоду.</span>
+                </span>
+            </div>
+            <div class="stat-card-value">{{ stats.unique_materials_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">
+                Джерела з надходженнями
+                <span class="info-tip">
+                    <button type="button" class="info-tip-trigger" aria-describedby="tip-srcarr">ⓘ<span class="sr-only"> пояснення</span></button>
+                    <span role="tooltip" id="tip-srcarr" class="info-tip-bubble">Кількість джерел, від яких надійшов хоча б один матеріал за вибраний період.</span>
+                </span>
+            </div>
+            <div class="stat-card-value">{{ stats.sources_with_arrivals }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">
+                Активні джерела
+                <span class="info-tip">
+                    <button type="button" class="info-tip-trigger" aria-describedby="tip-srcact">ⓘ<span class="sr-only"> пояснення</span></button>
+                    <span role="tooltip" id="tip-srcact" class="info-tip-bubble">Кількість джерел, увімкнених для моніторингу зараз, незалежно від вибраного періоду.</span>
+                </span>
+            </div>
+            <div class="stat-card-value">{{ stats.active_sources_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">
+                Останнє надходження
+                <span class="info-tip">
+                    <button type="button" class="info-tip-trigger" aria-describedby="tip-last">ⓘ<span class="sr-only"> пояснення</span></button>
+                    <span role="tooltip" id="tip-last" class="info-tip-bubble">Час найсвіжішого надходження серед матеріалів вибраного періоду.</span>
+                </span>
+            </div>
+            {% if stats.latest_arrival %}
+                <div class="stat-card-value is-time">{{ stats.latest_arrival.strftime("%Y-%m-%d %H:%M") }} UTC</div>
+            {% else %}
+                <div class="stat-card-value is-time">—</div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if has_data %}
+        <h2 class="section-title">Стан опрацювання</h2>
+        <div class="stage-list">
+            {% for stage in stages %}
+                <div class="stage-row">
+                    <div class="stage-head">
+                        <span class="stage-name">
+                            {{ stage.label }}
+                            <span class="info-tip">
+                                <button type="button" class="info-tip-trigger" aria-describedby="tip-stage-{{ loop.index }}">ⓘ<span class="sr-only"> пояснення</span></button>
+                                <span role="tooltip" id="tip-stage-{{ loop.index }}" class="info-tip-bubble">{{ stage.tip }}</span>
+                            </span>
+                        </span>
+                        <span class="stage-numbers">{{ stage.count }} з {{ stats.unique_materials_count }} ({{ stage.pct }}%)</span>
+                    </div>
+                    <div class="stage-track" aria-hidden="true"><div class="stage-fill" style="width:{{ stage.pct }}%"></div></div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="composite-block">
+            <h2 class="section-title">
+                Рішення щодо аналізу
+                <span class="info-tip">
+                    <button type="button" class="info-tip-trigger" aria-describedby="tip-comp1">ⓘ<span class="sr-only"> пояснення</span></button>
+                    <span role="tooltip" id="tip-comp1" class="info-tip-bubble">База розрахунку — унікальні матеріали періоду ({{ stats.unique_materials_count }}), кожен врахований рівно в одній категорії.</span>
+                </span>
+            </h2>
+            <div class="composite-bar" aria-hidden="true">
+                {% for seg in decision_segments %}
+                    <div class="composite-seg" style="width:{{ seg.pct or 0 }}%; background:{{ seg.css }}"></div>
+                {% endfor %}
+            </div>
+            <ul class="composite-legend">
+                {% for seg in decision_segments %}
+                    <li><span class="legend-swatch" style="background:{{ seg.css }}"></span>{{ seg.label }} — <span class="legend-value">{{ seg.count }} ({{ seg.pct }}%)</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="composite-block">
+            <h2 class="section-title">
+                Інформаційний простір
+                <span class="info-tip">
+                    <button type="button" class="info-tip-trigger" aria-describedby="tip-comp2">ⓘ<span class="sr-only"> пояснення</span></button>
+                    <span role="tooltip" id="tip-comp2" class="info-tip-bubble">База розрахунку — публікації періоду ({{ stats.publications_count }}), а не унікальні матеріали: одна публікація належить рівно одному джерелу.</span>
+                </span>
+            </h2>
+            <div class="composite-bar" aria-hidden="true">
+                {% for seg in space_segments %}
+                    <div class="composite-seg" style="width:{{ seg.pct or 0 }}%; background:{{ seg.css }}"></div>
+                {% endfor %}
+            </div>
+            <ul class="composite-legend">
+                {% for seg in space_segments %}
+                    <li><span class="legend-swatch" style="background:{{ seg.css }}"></span>{{ seg.label }} — <span class="legend-value">{{ seg.count }} ({{ seg.pct }}%)</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="pending-block">
+            <h2 class="section-title" style="margin-bottom:0.35rem">Очікує наступного етапу</h2>
+            <p class="pending-note">Матеріал може просто ще перебувати в обробці — це не помилка.</p>
+            <ul class="pending-list">
+                <li>Без отриманого повного тексту <strong>{{ pending.no_text }}</strong></li>
+                <li>Очікує рішення щодо аналізу <strong>{{ pending.no_decision }}</strong></li>
+                <li>Без поділу на фрагменти <strong>{{ pending.no_segments }}</strong></li>
+                <li>Без виділених тверджень <strong>{{ pending.no_claims }}</strong></li>
+            </ul>
+        </div>
+    {% else %}
+        <p class="materials-empty">Немає даних за цей період для розрахунку показників обробки.</p>
+    {% endif %}
+
+    <a class="cta-button" href="/materials">Перейти до матеріалів →</a>
 {% endblock %}

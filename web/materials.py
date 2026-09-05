@@ -55,7 +55,7 @@ class RoutingDecision(str, Enum):
     PENDING = "pending"
 
 
-_PERIOD_TO_TIMEDELTA = {
+PERIOD_TO_TIMEDELTA = {
     Period.HOURS_24: timedelta(hours=24),
     Period.HOURS_72: timedelta(hours=72),
     Period.DAYS_7: timedelta(days=7),
@@ -96,7 +96,7 @@ def fetch_materials(
     params: list[object] = []
 
     if period is not Period.ALL:
-        cutoff = datetime.now(timezone.utc) - _PERIOD_TO_TIMEDELTA[period]
+        cutoff = datetime.now(timezone.utc) - PERIOD_TO_TIMEDELTA[period]
         conditions.append("COALESCE(io.published_at, io.collected_at) >= %s")
         params.append(cutoff)
 

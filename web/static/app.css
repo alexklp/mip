@@ -1,0 +1,728 @@
+/* МІП Web MVP — базовий візуальний фундамент.
+   Темна тема, плоскі поверхні, без градієнтів/скла/неону.
+   Шрифт: UAF Sans, якщо колись з'являться локальні файли шрифту —
+   додати @font-face тут і нічого більше в CSS змінювати не потрібно,
+   бо назва вже присутня першою в стеку нижче. Наразі файлів немає —
+   системний sans-serif fallback. */
+
+:root {
+    --bg: #14130e;
+    --surface: #1c1a13;
+    --surface-2: #262319;
+    --border: #3a3627;
+    --border-interactive: #726e5c;
+    --mundir: #4d4634;
+    --text: #edeae0;
+    --text-muted: #b0ac9c;
+    --text-faint: #8f8b7a;
+
+    --gold: #f39200;
+    --gold-chip-bg: #3a2807;
+
+    --teal-tint: #6fd2e3;
+    --teal-mid: #0f6d7f;
+    --teal-chip-bg: #05282f;
+
+    --steel-tint: #a6a8ac;
+    --steel-chip-bg: #2a2a2a;
+
+    --space-ua: #0b7a8e;
+    --space-ru: #8a8d93;
+    --space-other: #7a6f4e;
+    --stripe-pattern: repeating-linear-gradient(
+        135deg,
+        var(--border-interactive) 0 6px,
+        var(--surface-2) 6px 12px
+    );
+
+    --radius: 3px;
+    --focus-ring: 0 0 0 3px var(--gold);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    color-scheme: dark;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "UAF Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+a {
+    color: var(--gold);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: var(--radius);
+}
+
+/* ---------- Каркас ---------- */
+
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+    align-items: stretch;
+}
+
+.sidebar {
+    width: 232px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 1.25rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0 0.25rem;
+}
+
+.brand-mark {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: var(--text);
+}
+
+.brand-full {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
+.status-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0 0.25rem;
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    background: var(--steel-chip-bg);
+    color: var(--steel-tint);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.nav-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.nav-link:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.nav-link[aria-current="page"] {
+    background: var(--mundir);
+    color: var(--text);
+}
+
+.mobile-topbar {
+    display: none;
+}
+
+.main {
+    flex: 1;
+    min-width: 0;
+    padding: 1.75rem 2rem 4rem;
+    max-width: 1400px;
+}
+
+@media (max-width: 900px) {
+    .app-shell {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        display: none;
+    }
+
+    .sidebar.nav-open {
+        display: flex;
+        width: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .mobile-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .mobile-topbar .brand-mark {
+        font-size: 1.25rem;
+    }
+
+    .nav-toggle {
+        min-height: 44px;
+        min-width: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--surface-2);
+        border: 1px solid var(--border-interactive);
+        border-radius: var(--radius);
+        color: var(--text);
+        font-size: 0.875rem;
+        cursor: pointer;
+    }
+
+    .main {
+        padding: 1.25rem 1rem 3rem;
+    }
+}
+
+/* ---------- Типографіка сторінки ---------- */
+
+.page-title {
+    margin: 0 0 0.35rem;
+    font-size: 1.625rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.page-lede {
+    margin: 0 0 1.5rem;
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    max-width: 62ch;
+}
+
+.section-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.0625rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+/* ---------- Перемикач періоду ---------- */
+
+.period-switch {
+    display: inline-flex;
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 1.75rem;
+}
+
+.period-switch a {
+    appearance: none;
+    border: 0;
+    border-right: 1px solid var(--border-interactive);
+    background: var(--surface);
+    color: var(--text-muted);
+    padding: 0.5rem 0.9rem;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.period-switch a:last-child {
+    border-right: 0;
+}
+
+.period-switch a:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.period-switch a[aria-current="true"] {
+    background: var(--mundir);
+    color: var(--text);
+}
+
+.period-switch a:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    position: relative;
+    z-index: 1;
+}
+
+/* ---------- Інфопідказки ---------- */
+
+.info-tip {
+    position: relative;
+    display: inline-flex;
+    margin-left: 0.35rem;
+}
+
+.info-tip-trigger {
+    appearance: none;
+    border: 1px solid var(--border-interactive);
+    background: var(--surface-2);
+    color: var(--text-faint);
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    min-height: 0;
+    line-height: 1;
+    font-size: 0.6875rem;
+    cursor: help;
+    padding: 0;
+}
+
+.info-tip-bubble {
+    position: absolute;
+    z-index: 5;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 260px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.65rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s linear;
+}
+
+.info-tip-trigger:hover + .info-tip-bubble,
+.info-tip-trigger:focus-visible + .info-tip-bubble {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ---------- Картки показників ---------- */
+
+.stat-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 0.9rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.9rem 1.05rem;
+}
+
+.stat-card-label {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    margin-bottom: 0.4rem;
+}
+
+.stat-card-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--gold);
+    line-height: 1.15;
+}
+
+.stat-card-value.is-time {
+    font-size: 1.1rem;
+    color: var(--text);
+}
+
+/* ---------- Прогрес по етапах ---------- */
+
+.stage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    margin-bottom: 2rem;
+}
+
+.stage-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+}
+
+.stage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.stage-name {
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.stage-numbers {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.stage-track {
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.stage-fill {
+    height: 100%;
+    background: var(--gold);
+}
+
+/* ---------- Складені горизонтальні смуги ---------- */
+
+.composite-block {
+    margin-bottom: 2rem;
+}
+
+.composite-bar {
+    display: flex;
+    height: 22px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface-2);
+    gap: 2px;
+}
+
+.composite-seg {
+    height: 100%;
+}
+
+.composite-legend {
+    list-style: none;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.25rem;
+}
+
+.composite-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.legend-value {
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* ---------- Стан очікування ---------- */
+
+.pending-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+}
+
+.pending-block p.pending-note {
+    margin: 0 0 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+
+.pending-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.6rem;
+}
+
+.pending-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    border-left: 2px solid var(--border-interactive);
+    padding-left: 0.6rem;
+}
+
+.pending-list strong {
+    color: var(--text);
+}
+
+/* ---------- CTA ---------- */
+
+.cta-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0.6rem 1.1rem;
+    background: transparent;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+}
+
+.cta-button:hover {
+    background: var(--gold-chip-bg);
+}
+
+/* ---------- Матеріали: фільтри ---------- */
+
+.filter-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.filter-field select {
+    min-height: 44px;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius);
+    padding: 0 0.6rem;
+    font-size: 0.875rem;
+}
+
+.filter-submit {
+    min-height: 44px;
+    padding: 0 1.1rem;
+    background: var(--mundir);
+    color: var(--text);
+    border: 1px solid var(--mundir);
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.filter-submit:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.materials-count {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    margin-bottom: 1rem;
+}
+
+.materials-empty {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+}
+
+/* ---------- Матеріали: таблиця ---------- */
+
+.table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+@media (max-width: 900px) {
+    .table-scroll {
+        position: relative;
+    }
+
+    .table-scroll::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 28px;
+        background: linear-gradient(to right, transparent, var(--surface));
+        pointer-events: none;
+    }
+}
+
+.materials-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 780px;
+    font-size: 0.8438rem;
+}
+
+.materials-table th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.6rem 0.9rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.materials-table td {
+    padding: 0.65rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.materials-table tbody tr:hover {
+    background: var(--surface-2);
+}
+
+.materials-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.source-meta {
+    display: block;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    margin-top: 0.15rem;
+}
+
+.material-title {
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 0.2rem;
+}
+
+.material-preview {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    max-width: 46ch;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--radius);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-analyze {
+    background: var(--gold-chip-bg);
+    color: var(--gold);
+}
+
+.badge-maybe {
+    background: var(--teal-chip-bg);
+    color: var(--teal-tint);
+}
+
+.badge-skip {
+    background: var(--steel-chip-bg);
+    color: var(--steel-tint);
+}
+
+.badge-pending {
+    background: transparent;
+    border: 1px dashed var(--border-interactive);
+    color: var(--text-muted);
+}
+
+.flag {
+    font-size: 0.8125rem;
+}
+
+.flag-yes {
+    color: var(--text);
+}
+
+.flag-no {
+    color: var(--text-faint);
+}

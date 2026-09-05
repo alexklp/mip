@@ -1,65 +1,65 @@
 {% extends "base.html" %}
 
-{% block title %}Матеріали — Web MVP{% endblock %}
+{% block title %}Матеріали — МІП{% endblock %}
 
 {% block content %}
-    <h2>Матеріали</h2>
+    <h1 class="page-title">Матеріали</h1>
 
-    <form method="get" action="/materials" class="materials-filter">
-        <label>
-            Період
-            <select name="period">
+    <form method="get" action="/materials" class="filter-panel">
+        <div class="filter-field">
+            <label for="f-period">Період</label>
+            <select id="f-period" name="period">
                 <option value="24h" {% if filters.period == "24h" %}selected{% endif %}>24 години</option>
                 <option value="72h" {% if filters.period == "72h" %}selected{% endif %}>72 години</option>
                 <option value="7d" {% if filters.period == "7d" %}selected{% endif %}>7 днів</option>
                 <option value="all" {% if filters.period == "all" %}selected{% endif %}>Увесь час</option>
             </select>
-        </label>
+        </div>
 
-        <label>
-            Інформаційний простір
-            <select name="source_group">
+        <div class="filter-field">
+            <label for="f-source-group">Інформаційний простір</label>
+            <select id="f-source-group" name="source_group">
                 <option value="" {% if not filters.source_group %}selected{% endif %}>Будь-який</option>
-                <option value="ua_space" {% if filters.source_group == "ua_space" %}selected{% endif %}>UA-простір</option>
-                <option value="ru_space" {% if filters.source_group == "ru_space" %}selected{% endif %}>RU-простір</option>
+                <option value="ua_space" {% if filters.source_group == "ua_space" %}selected{% endif %}>Український простір</option>
+                <option value="ru_space" {% if filters.source_group == "ru_space" %}selected{% endif %}>Російський простір</option>
                 <option value="other" {% if filters.source_group == "other" %}selected{% endif %}>Інше</option>
                 <option value="unknown" {% if filters.source_group == "unknown" %}selected{% endif %}>Невідомо</option>
             </select>
-        </label>
+        </div>
 
-        <label>
-            Тип джерела
-            <select name="source_type">
+        <div class="filter-field">
+            <label for="f-source-type">Тип джерела</label>
+            <select id="f-source-type" name="source_type">
                 <option value="" {% if not filters.source_type %}selected{% endif %}>Будь-який</option>
                 <option value="rss" {% if filters.source_type == "rss" %}selected{% endif %}>RSS</option>
                 <option value="telegram" {% if filters.source_type == "telegram" %}selected{% endif %}>Telegram</option>
                 <option value="web" {% if filters.source_type == "web" %}selected{% endif %}>Web</option>
                 <option value="api" {% if filters.source_type == "api" %}selected{% endif %}>API</option>
             </select>
-        </label>
+        </div>
 
-        <label>
-            Джерело
-            <select name="source_id">
+        <div class="filter-field">
+            <label for="f-source">Джерело</label>
+            <select id="f-source" name="source_id">
                 <option value="" {% if not filters.source_id %}selected{% endif %}>Будь-яке</option>
                 {% for source in sources %}
                     <option value="{{ source.source_id }}" {% if filters.source_id == source.source_id|string %}selected{% endif %}>{{ source.name }}</option>
                 {% endfor %}
             </select>
-        </label>
+        </div>
 
-        <label>
-            Routing-рішення
-            <select name="decision">
+        <div class="filter-field">
+            <label for="f-decision">Рішення щодо аналізу</label>
+            <select id="f-decision" name="decision">
                 <option value="" {% if not filters.decision %}selected{% endif %}>Будь-яке</option>
-                <option value="analyze" {% if filters.decision == "analyze" %}selected{% endif %}>Аналізувати</option>
-                <option value="maybe" {% if filters.decision == "maybe" %}selected{% endif %}>Можливо</option>
-                <option value="skip" {% if filters.decision == "skip" %}selected{% endif %}>Пропустити</option>
+                <option value="analyze" {% if filters.decision == "analyze" %}selected{% endif %}>Для аналізу</option>
+                <option value="maybe" {% if filters.decision == "maybe" %}selected{% endif %}>Потребує уточнення</option>
+                <option value="skip" {% if filters.decision == "skip" %}selected{% endif %}>Не відібрано</option>
                 <option value="pending" {% if filters.decision == "pending" %}selected{% endif %}>Очікує рішення</option>
             </select>
-        </label>
+        </div>
 
-        <button type="submit">Застосувати</button>
+        <button type="submit" class="filter-submit">Застосувати</button>
     </form>
 
     <p class="materials-count">
@@ -71,54 +71,68 @@
     </p>
 
     {% if materials %}
-        <table class="materials-table">
-            <thead>
-                <tr>
-                    <th>Час (UTC)</th>
-                    <th>Джерело</th>
-                    <th>Заголовок / прев'ю</th>
-                    <th>Routing</th>
-                    <th>Текст</th>
-                    <th>Сегменти</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in materials %}
+        <div class="table-scroll">
+            <table class="materials-table">
+                <thead>
                     <tr>
-                        <td>{{ row.occurred_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
-                        <td>
-                            {{ row.source_name }}
-                            <br>
-                            <span class="source-meta">{{ row.source_group }} / {{ row.source_type }}</span>
-                        </td>
-                        <td>
-                            <div class="material-title">{{ row.display_title }}</div>
-                            <div class="material-preview">{{ row.preview_text }}</div>
-                        </td>
-                        <td>
-                            {% if row.routing_decision == "analyze" %}
-                                <span class="badge badge-analyze">аналізувати</span>
-                            {% elif row.routing_decision == "maybe" %}
-                                <span class="badge badge-maybe">можливо</span>
-                            {% elif row.routing_decision == "skip" %}
-                                <span class="badge badge-skip">пропустити</span>
-                            {% else %}
-                                <span class="badge badge-pending">очікує рішення</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <span class="flag {{ 'flag-yes' if row.has_full_text else 'flag-no' }}">
-                                {{ "є" if row.has_full_text else "немає" }}
-                            </span>
-                        </td>
-                        <td>
-                            <span class="flag {{ 'flag-yes' if row.has_segments else 'flag-no' }}">
-                                {{ "є" if row.has_segments else "немає" }}
-                            </span>
-                        </td>
+                        <th>Час (UTC)</th>
+                        <th>Джерело</th>
+                        <th>Заголовок / прев'ю</th>
+                        <th>Рішення</th>
+                        <th>Текст</th>
+                        <th>Фрагменти</th>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% for row in materials %}
+                        <tr>
+                            <td>{{ row.occurred_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
+                            <td>
+                                {{ row.source_name }}
+                                <span class="source-meta">
+                                    {% if row.source_group == "ua_space" %}Український простір
+                                    {% elif row.source_group == "ru_space" %}Російський простір
+                                    {% elif row.source_group == "other" %}Інше
+                                    {% else %}Невідомо
+                                    {% endif %}
+                                    /
+                                    {% if row.source_type == "rss" %}RSS
+                                    {% elif row.source_type == "telegram" %}Telegram
+                                    {% elif row.source_type == "web" %}Web
+                                    {% elif row.source_type == "api" %}API
+                                    {% else %}{{ row.source_type }}
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="material-title">{{ row.display_title }}</div>
+                                <div class="material-preview">{{ row.preview_text }}</div>
+                            </td>
+                            <td>
+                                {% if row.routing_decision == "analyze" %}
+                                    <span class="badge badge-analyze">Для аналізу</span>
+                                {% elif row.routing_decision == "maybe" %}
+                                    <span class="badge badge-maybe">Потребує уточнення</span>
+                                {% elif row.routing_decision == "skip" %}
+                                    <span class="badge badge-skip">Не відібрано</span>
+                                {% else %}
+                                    <span class="badge badge-pending">Очікує рішення</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="flag {{ 'flag-yes' if row.has_full_text else 'flag-no' }}">
+                                    {{ "є" if row.has_full_text else "немає" }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="flag {{ 'flag-yes' if row.has_segments else 'flag-no' }}">
+                                    {{ "є" if row.has_segments else "немає" }}
+                                </span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     {% endif %}
 {% endblock %}
