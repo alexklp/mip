@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}МІП — Web MVP{% endblock %}</title>
+</head>
+<body>
+    <header>
+        <h1>МІП</h1>
+        <p>Web MVP</p>
+        <nav>
+            <a href="/">Головна</a>
+            <a href="/materials">Матеріали</a>
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
