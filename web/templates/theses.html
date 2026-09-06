@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Тези — МІП{% endblock %}
+{% block content %}
+    <h1 class="page-title">Тези за контурами моніторингу</h1>
+    <p class="page-lede">
+        Кураторська вибірка виділених тверджень за чотирма контурами ТЗ.
+        Це чорновий аналітичний зріз: автоматична прив'язка твердження до
+        контуру ще донавчається, тому якість поступово покращуватиметься.
+    </p>
+
+    <div class="theses-toolbar">
+        <a class="btn-export" href="/theses/export.csv">Завантажити CSV</a>
+        <input type="text" id="thesisFilter" class="thesis-filter-input"
+               placeholder="Пошук за текстом, джерелом...">
+    </div>
+
+    {% if contours %}
+        <div class="tabs">
+            {% for contour in contours %}
+                <input type="radio" name="contour-tab" id="tab-{{ contour.code }}"
+                       class="tab-radio" {% if loop.first %}checked{% endif %}>
+            {% endfor %}
+
+            <div class="tab-labels">
+                {% for contour in contours %}
+                    <label for="tab-{{ contour.code }}" class="tab-label">
+                        {{ contour.name }} <span class="tab-count">{{ contour.theses|length }}</span>
+                    </label>
+                {% endfor %}
+            </div>
+
+            <div class="tab-panels">
+                {% for contour in contours %}
+                    <div class="tab-panel" id="panel-{{ contour.code }}">
+                        {% if contour.confirmed_count > 0 %}
+                            <p class="contour-badge">{{ contour.confirmed_count }} підтверджених із {{ contour.theses|length }} показаних</p>
+                        {% else %}
+                            <p class="contour-badge contour-badge-draft">чернетка — підтверджених тверджень ще немає, показані кандидати</p>
+                        {% endif %}
+                        <div class="thesis-scroll">
+                        <div class="thesis-list">
+                            {% for item in contour.theses %}
+                                <details class="thesis-item {{ 'is-candidate' if item.assignment_status == 'candidate' else '' }}">
+                                    <summary class="thesis-summary">
+                                        <span class="thesis-claim">{{ item.claim_text }}</span>
+                                        <span class="thesis-meta-inline">{{ item.source_name }} · {{ item.published_at.strftime("%Y-%m-%d %H:%M") if item.published_at else "—" }}</span>
+                                    </summary>
+                                    <div class="thesis-detail">
+                                        {% if item.evidence_span and item.evidence_span.strip() != item.claim_text.strip() %}
+                                            <p class="thesis-evidence">«{{ item.evidence_span }}»</p>
+                                        {% endif %}
+                                        <div class="thesis-meta">
+                                            <span>{{ item.source_name }}</span>
+                                            <span>{{ item.published_at.strftime("%Y-%m-%d %H:%M") if item.published_at else "—" }} UTC</span>
+                                            {% if item.facet_code %}<span class="facet-tag">{{ item.facet_code }}</span>{% endif %}
+                                            {% if item.assignment_status == "candidate" %}<span>кандидат, потребує перевірки</span>{% endif %}
+                                        </div>
+                                    </div>
+                                </details>
+                            {% endfor %}
+                        </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <p class="materials-count">Тверджень для показу поки немає.</p>
+    {% endif %}
+
+    <script>
+    (function () {
+        var input = document.getElementById('thesisFilter');
+        if (!input) return;
+        input.addEventListener('input', function () {
+            var q = this.value.trim().toLowerCase();
+            document.querySelectorAll('.thesis-item').forEach(function (el) {
+                var match = !q || el.textContent.toLowerCase().indexOf(q) !== -1;
+                el.style.display = match ? '' : 'none';
+            });
+        });
+    })();
+    </script>
+{% endblock %}

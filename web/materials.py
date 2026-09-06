@@ -13,6 +13,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
+from typing import Annotated
+
+from pydantic import BeforeValidator
 
 MATERIALS_LIMIT = 50
 PREVIEW_LENGTH = 240
@@ -53,6 +56,19 @@ class RoutingDecision(str, Enum):
     MAYBE = "maybe"
     SKIP = "skip"
     PENDING = "pending"
+
+
+def _blank_to_none(value: object) -> object:
+    """Порожній рядок з форми (незаповнений фільтр) означає 'фільтр не задано'."""
+    if value == "":
+        return None
+    return value
+
+
+OptionalSourceGroup = Annotated[SourceGroup | None, BeforeValidator(_blank_to_none)]
+OptionalSourceType = Annotated[SourceType | None, BeforeValidator(_blank_to_none)]
+OptionalRoutingDecision = Annotated[RoutingDecision | None, BeforeValidator(_blank_to_none)]
+OptionalSourceIdUUID = Annotated[UUID | None, BeforeValidator(_blank_to_none)]
 
 
 PERIOD_TO_TIMEDELTA = {

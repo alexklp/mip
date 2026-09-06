@@ -1,21 +1,17 @@
 {% extends "base.html" %}
-
 {% block title %}Огляд — МІП{% endblock %}
-
 {% block content %}
     <h1 class="page-title">Огляд інформаційного простору</h1>
     <p class="page-lede">Стан надходження та опрацювання матеріалів за вибраний період.</p>
-
     <div class="period-switch" role="group" aria-label="Період">
         {% for value, label in periods %}
-            <a
+
                 href="/?period={{ value.value }}"
                 role="button"
                 {% if value == current_period %}aria-current="true"{% endif %}
             >{{ label }}</a>
         {% endfor %}
     </div>
-
     <div class="stat-cards">
         <div class="stat-card">
             <div class="stat-card-label">
@@ -71,28 +67,18 @@
                 <div class="stat-card-value is-time">—</div>
             {% endif %}
         </div>
-    </div>
-
-    {% if has_data %}
-        <h2 class="section-title">Стан опрацювання</h2>
-        <div class="stage-list">
-            {% for stage in stages %}
-                <div class="stage-row">
-                    <div class="stage-head">
-                        <span class="stage-name">
-                            {{ stage.label }}
-                            <span class="info-tip">
-                                <button type="button" class="info-tip-trigger" aria-describedby="tip-stage-{{ loop.index }}">ⓘ<span class="sr-only"> пояснення</span></button>
-                                <span role="tooltip" id="tip-stage-{{ loop.index }}" class="info-tip-bubble">{{ stage.tip }}</span>
-                            </span>
-                        </span>
-                        <span class="stage-numbers">{{ stage.count }} з {{ stats.unique_materials_count }} ({{ stage.pct }}%)</span>
-                    </div>
-                    <div class="stage-track" aria-hidden="true"><div class="stage-fill" style="width:{{ stage.pct }}%"></div></div>
-                </div>
-            {% endfor %}
+        <div class="stat-card">
+            <div class="stat-card-label">
+                Твердження виділено
+                <span class="info-tip">
+                    <button type="button" class="info-tip-trigger" aria-describedby="tip-claims">ⓘ<span class="sr-only"> пояснення</span></button>
+                    <span role="tooltip" id="tip-claims" class="info-tip-bubble">{{ claims_stat.tip }}</span>
+                </span>
+            </div>
+            <div class="stat-card-value">{{ claims_stat.count }}{% if claims_stat.pct is not none %} ({{ claims_stat.pct }}%){% endif %}</div>
         </div>
-
+    </div>
+    {% if has_data %}
         <div class="composite-block">
             <h2 class="section-title">
                 Рішення щодо аналізу
@@ -112,7 +98,6 @@
                 {% endfor %}
             </ul>
         </div>
-
         <div class="composite-block">
             <h2 class="section-title">
                 Інформаційний простір
@@ -132,20 +117,16 @@
                 {% endfor %}
             </ul>
         </div>
-
         <div class="pending-block">
             <h2 class="section-title" style="margin-bottom:0.35rem">Очікує наступного етапу</h2>
             <p class="pending-note">Матеріал може просто ще перебувати в обробці — це не помилка.</p>
             <ul class="pending-list">
-                <li>Без отриманого повного тексту <strong>{{ pending.no_text }}</strong></li>
                 <li>Очікує рішення щодо аналізу <strong>{{ pending.no_decision }}</strong></li>
-                <li>Без поділу на фрагменти <strong>{{ pending.no_segments }}</strong></li>
                 <li>Без виділених тверджень <strong>{{ pending.no_claims }}</strong></li>
             </ul>
         </div>
     {% else %}
         <p class="materials-empty">Немає даних за цей період для розрахунку показників обробки.</p>
     {% endif %}
-
     <a class="cta-button" href="/materials">Перейти до матеріалів →</a>
 {% endblock %}

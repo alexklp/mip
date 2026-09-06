@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Джерела — МІП{% endblock %}
+{% block content %}
+    <h1 class="page-title">Джерела моніторингу</h1>
+    <p class="page-lede">Охоплення за джерелами: скільки надійшло і коли востаннє.</p>
+
+    <div class="period-switch" role="group" aria-label="Період">
+        {% for value, label in periods %}
+
+                href="/sources?period={{ value.value }}"
+                role="button"
+                {% if value == current_period %}aria-current="true"{% endif %}
+            >{{ label }}</a>
+        {% endfor %}
+    </div>
+
+    <p class="materials-count">
+        {% if sources %}
+            Джерел з надходженнями: {{ sources|length }}
+        {% else %}
+            Джерел з надходженнями за обраний період не знайдено.
+        {% endif %}
+    </p>
+
+    {% if sources %}
+        <div class="table-scroll">
+            <table class="materials-table">
+                <thead>
+                    <tr>
+                        <th>Джерело</th>
+                        <th>Тип</th>
+                        <th>Простір</th>
+                        <th>Активне</th>
+                        <th>Публікацій</th>
+                        <th>Унікальних матеріалів</th>
+                        <th>Перше надходження</th>
+                        <th>Останнє надходження</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in sources %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td>
+                                {% if row.source_type == "rss" %}RSS
+                                {% elif row.source_type == "telegram" %}Telegram
+                                {% elif row.source_type == "web" %}Web
+                                {% elif row.source_type == "api" %}API
+                                {% else %}{{ row.source_type }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if row.source_group == "ua_space" %}Український простір
+                                {% elif row.source_group == "ru_space" %}Російський простір
+                                {% elif row.source_group == "other" %}Інше
+                                {% else %}Невідомо
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="flag {{ 'flag-yes' if row.is_active else 'flag-no' }}">
+                                    {{ "так" if row.is_active else "ні" }}
+                                </span>
+                            </td>
+                            <td>{{ row.publications }}</td>
+                            <td>{{ row.materials }}</td>
+                            <td>{{ row.first_item.strftime("%Y-%m-%d %H:%M") if row.first_item else "—" }} UTC</td>
+                            <td>{{ row.last_item.strftime("%Y-%m-%d %H:%M") if row.last_item else "—" }} UTC</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+{% endblock %}

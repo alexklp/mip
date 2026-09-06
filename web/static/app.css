@@ -726,3 +726,55 @@ a {
 .flag-no {
     color: var(--text-faint);
 }
+
+/* --- Тези (сторінка /theses) --- */
+.contour-section { margin-bottom: 2rem; }
+.contour-head { display:flex; align-items:baseline; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.6rem; }
+.contour-head h2 { margin:0; font-size:1.05rem; }
+.contour-badge { font-size:0.75rem; color: var(--steel-tint, #a6a8ac); }
+.contour-badge-draft { color: var(--gold, #f39200); }
+.thesis-list { display:flex; flex-direction:column; gap:0.7rem; }
+.thesis-item { background: var(--surface, #1c1a13); border:1px solid rgba(255,255,255,0.08);
+  border-radius:6px; padding:0.75rem 1rem; }
+.thesis-item.is-candidate { border-left: 3px solid var(--gold, #f39200); }
+.thesis-claim { font-size:0.95rem; margin:0 0 0.35rem; }
+.thesis-evidence { font-size:0.82rem; color: var(--steel-tint, #a6a8ac); font-style:italic; margin:0 0 0.4rem; }
+.thesis-meta { font-size:0.75rem; color: var(--steel-tint, #a6a8ac); display:flex; gap:0.6rem; flex-wrap:wrap; }
+.thesis-meta .facet-tag { background: var(--teal-mid, #0f6d7f); color:#fff; padding:0.05rem 0.4rem; border-radius:3px; }
+
+/* --- Тези v2: таби, тулбар, компактні рядки --- */
+.theses-toolbar { display:flex; gap:0.75rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap; }
+.btn-export { background: var(--gold, #f39200); color:#14130e; font-weight:600;
+  padding:0.5rem 1rem; border-radius:6px; text-decoration:none; font-size:0.85rem; }
+.btn-export:hover { opacity:0.9; }
+.thesis-filter-input { flex:1; min-width:220px; background: var(--surface, #1c1a13);
+  border:1px solid rgba(255,255,255,0.12); color:inherit; padding:0.5rem 0.75rem;
+  border-radius:6px; font-size:0.85rem; }
+
+.tab-radio { position:absolute; opacity:0; pointer-events:none; }
+.tab-labels { display:flex; gap:0.4rem; flex-wrap:wrap; border-bottom:1px solid rgba(255,255,255,0.12); margin-bottom:1rem; }
+.tab-label { padding:0.55rem 0.9rem; font-size:0.85rem; cursor:pointer;
+  color: var(--steel-tint, #a6a8ac); border-bottom:2px solid transparent; user-select:none; }
+.tab-count { opacity:0.7; font-size:0.75rem; }
+.tab-panel { display:none; }
+#tab-dshv_objects:checked ~ .tab-labels label[for="tab-dshv_objects"],
+#tab-national_context:checked ~ .tab-labels label[for="tab-national_context"],
+#tab-world_context:checked ~ .tab-labels label[for="tab-world_context"],
+#tab-enemy_media:checked ~ .tab-labels label[for="tab-enemy_media"] {
+  color: var(--gold, #f39200); border-bottom-color: var(--gold, #f39200);
+}
+#tab-dshv_objects:checked ~ .tab-panels #panel-dshv_objects,
+#tab-national_context:checked ~ .tab-panels #panel-national_context,
+#tab-world_context:checked ~ .tab-panels #panel-world_context,
+#tab-enemy_media:checked ~ .tab-panels #panel-enemy_media { display: block; }
+
+.thesis-summary { padding:0.6rem 0.9rem; cursor:pointer; display:flex;
+  justify-content:space-between; gap:1rem; align-items:baseline; }
+.thesis-claim { font-size:0.9rem; flex:1; }
+.thesis-meta-inline { font-size:0.72rem; color: var(--steel-tint, #a6a8ac); white-space:nowrap; }
+.thesis-detail { padding:0 0.9rem 0.75rem; }
+
+/* --- Тези: скролящееся вікно списку замість жорсткого ліміту 8 --- */
+.thesis-scroll { max-height: 65vh; overflow-y: auto; padding-right: 6px; }
+.thesis-scroll::-webkit-scrollbar { width: 8px; }
+.thesis-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }

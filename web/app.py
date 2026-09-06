@@ -5,13 +5,15 @@ GET /           -- огляд інформаційного простору (с�
 GET /materials  -- список публікацій (item_occurrences) з живої БД.
 """
 
+import csv
+import io
 import sys
 from pathlib import Path
 from uuid import UUID
 
 import psycopg
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -21,10 +23,16 @@ from web.materials import (
     RoutingDecision,
     SourceGroup,
     SourceType,
+    OptionalRoutingDecision,
+    OptionalSourceGroup,
+    OptionalSourceIdUUID,
+    OptionalSourceType,
     fetch_active_sources,
     fetch_materials,
 )
 from web.overview import fetch_overview_stats
+from web.sources import fetch_sources_overview
+from web.theses import EXPORT_PER_CONTOUR_LIMIT, fetch_theses_by_contour
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -68,44 +76,16 @@ def index(request: Request, period: Period = Period.HOURS_24) -> HTMLResponse:
     unique = stats["unique_materials_count"]
     publications = stats["publications_count"]
 
-    stages = [
-        {
-            "label": "Текст отримано",
-            "count": stats["text_received_count"],
-            "pct": _pct(stats["text_received_count"], unique),
-            "tip": (
-                "Частка унікальних матеріалів періоду, для яких вдалося "
-                "отримати повний текст статті за посиланням (окремий крок "
-                "збагачення понад початковий текст із джерела)."
-            ),
-        },
-        {
-            "label": "Відібрано для аналізу",
-            "count": stats["decision_analyze"],
-            "pct": _pct(stats["decision_analyze"], unique),
-            "tip": "Частка унікальних матеріалів періоду з останнім рішенням «Для аналізу».",
-        },
-        {
-            "label": "Поділено на фрагменти",
-            "count": stats["segmented_count"],
-            "pct": _pct(stats["segmented_count"], unique),
-            "tip": (
-                "Частка унікальних матеріалів періоду, текст яких успішно "
-                "поділено на аналітичні фрагменти."
-            ),
-        },
-        {
-            "label": "Твердження виділено",
-            "count": stats["claims_count"],
-            "pct": _pct(stats["claims_count"], unique),
-            "tip": (
-                "Частка унікальних матеріалів, з яких виділено хоча б одне "
-                "перевірюване твердження -- як із фрагментів, так і напряму "
-                "з тексту публікації (два незалежні режими вилучення, не "
-                "вимагає попереднього поділу на фрагменти)."
-            ),
-        },
-    ]
+    claims_stat = {
+        "count": stats["claims_count"],
+        "pct": _pct(stats["claims_count"], unique),
+        "tip": (
+            "Частка унікальних матеріалів, з яких виділено хоча б одне "
+            "перевірюване твердження -- як із фрагментів, так і напряму "
+            "з тексту публікації (два незалежні режими вилучення, не "
+            "вимагає попереднього поділу на фрагменти)."
+        ),
+    }
 
     decision_segments = [
         {
@@ -162,9 +142,7 @@ def index(request: Request, period: Period = Period.HOURS_24) -> HTMLResponse:
     ]
 
     pending = {
-        "no_text": unique - stats["text_received_count"],
         "no_decision": stats["decision_pending"],
-        "no_segments": unique - stats["segmented_count"],
         "no_claims": unique - stats["claims_count"],
     }
 
@@ -174,7 +152,7 @@ def index(request: Request, period: Period = Period.HOURS_24) -> HTMLResponse:
         "periods": PERIOD_LABELS,
         "has_data": unique > 0,
         "stats": stats,
-        "stages": stages,
+        "claims_stat": claims_stat,
         "decision_segments": decision_segments,
         "space_segments": space_segments,
         "pending": pending,
@@ -186,10 +164,10 @@ def index(request: Request, period: Period = Period.HOURS_24) -> HTMLResponse:
 def materials(
     request: Request,
     period: Period = Period.HOURS_24,
-    source_group: SourceGroup | None = None,
-    source_type: SourceType | None = None,
-    source_id: UUID | None = None,
-    decision: RoutingDecision | None = None,
+    source_group: OptionalSourceGroup = None,
+    source_type: OptionalSourceType = None,
+    source_id: OptionalSourceIdUUID = None,
+    decision: OptionalRoutingDecision = None,
 ) -> HTMLResponse:
     """Сторінка списку публікацій (item_occurrences) з живої БД за фільтрами."""
     try:
@@ -224,4 +202,79 @@ def materials(
             "sources": sources,
             "filters": filters,
         },
+    )
+
+
+@app.get("/sources", response_class=HTMLResponse)
+def sources_page(request: Request, period: Period = Period.ALL) -> HTMLResponse:
+    """Сторінка охоплення джерел моніторингу."""
+    try:
+        with read_connection() as conn:
+            rows = fetch_sources_overview(conn, period=period)
+    except psycopg.Error as exc:
+        print(f"/sources: db error: {exc}", file=sys.stderr)
+        raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE) from exc
+
+    return templates.TemplateResponse(
+        request,
+        "sources.html",
+        {
+            "active_page": "sources",
+            "current_period": period,
+            "periods": PERIOD_LABELS,
+            "sources": rows,
+        },
+    )
+
+
+@app.get("/theses", response_class=HTMLResponse)
+def theses_page(request: Request) -> HTMLResponse:
+    """Сторінка кураторських тез за контурами моніторингу."""
+    try:
+        with read_connection() as conn:
+            contours = fetch_theses_by_contour(conn)
+    except psycopg.Error as exc:
+        print(f"/theses: db error: {exc}", file=sys.stderr)
+        raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE) from exc
+
+    return templates.TemplateResponse(
+        request,
+        "theses.html",
+        {
+            "active_page": "theses",
+            "contours": contours,
+        },
+    )
+
+
+@app.get("/theses/export.csv")
+def theses_export_csv() -> Response:
+    """Експорт кураторської вибірки тез у CSV (для Excel)."""
+    try:
+        with read_connection() as conn:
+            contours = fetch_theses_by_contour(conn, per_contour_limit=EXPORT_PER_CONTOUR_LIMIT)
+    except psycopg.Error as exc:
+        print(f"/theses/export.csv: db error: {exc}", file=sys.stderr)
+        raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE) from exc
+
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    writer = csv.writer(buf, delimiter=";")
+    writer.writerow(["Контур", "Статус", "Джерело", "Дата (UTC)", "Твердження", "Фрагмент", "Тег"])
+    for contour in contours:
+        for item in contour["theses"]:
+            writer.writerow([
+                contour["name"],
+                "підтверджено" if item["assignment_status"] == "confirmed" else "кандидат",
+                item["source_name"],
+                item["published_at"].strftime("%Y-%m-%d %H:%M") if item["published_at"] else "",
+                item["claim_text"],
+                item["evidence_span"] or "",
+                item["facet_code"] or "",
+            ])
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=mip_thesis_export.csv"},
     )
