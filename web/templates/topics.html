@@ -1641,19 +1641,38 @@
                 source.textContent =
                     row.source_name;
 
-                var time = document.createElement(
-                    "span"
-                );
+                var sourceLink = null;
 
-                time.textContent =
-                    formatKyiv(
-                        row.observed_at
+                if (
+                    row.external_ref &&
+                    /^https?:\/\//i.test(
+                        row.external_ref
+                    )
+                ) {
+                    sourceLink = document.createElement(
+                        "a"
                     );
+                    sourceLink.className =
+                        "signals-source-link";
+                    sourceLink.href =
+                        row.external_ref;
+                    sourceLink.target =
+                        "_blank";
+                    sourceLink.rel =
+                        "noopener noreferrer";
+                    sourceLink.setAttribute(
+                        "aria-label",
+                        "Відкрити публікацію у джерелі"
+                    );
+                    sourceLink.textContent =
+                        "Відкрити джерело ↗";
+                }
 
-                head.append(
-                    source,
-                    time
-                );
+                head.appendChild(source);
+
+                if (sourceLink) {
+                    head.appendChild(sourceLink);
+                }
 
                 var meta = document.createElement(
                     "div"
@@ -1669,6 +1688,10 @@
                     " · " +
                     spaceName(
                         row.source_group
+                    ) +
+                    " · " +
+                    formatKyiv(
+                        row.observed_at
                     );
 
                 var text = document.createElement(

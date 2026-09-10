@@ -205,6 +205,15 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
         ]
         candidate_rows = current_rows if exact_current else rows
 
+        chronology_rows = sorted(
+            candidate_rows,
+            key=lambda r: (
+                r.published_at or r.collected_at,
+                r.collected_at,
+                r.occurrence_id,
+            ),
+        )
+
         if len({r.source_id for r in candidate_rows}) < 2:
             reason = (
                 "singleton_single_source"
@@ -259,7 +268,7 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             **counts(candidate_rows),
             "distances_to_representative": distances,
             "dynamics": dynamics,
-            "chronology": [{"occurrence_id": r.occurrence_id, "content_id": r.content_id, "source_id": r.source_id, "source_group": sources[r.source_id].source_group, "source_name": sources[r.source_id].source_name[:240], "source_type": sources[r.source_id].source_type[:40], "title": contents[r.content_id].title[:240], "external_ref": r.external_ref[:2048], "collected_at": r.collected_at.isoformat(), "published_at": r.published_at.isoformat() if r.published_at else None} for r in candidate_rows[:config.max_evidence]],
+            "chronology": [{"occurrence_id": r.occurrence_id, "content_id": r.content_id, "source_id": r.source_id, "source_group": sources[r.source_id].source_group, "source_name": sources[r.source_id].source_name[:240], "source_type": sources[r.source_id].source_type[:40], "title": contents[r.content_id].title[:240], "external_ref": r.external_ref[:2048], "collected_at": r.collected_at.isoformat(), "published_at": r.published_at.isoformat() if r.published_at else None} for r in chronology_rows[:config.max_evidence]],
             "evidence_omitted_count": max(0, len(candidate_rows) - config.max_evidence),
             "evidence_references": [{"content_id": cid, "text": contents[cid].text[:config.evidence_chars], "text_truncated": len(contents[cid].text) > config.evidence_chars} for cid in group[:config.max_evidence]],
         })
