@@ -33,6 +33,14 @@ from web.materials import (
 from web.overview import fetch_overview_stats
 from web.sources import fetch_sources_overview
 from web.theses import EXPORT_PER_CONTOUR_LIMIT, fetch_theses_by_contour
+from web.timefmt import (
+    fmt_kyiv,
+    fmt_kyiv_clock,
+    fmt_kyiv_clock_zoned,
+    fmt_kyiv_zoned,
+    kyiv_time_label,
+    utc_offset_label,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -50,6 +58,26 @@ PERIOD_LABELS = [
 app = FastAPI(title="mip-web")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+def _static_version(filename: str) -> str:
+    """Версія static-файлу для cache busting за поточним mtime."""
+    try:
+        return format((STATIC_DIR / filename).stat().st_mtime_ns, "x")
+    except OSError:
+        return "0"
+
+
+templates.env.globals["static_version"] = _static_version
+
+templates.env.globals.update(
+    fmt_kyiv=fmt_kyiv,
+    fmt_kyiv_clock=fmt_kyiv_clock,
+    fmt_kyiv_zoned=fmt_kyiv_zoned,
+    fmt_kyiv_clock_zoned=fmt_kyiv_clock_zoned,
+    kyiv_time_label=kyiv_time_label,
+    utc_offset_label=utc_offset_label,
+)
 
 
 @app.get("/health")
@@ -277,4 +305,80 @@ def theses_export_csv() -> Response:
         content=buf.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=mip_thesis_export.csv"},
+    )
+
+
+
+@app.get("/topics/marker/{marker_id}")
+def topics_marker(
+    request: Request,
+    marker_id: str,
+    space: str = "all",
+) -> dict:
+    """Деталь одного тематичного маркера зі snapshot."""
+    from web.topics import (
+        DEFAULT_SNAPSHOT,
+        load_topic_marker,
+    )
+
+    try:
+        return load_topic_marker(
+            getattr(
+                request.app.state,
+                "topics_snapshot_path",
+                DEFAULT_SNAPSHOT,
+            ),
+            marker_id=marker_id,
+            view=space,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Тематичний маркер не знайдено.",
+        ) from exc
+
+
+@app.get("/signals", response_class=HTMLResponse)
+def signals_page(request: Request) -> HTMLResponse:
+    """Лише snapshot: генерація та підключення до БД поза HTTP-запитом."""
+    from web.signals import DEFAULT_SNAPSHOT, load_signals
+
+    view = load_signals(
+        getattr(request.app.state, 'signals_snapshot_path', DEFAULT_SNAPSHOT),
+        stale_seconds=getattr(request.app.state, 'signals_stale_seconds', 7200),
+    )
+    return templates.TemplateResponse(request, "signals.html", {"active_page": "signals", **view})
+
+
+
+@app.get("/topics", response_class=HTMLResponse)
+def topics_page(request: Request) -> HTMLResponse:
+    """Тематичний простір з попередньо сформованого live snapshot."""
+    from web.topics import DEFAULT_SNAPSHOT, load_topics
+
+    view = load_topics(
+        getattr(
+            request.app.state,
+            "topics_snapshot_path",
+            DEFAULT_SNAPSHOT,
+        ),
+        stale_seconds=getattr(
+            request.app.state,
+            "topics_stale_seconds",
+            7200,
+        ),
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "topics.html",
+        {
+            "active_page": "topics",
+            **view,
+        },
     )

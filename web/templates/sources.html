@@ -63,8 +63,8 @@
                             </td>
                             <td>{{ row.publications }}</td>
                             <td>{{ row.materials }}</td>
-                            <td>{{ row.first_item.strftime("%Y-%m-%d %H:%M") if row.first_item else "—" }} UTC</td>
-                            <td>{{ row.last_item.strftime("%Y-%m-%d %H:%M") if row.last_item else "—" }} UTC</td>
+                            <td>{{ fmt_kyiv_zoned(row.first_item) }}</td>
+                            <td>{{ fmt_kyiv_zoned(row.last_item) }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>

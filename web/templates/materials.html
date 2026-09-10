@@ -75,7 +75,7 @@
             <table class="materials-table">
                 <thead>
                     <tr>
-                        <th>Час (UTC)</th>
+                        <th>Час (Київ)</th>
                         <th>Джерело</th>
                         <th>Заголовок / прев'ю</th>
                         <th>Рішення</th>
@@ -86,7 +86,7 @@
                 <tbody>
                     {% for row in materials %}
                         <tr>
-                            <td>{{ row.occurred_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
+                            <td>{{ fmt_kyiv_zoned(row.occurred_at) }}</td>
                             <td>
                                 {{ row.source_name }}
                                 <span class="source-meta">

@@ -62,7 +62,7 @@
                 </span>
             </div>
             {% if stats.latest_arrival %}
-                <div class="stat-card-value is-time">{{ stats.latest_arrival.strftime("%Y-%m-%d %H:%M") }} UTC</div>
+                <div class="stat-card-value is-time">{{ fmt_kyiv_zoned(stats.latest_arrival) }}</div>
             {% else %}
                 <div class="stat-card-value is-time">—</div>
             {% endif %}

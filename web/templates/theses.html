@@ -43,7 +43,7 @@
                                 <details class="thesis-item {{ 'is-candidate' if item.assignment_status == 'candidate' else '' }}">
                                     <summary class="thesis-summary">
                                         <span class="thesis-claim">{{ item.claim_text }}</span>
-                                        <span class="thesis-meta-inline">{{ item.source_name }} · {{ item.published_at.strftime("%Y-%m-%d %H:%M") if item.published_at else "—" }}</span>
+                                        <span class="thesis-meta-inline">{{ item.source_name }} · {{ fmt_kyiv_zoned(item.published_at) }}</span>
                                     </summary>
                                     <div class="thesis-detail">
                                         {% if item.evidence_span and item.evidence_span.strip() != item.claim_text.strip() %}
@@ -51,7 +51,7 @@
                                         {% endif %}
                                         <div class="thesis-meta">
                                             <span>{{ item.source_name }}</span>
-                                            <span>{{ item.published_at.strftime("%Y-%m-%d %H:%M") if item.published_at else "—" }} UTC</span>
+                                            <span>{{ fmt_kyiv_zoned(item.published_at) }}</span>
                                             {% if item.facet_code %}<span class="facet-tag">{{ item.facet_code }}</span>{% endif %}
                                             {% if item.assignment_status == "candidate" %}<span>кандидат, потребує перевірки</span>{% endif %}
                                         </div>

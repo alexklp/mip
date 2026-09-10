@@ -27,3 +27,8 @@ local/reference/
 
 # Generated reporting artifacts
 reporting/output/
+
+# Згенерований signals snapshot
+reporting/signals.latest.json
+
+reporting/topics.latest.json

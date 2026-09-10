@@ -160,3 +160,34 @@ Recommended implementation order:
 6. Only after the read path works: relation review / annotation write path and per-user attribution.
 
 This document is a working baseline, not a frozen architecture. Details may change when implementation or testing shows a simpler or more correct solution, while preserving the principles above.
+
+## 10. Сигнали: Phase 4, окремий snapshot read path
+
+Для `/signals` збережено виняток до прямого live-читання web з розділу 2:
+PostgreSQL SELECT-only адаптер формує JSON `signals/4`, а HTTP-запит читає лише
+локальний валідований snapshot. HTTP не запускає recall, модель або DB-запити.
+Інші routes не змінено в Phase 4.
+
+У recall допускається лише останній `content_routing_decisions.decision='analyze'`.
+`maybe`, `skip` та відсутнє рішення виключені; routing coverage показано окремо
+для кожного вікна та простору. Contours не є hard gate. Anchors відбираються
+детермінованим round-robin між вибраними групами з одним загальним лімітом.
+
+Core-поріг 0.18 об'єднує матеріали лише за complete-link правилом. Related
+зв'язки `(0.18, 0.36]` показуються окремо для review і не змінюють кількості чи
+динаміку core. Кандидат має щонайменше два distinct source_id; повтори одного
+матеріалу в одному джерелі подавляються. Same-space multi-source кандидати
+дозволені. Пріоритет показу: cross_space, source_count, content_count, свіжість,
+стабільний ID; default display limit 20. Усі зв'язки — candidate/unverified.
+
+Стани missing/invalid/stale/empty/ready, chronology, безпечні посилання та
+автооновлення HTML збережено. `signals/2` діагностичний JSON не є результатом
+Phase 4; новий validator відхиляє його. До окремо дозволеної оператором генерації
+нового `signals/4` loader може показувати invalid. Файл не переписувався.
+
+На 2026-09-08: 85 offline tests PASS, включно з FastAPI TestClient та Jinja,
+без запуску сервера. Один read-only benchmark: 7 core candidates, 100 related
+review links, anchors 20/20, critical_incomplete=false, RC=0. На новому common
+watermark у current/ua_space виявлено 22 missing routing; вони виключені.
+Новий production snapshot і розклад не створювалися. Команди, вимірювання,
+параметри та обмеження recall наведено в [Signals_v1.md](Signals_v1.md).

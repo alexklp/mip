@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}МІП — Моніторинг інформаційного простору{% endblock %}</title>
-    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/app.css?v={{ static_version('app.css') }}">
 </head>
 <body>
     <div class="app-shell">
@@ -28,7 +28,6 @@
             <div class="status-pills">
                 <span class="pill">Тестова версія</span>
                 <span class="pill">Лише перегляд</span>
-                <span class="pill">Час — UTC</span>
             </div>
             <ul class="nav-list">
                 <li>
@@ -41,8 +40,12 @@
                     <a class="nav-link" href="/sources" {% if active_page == "sources" %}aria-current="page"{% endif %}>Джерела</a>
                 </li>
                 <li>
+                    <a class="nav-link" href="/topics" {% if active_page == "topics" %}aria-current="page"{% endif %}>Теми</a>
+                </li>
+                <li>
                     <a class="nav-link" href="/theses" {% if active_page == "theses" %}aria-current="page"{% endif %}>Тези</a>
                 </li>
+                <li><a class="nav-link" href="/signals" {% if active_page == "signals" %}aria-current="page"{% endif %}>Сигнали</a></li>
             </ul>
         </nav>
         <main class="main">

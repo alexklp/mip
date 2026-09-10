@@ -1,0 +1,2272 @@
+{% extends "base.html" %}
+{% block title %}Тематичний простір — МІП{% endblock %}
+
+{% block content %}
+<section class="topics-page" data-state="{{ state }}">
+    <header class="topics-header">
+        <div>
+            <h1 class="page-title">Тематичний простір</h1>
+            <p class="page-lede">
+                Що домінує та що змінюється у спостережуваному потоці.
+            </p>
+        </div>
+
+        {% if snapshot %}
+        <div class="topics-freshness">
+            <span class="signals-live-dot" aria-hidden="true"></span>
+            <span>Оновлено {{ fmt_kyiv_zoned(snapshot.generated_at) }}</span>
+        </div>
+        {% endif %}
+    </header>
+
+    {% if state != "ready" %}
+    <p role="status" class="signals-status signals-status-{{ state }}">
+        {% if state == "missing" %}
+            Тематичний зріз ще не створено.
+        {% elif state == "invalid" %}
+            Тематичний зріз недоступний або має некоректний формат.
+        {% elif state == "stale" %}
+            Дані застаріли. Показано останній доступний стан.
+        {% endif %}
+    </p>
+    {% endif %}
+
+    {% if snapshot %}
+    <div class="topics-summary">
+        <div class="topics-summary-item">
+            <span>Вікно</span>
+            <strong>24 години</strong>
+            <span>до {{ fmt_kyiv_zoned(snapshot.as_of) }}</span>
+        </div>
+
+        <div class="topics-summary-item">
+            <span>Публікації</span>
+            <strong id="topics-summary-publications">{{ snapshot.summary["all"].current.publications }}</strong>
+        </div>
+
+        <div class="topics-summary-item">
+            <span>Джерела</span>
+            <strong id="topics-summary-sources">{{ snapshot.summary["all"].current.sources }}</strong>
+        </div>
+    </div>
+
+    <div class="topics-toolbar">
+        <label class="topics-search">
+            <span class="sr-only">Пошук тематичного маркера</span>
+            <span aria-hidden="true">⌕</span>
+            <input
+                id="topics-query"
+                type="search"
+                placeholder="Знайти тему або маркер"
+                autocomplete="off"
+            >
+        </label>
+
+        <label class="topics-filter">
+            <span class="sr-only">Інформаційний простір</span>
+            <select id="topics-space">
+                <option value="all">Усі простори</option>
+                <option value="ru_space">Російський</option>
+                <option value="ua_space">Український</option>
+            </select>
+        </label>
+
+        <div class="topics-segment" aria-label="Режим">
+            <button type="button" data-topic-mode="themes" aria-pressed="true">Теми</button>
+            <button type="button" data-topic-mode="changes" aria-pressed="false">Зміни</button>
+        </div>
+
+        <div class="topics-segment" aria-label="Тип маркера">
+            <button type="button" data-topic-unit="phrases" aria-pressed="true">Фрази</button>
+            <button type="button" data-topic-unit="words" aria-pressed="false">Слова</button>
+        </div>
+    </div>
+
+    <div class="topics-workspace">
+        <section class="topics-panel topics-cloud-panel">
+            <div class="topics-panel-head">
+                <div>
+                    <h2 id="topics-cloud-title">Тематичне поле</h2>
+                    <p id="topics-cloud-note">
+                        Розмір маркера відповідає кількості публікацій.
+                    </p>
+                </div>
+            </div>
+
+            <div class="topics-cloud-wrap">
+                <svg
+                    id="topics-cloud"
+                    class="topics-cloud"
+                    viewBox="-35 -30 1270 740"
+                    preserveAspectRatio="xMidYMid meet"
+                    aria-label="Тематичне поле"
+                ></svg>
+
+                <p id="topics-cloud-empty" class="topics-empty" hidden>
+                    У цьому зрізі маркерів не знайдено.
+                </p>
+            </div>
+        </section>
+
+        <section class="topics-panel topics-ranking-panel">
+            <div class="topics-panel-head">
+                <div>
+                    <h2 id="topics-ranking-title">Топ за 24 год</h2>
+                    <p id="topics-ranking-note">
+                        Найчастіші маркери поточного потоку.
+                    </p>
+                </div>
+            </div>
+
+            <div id="topics-ranking" class="topics-ranking"></div>
+        </section>
+    </div>
+
+    <section
+        id="topics-selection"
+        class="topics-panel topics-selection"
+        aria-live="polite"
+    >
+        <div class="topics-selection-head">
+            <div>
+                <span class="topics-kicker">Обраний маркер</span>
+                <h2 id="topics-selected-label">—</h2>
+            </div>
+        </div>
+
+        <div id="topics-metrics" class="topics-metrics"></div>
+    </section>
+
+    <div class="topics-detail-grid">
+        <section class="topics-panel topics-trend-panel">
+            <div class="topics-panel-head topics-detail-head">
+                <div>
+                    <h2>Динаміка за 24 год</h2>
+                    <p id="topics-trend-note">Публікації за годину.</p>
+                </div>
+                <div id="topics-trend-legend" class="topics-trend-legend"></div>
+            </div>
+
+            <div class="topics-trend-wrap">
+                <svg
+                    id="topics-trend"
+                    class="topics-trend"
+                    viewBox="0 0 800 220"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="Динаміка публікацій тематичного маркера"
+                ></svg>
+            </div>
+        </section>
+
+        <section class="topics-panel topics-sources-panel">
+            <div class="topics-panel-head">
+                <div>
+                    <h2>Джерела маркера</h2>
+                    <p id="topics-sources-note">Поточні 24 години.</p>
+                </div>
+            </div>
+
+            <div id="topics-sources" class="topics-sources"></div>
+        </section>
+    </div>
+
+    <section class="topics-panel topics-evidence-panel">
+        <div class="topics-panel-head topics-evidence-head">
+            <div>
+                <h2>Матеріали за маркером</h2>
+                <p id="topics-evidence-note">Публікації поточного 24-годинного вікна.</p>
+            </div>
+
+            <div
+                id="topics-evidence-slices"
+                class="topics-segment topics-evidence-slices"
+                hidden
+            >
+                <button
+                    type="button"
+                    data-evidence-slice="current"
+                    aria-pressed="true"
+                >
+                    Поточні 24 год
+                </button>
+                <button
+                    type="button"
+                    data-evidence-slice="previous"
+                    aria-pressed="false"
+                >
+                    Попередні 24 год
+                </button>
+            </div>
+        </div>
+
+        <div id="topics-evidence" class="topics-evidence"></div>
+
+        <div class="topics-evidence-more-wrap">
+            <button
+                id="topics-evidence-more"
+                class="topics-evidence-more"
+                type="button"
+                hidden
+            >
+                Показати ще
+            </button>
+        </div>
+    </section>
+
+    <script id="topics-data" type="application/json">{{ topic_data | tojson }}</script>
+
+    <script>
+    (function () {
+        "use strict";
+
+        var data = JSON.parse(
+            document.getElementById("topics-data").textContent
+        );
+
+        var state = {
+            space: "all",
+            mode: "themes",
+            unit: "phrases",
+            selectedId: null,
+            query: "",
+            detailSlice: "current"
+        };
+
+        var detailKey = null;
+        var detailData = null;
+        var detailRequest = 0;
+        var detailSourceId = null;
+        var detailSourceName = null;
+        var detailHour = null;
+        var evidenceShown = 8;
+
+        var SVG_NS = "http://www.w3.org/2000/svg";
+
+        var cloud = document.getElementById("topics-cloud");
+        var cloudEmpty = document.getElementById("topics-cloud-empty");
+        var ranking = document.getElementById("topics-ranking");
+        var queryInput = document.getElementById("topics-query");
+        var spaceSelect = document.getElementById("topics-space");
+
+        function plural(value, one, few, many) {
+            var n = Math.abs(Number(value));
+
+            if (n % 10 === 1 && n % 100 !== 11) return one;
+
+            if (
+                [2, 3, 4].indexOf(n % 10) !== -1 &&
+                [12, 13, 14].indexOf(n % 100) === -1
+            ) return few;
+
+            return many;
+        }
+
+        function signed(value) {
+            var n = Number(value);
+            return (n > 0 ? "+" : "") + n.toFixed(2);
+        }
+
+        function currentRows() {
+            var view = data.views[state.space];
+
+            if (state.mode === "themes") {
+                return view.themes[state.unit].slice();
+            }
+
+            return view.changes[state.unit].growing
+                .concat(view.changes[state.unit].declining)
+                .sort(function (a, b) {
+                    return Math.abs(b.delta_pp) - Math.abs(a.delta_pp);
+                });
+        }
+
+        function currentCloud() {
+            return data.views[state.space]
+                .clouds[state.mode][state.unit];
+        }
+
+        function rowMap(rows) {
+            var result = {};
+
+            rows.forEach(function (row) {
+                result[row.marker_id] = row;
+            });
+
+            return result;
+        }
+
+        function filteredRows(rows) {
+            var q = state.query.trim().toLocaleLowerCase("uk");
+
+            if (!q) return rows;
+
+            return rows.filter(function (row) {
+                return row.label
+                    .toLocaleLowerCase("uk")
+                    .indexOf(q) !== -1;
+            });
+        }
+
+        function ensureSelection(rows) {
+            if (
+                state.selectedId &&
+                rows.some(function (row) {
+                    return row.marker_id === state.selectedId;
+                })
+            ) {
+                return;
+            }
+
+            state.selectedId = rows.length
+                ? rows[0].marker_id
+                : null;
+        }
+
+        function selectMarker(markerId) {
+            state.selectedId = markerId;
+            state.detailSlice = "current";
+            detailKey = null;
+            detailData = null;
+            detailSourceId = null;
+            detailSourceName = null;
+            detailHour = null;
+            evidenceShown = 8;
+            render();
+        }
+
+        function tooltipFor(row) {
+            if (state.mode === "themes") {
+                return (
+                    row.label +
+                    " · " +
+                    row.publications +
+                    " публікацій · " +
+                    row.sources +
+                    " джерел · " +
+                    row.share.toFixed(1) +
+                    "%"
+                );
+            }
+
+            return (
+                row.label +
+                " · " +
+                row.previous_share.toFixed(1) +
+                "% → " +
+                row.current_share.toFixed(1) +
+                "% · " +
+                signed(row.delta_pp) +
+                " п.п."
+            );
+        }
+
+        function renderCloud(rows) {
+            cloud.replaceChildren();
+
+            var lookup = rowMap(rows);
+            var items = currentCloud();
+            var q = state.query.trim().toLocaleLowerCase("uk");
+
+            cloudEmpty.hidden = items.length !== 0;
+            cloud.hidden = items.length === 0;
+
+            items.forEach(function (item, index) {
+                var row = lookup[item.marker_id];
+
+                if (!row) return;
+
+                var text = document.createElementNS(
+                    SVG_NS,
+                    "text"
+                );
+
+                text.setAttribute("x", item.x);
+                text.setAttribute("y", item.y);
+                text.setAttribute(
+                    "font-size",
+                    item.font_size
+                );
+                text.setAttribute(
+                    "dominant-baseline",
+                    "hanging"
+                );
+                text.setAttribute("tabindex", "0");
+                text.setAttribute("role", "button");
+                text.setAttribute(
+                    "aria-label",
+                    tooltipFor(row)
+                );
+
+                text.classList.add("topics-cloud-word");
+
+                if (state.mode === "themes") {
+                    text.classList.add(
+                        "tone-" + (index % 4)
+                    );
+                } else {
+                    text.classList.add(
+                        row.delta_pp > 0
+                            ? "is-up"
+                            : "is-down"
+                    );
+                }
+
+                if (row.marker_id === state.selectedId) {
+                    text.classList.add("is-selected");
+                }
+
+                if (
+                    q &&
+                    row.label
+                        .toLocaleLowerCase("uk")
+                        .indexOf(q) === -1
+                ) {
+                    text.classList.add("is-dimmed");
+                }
+
+                text.textContent =
+                    row.label +
+                    (
+                        state.mode === "changes"
+                            ? (row.delta_pp > 0 ? " ↑" : " ↓")
+                            : ""
+                    );
+
+                var title = document.createElementNS(
+                    SVG_NS,
+                    "title"
+                );
+
+                title.textContent = tooltipFor(row);
+                text.appendChild(title);
+
+                text.addEventListener("click", function () {
+                    selectMarker(row.marker_id);
+                });
+
+                text.addEventListener(
+                    "keydown",
+                    function (event) {
+                        if (
+                            event.key === "Enter" ||
+                            event.key === " "
+                        ) {
+                            event.preventDefault();
+                            selectMarker(row.marker_id);
+                        }
+                    }
+                );
+
+                cloud.appendChild(text);
+            });
+        }
+
+        function renderThemeRanking(rows) {
+            ranking.replaceChildren();
+
+            var visible = filteredRows(rows).slice(0, 10);
+            var max = visible.reduce(function (value, row) {
+                return Math.max(value, row.publications);
+            }, 1);
+
+            if (!visible.length) {
+                ranking.innerHTML =
+                    '<p class="topics-empty">Нічого не знайдено.</p>';
+                return;
+            }
+
+            visible.forEach(function (row, index) {
+                var button = document.createElement("button");
+                button.type = "button";
+                button.className = "topics-rank-row";
+
+                if (row.marker_id === state.selectedId) {
+                    button.classList.add("is-selected");
+                }
+
+                var width = (
+                    100 * row.publications / max
+                ).toFixed(1);
+
+                button.innerHTML =
+                    '<span class="topics-rank-number">' +
+                    (index + 1) +
+                    '</span>' +
+                    '<span class="topics-rank-main">' +
+                        '<span class="topics-rank-label"></span>' +
+                        '<span class="topics-rank-track">' +
+                            '<i style="width:' + width + '%"></i>' +
+                        '</span>' +
+                    '</span>' +
+                    '<span class="topics-rank-value">' +
+                        '<strong>' + row.publications + '</strong>' +
+                        '<small>' + row.share.toFixed(1) + '%</small>' +
+                    '</span>';
+
+                button.querySelector(
+                    ".topics-rank-label"
+                ).textContent = row.label;
+
+                button.addEventListener("click", function () {
+                    selectMarker(row.marker_id);
+                });
+
+                ranking.appendChild(button);
+            });
+        }
+
+        function renderChangeRanking(rows) {
+            ranking.replaceChildren();
+
+            var visible = filteredRows(rows).slice(0, 10);
+
+            var max = visible.reduce(function (value, row) {
+                return Math.max(
+                    value,
+                    Math.abs(row.delta_pp)
+                );
+            }, 0.01);
+
+            if (!visible.length) {
+                ranking.innerHTML =
+                    '<p class="topics-empty">Нічого не знайдено.</p>';
+                return;
+            }
+
+            visible.forEach(function (row) {
+                var button = document.createElement("button");
+                button.type = "button";
+                button.className = "topics-change-row";
+
+                if (row.marker_id === state.selectedId) {
+                    button.classList.add("is-selected");
+                }
+
+                var width = (
+                    50 * Math.abs(row.delta_pp) / max
+                ).toFixed(1);
+
+                var direction =
+                    row.delta_pp > 0 ? "is-up" : "is-down";
+
+                button.innerHTML =
+                    '<span class="topics-change-label"></span>' +
+                    '<span class="topics-change-track">' +
+                        '<i class="' + direction +
+                            '" style="width:' + width + '%"></i>' +
+                    '</span>' +
+                    '<strong class="' + direction + '">' +
+                        signed(row.delta_pp) +
+                        ' п.п.</strong>';
+
+                button.querySelector(
+                    ".topics-change-label"
+                ).textContent = row.label;
+
+                button.addEventListener("click", function () {
+                    selectMarker(row.marker_id);
+                });
+
+                ranking.appendChild(button);
+            });
+        }
+
+        function metric(value, label, extraClass) {
+            return (
+                '<div class="topics-metric ' +
+                    (extraClass || "") +
+                '">' +
+                    '<strong>' + value + '</strong>' +
+                    '<span>' + label + '</span>' +
+                '</div>'
+            );
+        }
+
+        function renderSelection(rows) {
+            var selected = rows.find(function (row) {
+                return row.marker_id === state.selectedId;
+            });
+
+            var label = document.getElementById(
+                "topics-selected-label"
+            );
+
+            var metrics = document.getElementById(
+                "topics-metrics"
+            );
+
+            if (!selected) {
+                label.textContent = "—";
+                metrics.replaceChildren();
+                return;
+            }
+
+            label.textContent = selected.label;
+
+            if (state.mode === "themes") {
+                metrics.innerHTML =
+                    metric(
+                        selected.publications,
+                        plural(
+                            selected.publications,
+                            "публікація",
+                            "публікації",
+                            "публікацій"
+                        )
+                    ) +
+                    metric(
+                        selected.materials,
+                        plural(
+                            selected.materials,
+                            "матеріал",
+                            "матеріали",
+                            "матеріалів"
+                        )
+                    ) +
+                    metric(
+                        selected.sources,
+                        plural(
+                            selected.sources,
+                            "джерело",
+                            "джерела",
+                            "джерел"
+                        )
+                    ) +
+                    metric(
+                        selected.share.toFixed(1) + "%",
+                        "частка потоку"
+                    );
+
+                return;
+            }
+
+            metrics.innerHTML =
+                metric(
+                    selected.current_publications,
+                    "публікацій зараз"
+                ) +
+                metric(
+                    selected.previous_publications,
+                    "у попередні 24 год"
+                ) +
+                metric(
+                    signed(selected.delta_pp) + " п.п.",
+                    "зміна частки",
+                    selected.delta_pp > 0
+                        ? "is-up"
+                        : "is-down"
+                ) +
+                metric(
+                    selected.current_share.toFixed(1) + "%",
+                    "частка потоку зараз"
+                );
+        }
+
+        function updateSummary() {
+            var current = data.summary[state.space].current;
+
+            document.getElementById(
+                "topics-summary-publications"
+            ).textContent = current.publications;
+
+            document.getElementById(
+                "topics-summary-sources"
+            ).textContent = current.sources;
+        }
+
+        function formatKyiv(value) {
+            if (!value) return "—";
+
+            var date = new Date(value);
+
+            return new Intl.DateTimeFormat(
+                "uk-UA",
+                {
+                    timeZone: "Europe/Kyiv",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false
+                }
+            ).format(date).replace(",", " ·");
+        }
+
+        function sourceTypeName(value) {
+            var key = (value || "").toLowerCase();
+
+            return {
+                telegram: "Telegram",
+                rss: "RSS",
+                web: "Сайт"
+            }[key] || value || "Джерело";
+        }
+
+        function spaceName(value) {
+            return {
+                ru_space: "Російський",
+                ua_space: "Український"
+            }[value] || value;
+        }
+
+        function kyivDate(value) {
+            return new Intl.DateTimeFormat(
+                "uk-UA",
+                {
+                    timeZone: "Europe/Kyiv",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric"
+                }
+            ).format(value);
+        }
+
+        function kyivClock(value) {
+            return new Intl.DateTimeFormat(
+                "uk-UA",
+                {
+                    timeZone: "Europe/Kyiv",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false
+                }
+            ).format(value);
+        }
+
+        function kyivOffset(value) {
+            var parts = new Intl.DateTimeFormat(
+                "en-US",
+                {
+                    timeZone: "Europe/Kyiv",
+                    timeZoneName: "shortOffset"
+                }
+            ).formatToParts(value);
+
+            var zone = parts.find(
+                function (part) {
+                    return (
+                        part.type ===
+                        "timeZoneName"
+                    );
+                }
+            );
+
+            return (
+                zone
+                    ? zone.value.replace(
+                        "GMT",
+                        "UTC"
+                    )
+                    : "Europe/Kyiv"
+            );
+        }
+
+        function hourBounds(
+            detail,
+            sliceName,
+            index
+        ) {
+            var windowStart = new Date(
+                detail.windows[
+                    sliceName
+                ].start
+            );
+
+            var start = new Date(
+                windowStart.getTime() +
+                index * 3600000
+            );
+
+            var end = new Date(
+                start.getTime() +
+                3600000
+            );
+
+            return {
+                start: start,
+                end: end
+            };
+        }
+
+        function trendPointTooltip(
+            detail,
+            sliceName,
+            index,
+            value,
+            sources
+        ) {
+            var bounds = hourBounds(
+                detail,
+                sliceName,
+                index
+            );
+
+            var dateFormatter =
+                new Intl.DateTimeFormat(
+                    "uk-UA",
+                    {
+                        timeZone: "Europe/Kyiv",
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric"
+                    }
+                );
+
+            var lines = [
+                dateFormatter.format(
+                    bounds.start
+                ) +
+                " · " +
+                kyivClock(
+                    bounds.start
+                ) +
+                "–" +
+                kyivClock(
+                    bounds.end
+                ) +
+                " " +
+                kyivOffset(
+                    bounds.start
+                ),
+                "",
+                value +
+                " " +
+                plural(
+                    value,
+                    "публікація",
+                    "публікації",
+                    "публікацій"
+                )
+            ];
+
+            if (
+                sources &&
+                sources.length
+            ) {
+                lines.push(
+                    "",
+                    "Джерела:"
+                );
+
+                sources
+                    .slice(0, 6)
+                    .forEach(function (row) {
+                        lines.push(
+                            row.name +
+                            " · " +
+                            row.publications
+                        );
+                    });
+            }
+
+            return lines.join("\n");
+        }
+
+        function appendTrendPoints(
+            svg,
+            detail,
+            sliceName,
+            values,
+            sourcesByHour,
+            maxValue
+        ) {
+            values.forEach(
+                function (
+                    value,
+                    index
+                ) {
+                    if (!value) {
+                        return;
+                    }
+
+                    var x =
+                        52 +
+                        index *
+                        (710 / 23);
+
+                    var y =
+                        176 -
+                        (
+                            Number(value) /
+                            maxValue *
+                            132
+                        );
+
+                    var circle =
+                        svgElement(
+                            "circle",
+                            {
+                                cx: x,
+                                cy: y,
+                                r: (
+                                    sliceName ===
+                                    "current"
+                                        ? 3.4
+                                        : 3
+                                ),
+                                tabindex: "0",
+                                role: "button",
+                                class:
+                                    "topics-trend-point " +
+                                    (
+                                        sliceName ===
+                                        "current"
+                                            ? "is-current"
+                                            : "is-previous"
+                                    )
+                            }
+                        );
+
+                    if (
+                        detailHour &&
+                        detailHour.slice ===
+                            sliceName &&
+                        detailHour.index ===
+                            index
+                    ) {
+                        circle.classList.add(
+                            "is-selected"
+                        );
+                    }
+
+                    var title =
+                        svgElement(
+                            "title"
+                        );
+
+                    title.textContent =
+                        trendPointTooltip(
+                            detail,
+                            sliceName,
+                            index,
+                            value,
+                            (
+                                sourcesByHour[
+                                    index
+                                ] || []
+                            )
+                        ) +
+                        "\n\nКлік — показати публікації цього часу";
+
+                    circle.appendChild(
+                        title
+                    );
+
+                    function activateHour() {
+                        var same =
+                            detailHour &&
+                            detailHour.slice ===
+                                sliceName &&
+                            detailHour.index ===
+                                index;
+
+                        if (same) {
+                            detailHour = null;
+                        } else {
+                            detailHour = {
+                                slice: sliceName,
+                                index: index
+                            };
+
+                            state.detailSlice =
+                                sliceName;
+                        }
+
+                        detailSourceId = null;
+            detailSourceName = null;
+                        evidenceShown = 8;
+
+                        renderDetail(
+                            detail
+                        );
+                    }
+
+                    circle.addEventListener(
+                        "click",
+                        activateHour
+                    );
+
+                    circle.addEventListener(
+                        "keydown",
+                        function (event) {
+                            if (
+                                event.key ===
+                                    "Enter" ||
+                                event.key ===
+                                    " "
+                            ) {
+                                event.preventDefault();
+                                activateHour();
+                            }
+                        }
+                    );
+
+                    svg.appendChild(
+                        circle
+                    );
+                }
+            );
+        }
+
+        function svgElement(name, attrs) {
+            var element = document.createElementNS(
+                SVG_NS,
+                name
+            );
+
+            Object.keys(attrs || {}).forEach(function (key) {
+                element.setAttribute(
+                    key,
+                    attrs[key]
+                );
+            });
+
+            return element;
+        }
+
+        function trendHourDate(
+            detail,
+            sliceName,
+            index
+        ) {
+            var start = new Date(
+                detail.windows[
+                    sliceName
+                ].start
+            );
+
+            return new Date(
+                start.getTime() +
+                index * 3600000
+            );
+        }
+
+        function shortKyivClock(value) {
+            return new Intl.DateTimeFormat(
+                "uk-UA",
+                {
+                    timeZone: "Europe/Kyiv",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false
+                }
+            ).format(value);
+        }
+
+        function shortKyivDate(value) {
+            return new Intl.DateTimeFormat(
+                "uk-UA",
+                {
+                    timeZone: "Europe/Kyiv",
+                    day: "2-digit",
+                    month: "2-digit"
+                }
+            ).format(value);
+        }
+
+        function trendPoints(values, maxValue) {
+            return values.map(function (value, index) {
+                var x = 52 + index * (710 / 23);
+                var y = 176 - (
+                    maxValue
+                        ? (Number(value) / maxValue) * 132
+                        : 0
+                );
+
+                return (
+                    x.toFixed(2) +
+                    "," +
+                    y.toFixed(2)
+                );
+            }).join(" ");
+        }
+
+        function renderTrend(detail) {
+            var svg = document.getElementById(
+                "topics-trend"
+            );
+
+            svg.replaceChildren();
+
+            var current = detail.current.hourly || [];
+            var previous = detail.previous.hourly || [];
+
+            var visibleSeries = [current];
+
+            if (state.mode === "changes") {
+                visibleSeries.push(previous);
+            }
+
+            var maxValue = Math.max.apply(
+                null,
+                [1].concat.apply(
+                    [1],
+                    visibleSeries
+                )
+            );
+
+            [44, 110, 176].forEach(function (y) {
+                svg.appendChild(
+                    svgElement(
+                        "line",
+                        {
+                            x1: 52,
+                            y1: y,
+                            x2: 762,
+                            y2: y,
+                            class: "topics-trend-grid"
+                        }
+                    )
+                );
+            });
+
+            [
+                [44, maxValue],
+                [110, Math.round(maxValue / 2)],
+                [176, 0]
+            ].forEach(function (item) {
+                var label = svgElement(
+                    "text",
+                    {
+                        x: 42,
+                        y: item[0] + 4,
+                        class: "topics-trend-axis-y",
+                        "text-anchor": "end"
+                    }
+                );
+
+                label.textContent = item[1];
+
+                svg.appendChild(label);
+            });
+
+            var axisHours = [
+                [0, 52, "−24"],
+                [6, 230, "−18"],
+                [12, 407, "−12"],
+                [18, 585, "−6"],
+                [23, 762, "0"]
+            ];
+
+            axisHours.forEach(function (item) {
+                var index = item[0];
+                var x = item[1];
+                var relativeLabel = item[2];
+
+                var anchor = (
+                    index === 0
+                        ? "start"
+                        : index === 23
+                            ? "end"
+                            : "middle"
+                );
+
+                var realTime = trendHourDate(
+                    detail,
+                    "current",
+                    index
+                );
+
+                var topLabel = svgElement(
+                    "text",
+                    {
+                        x: x,
+                        y: 24,
+                        class:
+                            "topics-trend-axis-top",
+                        "text-anchor":
+                            anchor
+                    }
+                );
+
+                topLabel.textContent =
+                    shortKyivClock(
+                        realTime
+                    );
+
+                svg.appendChild(
+                    topLabel
+                );
+
+                var bottomLabel = svgElement(
+                    "text",
+                    {
+                        x: x,
+                        y: 203,
+                        class:
+                            "topics-trend-axis-x",
+                        "text-anchor":
+                            anchor
+                    }
+                );
+
+                bottomLabel.textContent =
+                    relativeLabel;
+
+                svg.appendChild(
+                    bottomLabel
+                );
+            });
+
+            for (
+                var midnightIndex = 0;
+                midnightIndex < 24;
+                midnightIndex += 1
+            ) {
+                var midnightDate =
+                    trendHourDate(
+                        detail,
+                        "current",
+                        midnightIndex
+                    );
+
+                if (
+                    shortKyivClock(
+                        midnightDate
+                    ) !== "00:00"
+                ) {
+                    continue;
+                }
+
+                var midnightX =
+                    52 +
+                    midnightIndex *
+                    (710 / 23);
+
+                svg.appendChild(
+                    svgElement(
+                        "line",
+                        {
+                            x1: midnightX,
+                            y1: 31,
+                            x2: midnightX,
+                            y2: 184,
+                            class:
+                                "topics-trend-midnight"
+                        }
+                    )
+                );
+
+                var midnightLabel =
+                    svgElement(
+                        "text",
+                        {
+                            x: midnightX,
+                            y: 36,
+                            class:
+                                "topics-trend-midnight-label",
+                            "text-anchor":
+                                "middle"
+                        }
+                    );
+
+                midnightLabel.textContent =
+                    "00:00 · " +
+                    shortKyivDate(
+                        midnightDate
+                    );
+
+                svg.appendChild(
+                    midnightLabel
+                );
+
+                break;
+            }
+
+            if (state.mode === "changes") {
+                svg.appendChild(
+                    svgElement(
+                        "polyline",
+                        {
+                            points: trendPoints(
+                                previous,
+                                maxValue
+                            ),
+                            class: (
+                                "topics-trend-line " +
+                                "is-previous"
+                            )
+                        }
+                    )
+                );
+            }
+
+            svg.appendChild(
+                svgElement(
+                    "polyline",
+                    {
+                        points: trendPoints(
+                            current,
+                            maxValue
+                        ),
+                        class: (
+                            "topics-trend-line " +
+                            "is-current"
+                        )
+                    }
+                )
+            );
+
+            if (
+                state.mode ===
+                "changes"
+            ) {
+                appendTrendPoints(
+                    svg,
+                    detail,
+                    "previous",
+                    previous,
+                    detail.previous
+                        .hourly_sources || [],
+                    maxValue
+                );
+            }
+
+            appendTrendPoints(
+                svg,
+                detail,
+                "current",
+                current,
+                detail.current
+                    .hourly_sources || [],
+                maxValue
+            );
+
+            var legend = document.getElementById(
+                "topics-trend-legend"
+            );
+
+            legend.replaceChildren();
+
+            var currentItem = document.createElement(
+                "span"
+            );
+            currentItem.className =
+                "topics-trend-legend-current";
+            currentItem.textContent =
+                "Поточні 24 год";
+            legend.appendChild(currentItem);
+
+            if (state.mode === "changes") {
+                var previousItem = document.createElement(
+                    "span"
+                );
+                previousItem.className =
+                    "topics-trend-legend-previous";
+                previousItem.textContent =
+                    "Попередні 24 год";
+                legend.appendChild(previousItem);
+            }
+
+            document.getElementById(
+                "topics-trend-note"
+            ).textContent =
+                "Пік — " +
+                maxValue +
+                " " +
+                plural(
+                    maxValue,
+                    "публікація",
+                    "публікації",
+                    "публікацій"
+                ) +
+                " за годину.";
+        }
+
+        function renderSources(slice) {
+            var container = document.getElementById(
+                "topics-sources"
+            );
+
+            container.replaceChildren();
+
+            var hourlyMode = (
+                detailHour &&
+                detailHour.slice ===
+                    state.detailSlice
+            );
+
+            var rows;
+
+            if (hourlyMode) {
+                rows = (
+                    (
+                        slice.hourly_sources ||
+                        []
+                    )[
+                        detailHour.index
+                    ] || []
+                ).slice(0, 8);
+            } else {
+                rows = (
+                    slice.source_ranking || []
+                ).slice(0, 8);
+            }
+
+            var note = document.getElementById(
+                "topics-sources-note"
+            );
+
+            if (note) {
+                note.textContent = hourlyMode
+                    ? "Джерела вибраної години."
+                    : (
+                        state.detailSlice ===
+                        "current"
+                            ? "Поточні 24 години."
+                            : "Попередні 24 години."
+                    );
+            }
+
+            if (!rows.length) {
+                container.innerHTML =
+                    '<p class="topics-empty">' +
+                    'Джерел не знайдено.' +
+                    '</p>';
+                return;
+            }
+
+            var maxValue = Math.max.apply(
+                null,
+                rows.map(function (row) {
+                    return Number(
+                        row.publications || 0
+                    );
+                }).concat([1])
+            );
+
+            rows.forEach(function (row) {
+                var button = document.createElement(
+                    "button"
+                );
+
+                button.type = "button";
+                button.className =
+                    "topics-source-row";
+
+                var selected = (
+                    row.source_id
+                        ? detailSourceId ===
+                            row.source_id
+                        : detailSourceName ===
+                            row.name
+                );
+
+                if (selected) {
+                    button.classList.add(
+                        "is-selected"
+                    );
+                }
+
+                var label = document.createElement(
+                    "span"
+                );
+                label.className =
+                    "topics-source-label";
+                label.textContent = row.name;
+
+                var track = document.createElement(
+                    "span"
+                );
+                track.className =
+                    "topics-source-track";
+
+                var fill = document.createElement(
+                    "i"
+                );
+
+                fill.style.width = (
+                    100 *
+                    Number(
+                        row.publications || 0
+                    ) /
+                    maxValue
+                ).toFixed(1) + "%";
+
+                track.appendChild(fill);
+
+                var value = document.createElement(
+                    "strong"
+                );
+                value.textContent =
+                    row.publications;
+
+                button.append(
+                    label,
+                    track,
+                    value
+                );
+
+                button.title =
+                    row.name +
+                    " · " +
+                    row.publications +
+                    " " +
+                    plural(
+                        row.publications,
+                        "публікація",
+                        "публікації",
+                        "публікацій"
+                    );
+
+                button.addEventListener(
+                    "click",
+                    function () {
+                        if (row.source_id) {
+                            detailSourceId = (
+                                detailSourceId ===
+                                row.source_id
+                                    ? null
+                                    : row.source_id
+                            );
+                            detailSourceName = null;
+                        } else {
+                            detailSourceName = (
+                                detailSourceName ===
+                                row.name
+                                    ? null
+                                    : row.name
+                            );
+                            detailSourceId = null;
+                        }
+
+                        evidenceShown = 8;
+
+                        renderSources(slice);
+                        renderEvidence(slice);
+                    }
+                );
+
+                container.appendChild(
+                    button
+                );
+            });
+        }
+
+        function renderEvidence(slice) {
+            var container = document.getElementById(
+                "topics-evidence"
+            );
+
+            container.replaceChildren();
+
+            var rows = (
+                slice.occurrences || []
+            ).filter(function (row) {
+                if (
+                    detailSourceId &&
+                    row.source_id !==
+                        detailSourceId
+                ) {
+                    return false;
+                }
+
+                if (
+                    detailSourceName &&
+                    row.source_name !==
+                        detailSourceName
+                ) {
+                    return false;
+                }
+
+                if (
+                    detailHour &&
+                    detailHour.slice ===
+                        state.detailSlice
+                ) {
+                    var bounds =
+                        hourBounds(
+                            detailData,
+                            state.detailSlice,
+                            detailHour.index
+                        );
+
+                    var observed =
+                        new Date(
+                            row.observed_at
+                        );
+
+                    if (
+                        observed <
+                            bounds.start ||
+                        observed >=
+                            bounds.end
+                    ) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            var visible = rows.slice(
+                0,
+                evidenceShown
+            );
+
+            if (!visible.length) {
+                container.innerHTML =
+                    '<p class="topics-empty">' +
+                    'Публікацій не знайдено.' +
+                    '</p>';
+
+                document.getElementById(
+                    "topics-evidence-more"
+                ).hidden = true;
+
+                return;
+            }
+
+            visible.forEach(function (row) {
+                var article = document.createElement(
+                    "article"
+                );
+
+                article.className =
+                    "topics-evidence-item";
+
+                var head = document.createElement(
+                    "div"
+                );
+
+                head.className =
+                    "topics-evidence-item-head";
+
+                var source = document.createElement(
+                    "strong"
+                );
+
+                source.textContent =
+                    row.source_name;
+
+                var time = document.createElement(
+                    "span"
+                );
+
+                time.textContent =
+                    formatKyiv(
+                        row.observed_at
+                    );
+
+                head.append(
+                    source,
+                    time
+                );
+
+                var meta = document.createElement(
+                    "div"
+                );
+
+                meta.className =
+                    "topics-evidence-meta";
+
+                meta.textContent =
+                    sourceTypeName(
+                        row.source_type
+                    ) +
+                    " · " +
+                    spaceName(
+                        row.source_group
+                    );
+
+                var text = document.createElement(
+                    "p"
+                );
+
+                text.textContent =
+                    row.text_preview || "—";
+
+                article.append(
+                    head,
+                    meta,
+                    text
+                );
+
+                container.appendChild(
+                    article
+                );
+            });
+
+            var more = document.getElementById(
+                "topics-evidence-more"
+            );
+
+            more.hidden = (
+                evidenceShown >= rows.length
+            );
+
+            var note = document.getElementById(
+                "topics-evidence-note"
+            );
+
+            var sliceLabel = (
+                state.detailSlice === "current"
+                    ? "Поточні 24 години"
+                    : "Попередні 24 години"
+            );
+
+            note.textContent =
+                sliceLabel +
+                " · " +
+                slice.publications +
+                " " +
+                plural(
+                    slice.publications,
+                    "публікація",
+                    "публікації",
+                    "публікацій"
+                ) +
+                (
+                    detailSourceId
+                        ? " · фільтр за джерелом"
+                        : ""
+                );
+        }
+
+        function selectedMarkerPanel(detail) {
+            var wanted = (
+                detail &&
+                detail.marker &&
+                detail.marker.label
+                    ? detail.marker.label.trim()
+                    : ""
+            );
+
+            var nodes = Array.from(
+                document.querySelectorAll(
+                    "main *"
+                )
+            );
+
+            var kicker = nodes.find(
+                function (node) {
+                    return (
+                        node.children.length === 0 &&
+                        node.textContent
+                            .trim()
+                            .toLocaleLowerCase(
+                                "uk-UA"
+                            ) ===
+                            "обраний маркер"
+                    );
+                }
+            );
+
+            if (!kicker) {
+                return null;
+            }
+
+            var root = kicker.parentElement;
+
+            while (
+                root &&
+                root !== document.body
+            ) {
+                var text = root.textContent
+                    .toLocaleLowerCase(
+                        "uk-UA"
+                    );
+
+                if (
+                    text.indexOf(
+                        "публікац"
+                    ) !== -1 &&
+                    text.indexOf(
+                        "матеріал"
+                    ) !== -1 &&
+                    text.indexOf(
+                        "джерел"
+                    ) !== -1
+                ) {
+                    break;
+                }
+
+                root = root.parentElement;
+            }
+
+            if (!root) {
+                return null;
+            }
+
+            if (wanted) {
+                Array.from(
+                    root.querySelectorAll("*")
+                ).forEach(
+                    function (node) {
+                        if (
+                            node.children.length === 0 &&
+                            node.textContent.trim() ===
+                                wanted
+                        ) {
+                            node.classList.add(
+                                "topics-selected-marker-name"
+                            );
+                        }
+                    }
+                );
+            }
+
+            return root;
+        }
+
+        function renderSpaceBreakdown(
+            detail,
+            slice
+        ) {
+            var old = document.getElementById(
+                "topics-space-breakdown"
+            );
+
+            if (old) {
+                old.remove();
+            }
+
+            var panel =
+                selectedMarkerPanel(detail);
+
+            if (
+                !panel ||
+                state.mode !== "themes" ||
+                state.space !== "all" ||
+                !slice ||
+                !slice.space_breakdown
+            ) {
+                return;
+            }
+
+            var ru =
+                slice.space_breakdown.ru_space;
+
+            var ua =
+                slice.space_breakdown.ua_space;
+
+            if (!ru || !ua) {
+                return;
+            }
+
+            var total =
+                Number(
+                    ru.publications || 0
+                ) +
+                Number(
+                    ua.publications || 0
+                );
+
+            function percent(value) {
+                if (!total) {
+                    return "0.0%";
+                }
+
+                return (
+                    100 *
+                    Number(value || 0) /
+                    total
+                ).toFixed(1) + "%";
+            }
+
+            function createSpace(
+                title,
+                row
+            ) {
+                var block =
+                    document.createElement(
+                        "div"
+                    );
+
+                block.className =
+                    "topics-space-breakdown-item";
+
+                var head =
+                    document.createElement(
+                        "div"
+                    );
+
+                head.className =
+                    "topics-space-breakdown-title";
+
+                head.textContent = title;
+
+                var value =
+                    document.createElement(
+                        "strong"
+                    );
+
+                value.textContent =
+                    row.publications;
+
+                var pub =
+                    document.createElement(
+                        "span"
+                    );
+
+                pub.textContent =
+                    " публікацій";
+
+                var meta =
+                    document.createElement(
+                        "div"
+                    );
+
+                meta.className =
+                    "topics-space-breakdown-meta";
+
+                meta.textContent =
+                    percent(
+                        row.publications
+                    ) +
+                    " маркера · " +
+                    row.sources +
+                    " " +
+                    plural(
+                        row.sources,
+                        "джерело",
+                        "джерела",
+                        "джерел"
+                    );
+
+                block.append(
+                    head,
+                    value,
+                    pub,
+                    meta
+                );
+
+                return block;
+            }
+
+            var wrap =
+                document.createElement(
+                    "div"
+                );
+
+            wrap.id =
+                "topics-space-breakdown";
+
+            wrap.className =
+                "topics-space-breakdown";
+
+            wrap.append(
+                createSpace(
+                    "Російський простір",
+                    ru
+                ),
+                createSpace(
+                    "Український простір",
+                    ua
+                )
+            );
+
+            panel.appendChild(wrap);
+        }
+
+        function renderDetail(detail) {
+            if (!detail) {
+                return;
+            }
+
+            if (
+                state.mode !== "changes"
+            ) {
+                state.detailSlice =
+                    "current";
+            }
+
+            var controls = document.getElementById(
+                "topics-evidence-slices"
+            );
+
+            controls.hidden = (
+                state.mode !== "changes"
+            );
+
+            controls.style.display = (
+                state.mode === "changes"
+                    ? ""
+                    : "none"
+            );
+
+            controls.querySelectorAll(
+                "[data-evidence-slice]"
+            ).forEach(function (button) {
+                button.setAttribute(
+                    "aria-pressed",
+                    button.dataset.evidenceSlice ===
+                        state.detailSlice
+                        ? "true"
+                        : "false"
+                );
+            });
+
+            renderTrend(detail);
+
+            var slice =
+                detail[state.detailSlice];
+
+            renderSpaceBreakdown(
+                detail,
+                slice
+            );
+
+            document.getElementById(
+                "topics-sources-note"
+            ).textContent = (
+                state.detailSlice === "current"
+                    ? "Поточні 24 години."
+                    : "Попередні 24 години."
+            );
+
+            renderSources(slice);
+            renderEvidence(slice);
+        }
+
+        async function loadDetail() {
+            if (!state.selectedId) {
+                return;
+            }
+
+            var key =
+                state.space +
+                "|" +
+                state.selectedId;
+
+            if (
+                detailKey === key &&
+                detailData
+            ) {
+                renderDetail(
+                    detailData
+                );
+                return;
+            }
+
+            detailKey = key;
+            detailData = null;
+            detailHour = null;
+
+            var requestNumber =
+                ++detailRequest;
+
+            try {
+                var response = await fetch(
+                    "/topics/marker/" +
+                    encodeURIComponent(
+                        state.selectedId
+                    ) +
+                    "?space=" +
+                    encodeURIComponent(
+                        state.space
+                    ),
+                    {
+                        headers: {
+                            "Accept":
+                                "application/json"
+                        }
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error(
+                        "HTTP " +
+                        response.status
+                    );
+                }
+
+                var payload =
+                    await response.json();
+
+                if (
+                    requestNumber !==
+                    detailRequest
+                ) {
+                    return;
+                }
+
+                detailData = payload;
+                renderDetail(payload);
+
+            } catch (error) {
+                if (
+                    requestNumber !==
+                    detailRequest
+                ) {
+                    return;
+                }
+
+                document.getElementById(
+                    "topics-evidence"
+                ).innerHTML =
+                    '<p class="topics-empty">' +
+                    'Деталь маркера тимчасово недоступна.' +
+                    '</p>';
+            }
+        }
+
+        function renderHeadings() {
+            var isThemes = state.mode === "themes";
+
+            document.getElementById(
+                "topics-cloud-title"
+            ).textContent = isThemes
+                ? "Тематичне поле"
+                : "Що змінилося";
+
+            document.getElementById(
+                "topics-cloud-note"
+            ).textContent = isThemes
+                ? "Розмір маркера відповідає кількості публікацій."
+                : "↑ зростання · ↓ зниження відносно попередніх 24 год.";
+
+            document.getElementById(
+                "topics-ranking-title"
+            ).textContent = isThemes
+                ? "Топ за 24 год"
+                : "Найбільші зміни";
+
+            document.getElementById(
+                "topics-ranking-note"
+            ).textContent = isThemes
+                ? "Найчастіші маркери поточного потоку."
+                : "Зміна частки маркера у потоці, п.п.";
+        }
+
+        function renderControls() {
+            document.querySelectorAll(
+                "[data-topic-mode]"
+            ).forEach(function (button) {
+                button.setAttribute(
+                    "aria-pressed",
+                    button.dataset.topicMode === state.mode
+                        ? "true"
+                        : "false"
+                );
+            });
+
+            document.querySelectorAll(
+                "[data-topic-unit]"
+            ).forEach(function (button) {
+                button.setAttribute(
+                    "aria-pressed",
+                    button.dataset.topicUnit === state.unit
+                        ? "true"
+                        : "false"
+                );
+            });
+        }
+
+        function render() {
+            var rows = currentRows();
+
+            ensureSelection(rows);
+            updateSummary();
+            renderControls();
+            renderHeadings();
+            renderCloud(rows);
+
+            if (state.mode === "themes") {
+                renderThemeRanking(rows);
+            } else {
+                renderChangeRanking(rows);
+            }
+
+            renderSelection(rows);
+            loadDetail();
+        }
+
+        spaceSelect.addEventListener("change", function () {
+            state.space = this.value;
+            state.selectedId = null;
+            state.detailSlice = "current";
+            detailKey = null;
+            detailData = null;
+            detailSourceId = null;
+            detailSourceName = null;
+            detailHour = null;
+            evidenceShown = 8;
+            render();
+        });
+
+        queryInput.addEventListener("input", function () {
+            state.query = this.value;
+            render();
+        });
+
+        document.querySelectorAll(
+            "[data-topic-mode]"
+        ).forEach(function (button) {
+            button.addEventListener("click", function () {
+                state.mode = this.dataset.topicMode;
+                state.selectedId = null;
+                state.detailSlice = "current";
+                detailKey = null;
+                detailData = null;
+                detailSourceId = null;
+            detailSourceName = null;
+                detailHour = null;
+                evidenceShown = 8;
+                render();
+            });
+        });
+
+        document.querySelectorAll(
+            "[data-topic-unit]"
+        ).forEach(function (button) {
+            button.addEventListener("click", function () {
+                state.unit = this.dataset.topicUnit;
+                state.selectedId = null;
+                state.detailSlice = "current";
+                detailKey = null;
+                detailData = null;
+                detailSourceId = null;
+            detailSourceName = null;
+                detailHour = null;
+                evidenceShown = 8;
+                render();
+            });
+        });
+
+        document.querySelectorAll(
+            "[data-evidence-slice]"
+        ).forEach(function (button) {
+            button.addEventListener(
+                "click",
+                function () {
+                    state.detailSlice =
+                        this.dataset.evidenceSlice;
+
+                    detailSourceId = null;
+            detailSourceName = null;
+                    detailHour = null;
+                    evidenceShown = 8;
+
+                    if (detailData) {
+                        renderDetail(
+                            detailData
+                        );
+                    }
+                }
+            );
+        });
+
+        document.getElementById(
+            "topics-evidence-more"
+        ).addEventListener(
+            "click",
+            function () {
+                evidenceShown += 8;
+
+                if (detailData) {
+                    renderDetail(
+                        detailData
+                    );
+                }
+            }
+        );
+
+        render();
+    }());
+    </script>
+    {% endif %}
+</section>
+{% endblock %}\n\n\n
