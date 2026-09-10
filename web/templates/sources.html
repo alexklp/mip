@@ -4,15 +4,123 @@
     <h1 class="page-title">Джерела моніторингу</h1>
     <p class="page-lede">Охоплення за джерелами: скільки надійшло і коли востаннє.</p>
 
-    <div class="period-switch" role="group" aria-label="Період">
-        {% for value, label in periods %}
+    <form method="get" action="/sources" class="filter-panel">
+        <div class="filter-field">
+            <label for="sources-period">Період</label>
+            <select id="sources-period" name="period">
+                {% for value, label in periods %}
+                    <option
+                        value="{{ value.value }}"
+                        {% if value == current_period %}selected{% endif %}
+                    >{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
 
-                href="/sources?period={{ value.value }}"
-                role="button"
-                {% if value == current_period %}aria-current="true"{% endif %}
-            >{{ label }}</a>
-        {% endfor %}
-    </div>
+        {% if source_groups %}
+            <div class="filter-field">
+                <label for="sources-group">
+                    Інформаційний простір
+                </label>
+                <select
+                    id="sources-group"
+                    name="source_group"
+                >
+                    <option value="">Усі простори</option>
+
+                    {% for value in source_groups %}
+                        <option
+                            value="{{ value }}"
+                            {% if filters.source_group == value %}selected{% endif %}
+                        >
+                            {% if value == "ua_space" %}
+                                Український простір
+                            {% elif value == "ru_space" %}
+                                Російський простір
+                            {% elif value == "other" %}
+                                Інше
+                            {% else %}
+                                {{ value }}
+                            {% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% endif %}
+
+        {% if source_types %}
+            <div class="filter-field">
+                <label for="sources-type">
+                    Тип джерела
+                </label>
+                <select
+                    id="sources-type"
+                    name="source_type"
+                >
+                    <option value="">Усі типи</option>
+
+                    {% for value in source_types %}
+                        <option
+                            value="{{ value }}"
+                            {% if filters.source_type == value %}selected{% endif %}
+                        >
+                            {% if value == "rss" %}
+                                RSS
+                            {% elif value == "telegram" %}
+                                Telegram
+                            {% else %}
+                                {{ value }}
+                            {% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% endif %}
+
+        {% if source_names %}
+            <div class="filter-field">
+                <label for="sources-name">
+                    Джерело
+                </label>
+                <select
+                    id="sources-name"
+                    name="source_name"
+                >
+                    <option value="">
+                        Усі джерела
+                    </option>
+
+                    {% for name in source_names %}
+                        <option
+                            value="{{ name }}"
+                            {% if filters.source_name == name %}selected{% endif %}
+                        >{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% endif %}
+
+        <button
+            type="submit"
+            class="filter-submit"
+        >
+            Застосувати
+        </button>
+
+        {% if
+            filters.source_group
+            or filters.source_type
+            or filters.source_name
+            or current_period.value != "all"
+        %}
+            <a
+                href="/sources"
+                class="filter-reset"
+            >
+                Скинути
+            </a>
+        {% endif %}
+    </form>
 
     <p class="materials-count">
         {% if sources %}
@@ -24,24 +132,96 @@
 
     {% if sources %}
         <div class="table-scroll">
-            <table class="materials-table">
+            <table class="materials-table sources-table-sortable">
                 <thead>
                     <tr>
-                        <th>Джерело</th>
-                        <th>Тип</th>
-                        <th>Простір</th>
-                        <th>Активне</th>
-                        <th>Публікацій</th>
-                        <th>Унікальних матеріалів</th>
-                        <th>Перше надходження</th>
-                        <th>Останнє надходження</th>
+                        <th class="sources-sortable"
+                            data-sort-type="text"
+                            aria-sort="none">
+                            <button type="button"
+                                    class="sources-sort-button">
+                                <span>Джерело</span>
+                                <span class="sources-sort-indicator"
+                                      aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="sources-sortable"
+                            data-sort-type="text"
+                            aria-sort="none">
+                            <button type="button"
+                                    class="sources-sort-button">
+                                <span>Тип</span>
+                                <span class="sources-sort-indicator"
+                                      aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="sources-sortable"
+                            data-sort-type="text"
+                            aria-sort="none">
+                            <button type="button"
+                                    class="sources-sort-button">
+                                <span>Простір</span>
+                                <span class="sources-sort-indicator"
+                                      aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="sources-sortable"
+                            data-sort-type="text"
+                            aria-sort="none">
+                            <button type="button"
+                                    class="sources-sort-button">
+                                <span>Активне</span>
+                                <span class="sources-sort-indicator"
+                                      aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="sources-sortable"
+                            data-sort-type="number"
+                            aria-sort="none">
+                            <button type="button"
+                                    class="sources-sort-button">
+                                <span>Публікацій</span>
+                                <span class="sources-sort-indicator"
+                                      aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="sources-sortable"
+                            data-sort-type="number"
+                            aria-sort="none">
+                            <button type="button"
+                                    class="sources-sort-button">
+                                <span>Унікальних матеріалів</span>
+                                <span class="sources-sort-indicator"
+                                      aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="sources-sortable"
+                            data-sort-type="date"
+                            aria-sort="none">
+                            <button type="button"
+                                    class="sources-sort-button">
+                                <span>Перше надходження</span>
+                                <span class="sources-sort-indicator"
+                                      aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="sources-sortable"
+                            data-sort-type="date"
+                            aria-sort="none">
+                            <button type="button"
+                                    class="sources-sort-button">
+                                <span>Останнє надходження</span>
+                                <span class="sources-sort-indicator"
+                                      aria-hidden="true"></span>
+                            </button>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in sources %}
                         <tr>
-                            <td>{{ row.name }}</td>
-                            <td>
+                            <td data-sort="{{ row.name }}">{{ row.name }}</td>
+                            <td data-sort="{{ row.source_type }}">
                                 {% if row.source_type == "rss" %}RSS
                                 {% elif row.source_type == "telegram" %}Telegram
                                 {% elif row.source_type == "web" %}Web
@@ -49,26 +229,180 @@
                                 {% else %}{{ row.source_type }}
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-sort="{{ row.source_group }}">
                                 {% if row.source_group == "ua_space" %}Український простір
                                 {% elif row.source_group == "ru_space" %}Російський простір
                                 {% elif row.source_group == "other" %}Інше
                                 {% else %}Невідомо
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-sort="{{ 1 if row.is_active else 0 }}">
                                 <span class="flag {{ 'flag-yes' if row.is_active else 'flag-no' }}">
                                     {{ "так" if row.is_active else "ні" }}
                                 </span>
                             </td>
-                            <td>{{ row.publications }}</td>
-                            <td>{{ row.materials }}</td>
-                            <td>{{ fmt_kyiv_zoned(row.first_item) }}</td>
-                            <td>{{ fmt_kyiv_zoned(row.last_item) }}</td>
+                            <td data-sort="{{ row.publications }}">{{ row.publications }}</td>
+                            <td data-sort="{{ row.materials }}">{{ row.materials }}</td>
+                            <td data-sort="{{ row.first_item.isoformat() if row.first_item else '' }}">
+                                {{ fmt_kyiv_zoned(row.first_item) }}
+                            </td>
+                            <td data-sort="{{ row.last_item.isoformat() if row.last_item else '' }}">
+                                {{ fmt_kyiv_zoned(row.last_item) }}
+                            </td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     {% endif %}
+
+    <script>
+    (() => {
+        const table = document.querySelector(
+            ".sources-table-sortable"
+        );
+
+        if (!table) {
+            return;
+        }
+
+        const tbody = table.querySelector("tbody");
+        const headers = Array.from(
+            table.querySelectorAll(
+                "thead th.sources-sortable"
+            )
+        );
+
+        function valueFor(row, index) {
+            const cell = row.cells[index];
+
+            return (
+                cell.dataset.sort ??
+                cell.textContent.trim()
+            );
+        }
+
+        function compareValues(a, b, type) {
+            const aBlank = a === "";
+            const bBlank = b === "";
+
+            if (aBlank && bBlank) {
+                return 0;
+            }
+
+            if (aBlank) {
+                return 1;
+            }
+
+            if (bBlank) {
+                return -1;
+            }
+
+            if (type === "number") {
+                return Number(a) - Number(b);
+            }
+
+            if (type === "date") {
+                return (
+                    new Date(a).getTime() -
+                    new Date(b).getTime()
+                );
+            }
+
+            return a.localeCompare(
+                b,
+                ["uk", "ru"],
+                {
+                    numeric: true,
+                    sensitivity: "base",
+                }
+            );
+        }
+
+        headers.forEach((header, index) => {
+            const button = header.querySelector(
+                ".sources-sort-button"
+            );
+
+            button.addEventListener("click", () => {
+                const current =
+                    header.dataset.sortDirection;
+
+                const direction =
+                    current === "asc"
+                        ? "desc"
+                        : "asc";
+
+                headers.forEach((other) => {
+                    other.dataset.sortDirection = "";
+                    other.setAttribute(
+                        "aria-sort",
+                        "none"
+                    );
+
+                    const indicator =
+                        other.querySelector(
+                            ".sources-sort-indicator"
+                        );
+
+                    if (indicator) {
+                        indicator.textContent = "";
+                    }
+                });
+
+                header.dataset.sortDirection =
+                    direction;
+
+                header.setAttribute(
+                    "aria-sort",
+                    direction === "asc"
+                        ? "ascending"
+                        : "descending"
+                );
+
+                header.querySelector(
+                    ".sources-sort-indicator"
+                ).textContent =
+                    direction === "asc"
+                        ? "↑"
+                        : "↓";
+
+                const type =
+                    header.dataset.sortType;
+
+                const rows = Array.from(
+                    tbody.rows
+                );
+
+                rows.sort((rowA, rowB) => {
+                    const a = valueFor(
+                        rowA,
+                        index
+                    );
+
+                    const b = valueFor(
+                        rowB,
+                        index
+                    );
+
+                    const result =
+                        compareValues(
+                            a,
+                            b,
+                            type
+                        );
+
+                    return direction === "asc"
+                        ? result
+                        : -result;
+                });
+
+                rows.forEach((row) => {
+                    tbody.appendChild(row);
+                });
+            });
+        });
+    })();
+    </script>
+
 {% endblock %}

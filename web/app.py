@@ -92,6 +92,12 @@ def _pct(count: int, denominator: int) -> int | None:
 
 
 @app.get("/", response_class=HTMLResponse)
+def root_page(request: Request) -> HTMLResponse:
+    """Головна точка входу -- тематичний простір."""
+    return topics_page(request)
+
+
+@app.get("/overview", response_class=HTMLResponse)
 def index(request: Request, period: Period = Period.HOURS_24) -> HTMLResponse:
     """Огляд інформаційного простору -- статистична головна сторінка."""
     try:
@@ -234,14 +240,94 @@ def materials(
 
 
 @app.get("/sources", response_class=HTMLResponse)
-def sources_page(request: Request, period: Period = Period.ALL) -> HTMLResponse:
+def sources_page(
+    request: Request,
+    period: Period = Period.ALL,
+    source_group: OptionalSourceGroup = None,
+    source_type: OptionalSourceType = None,
+    source_name: str | None = None,
+) -> HTMLResponse:
     """Сторінка охоплення джерел моніторингу."""
     try:
         with read_connection() as conn:
-            rows = fetch_sources_overview(conn, period=period)
+            all_rows = fetch_sources_overview(
+                conn,
+                period=period,
+            )
     except psycopg.Error as exc:
-        print(f"/sources: db error: {exc}", file=sys.stderr)
-        raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE) from exc
+        print(
+            f"/sources: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    type_order = {
+        "rss": 0,
+        "telegram": 1,
+    }
+    group_order = {
+        "ua_space": 0,
+        "ru_space": 1,
+        "other": 2,
+    }
+
+    source_types = sorted(
+        {
+            row["source_type"]
+            for row in all_rows
+            if row["source_type"]
+        },
+        key=lambda value: (
+            type_order.get(value, 99),
+            value,
+        ),
+    )
+
+    source_groups = sorted(
+        {
+            row["source_group"]
+            for row in all_rows
+            if row["source_group"]
+        },
+        key=lambda value: (
+            group_order.get(value, 99),
+            value,
+        ),
+    )
+
+    rows_by_type_group = [
+        row
+        for row in all_rows
+        if (
+            source_type is None
+            or row["source_type"] == source_type.value
+        )
+        and (
+            source_group is None
+            or row["source_group"] == source_group.value
+        )
+    ]
+
+    source_names = sorted(
+        {
+            row["name"]
+            for row in rows_by_type_group
+            if row["name"]
+        },
+        key=str.casefold,
+    )
+
+    rows = [
+        row
+        for row in rows_by_type_group
+        if (
+            not source_name
+            or row["name"] == source_name
+        )
+    ]
 
     return templates.TemplateResponse(
         request,
@@ -251,6 +337,22 @@ def sources_page(request: Request, period: Period = Period.ALL) -> HTMLResponse:
             "current_period": period,
             "periods": PERIOD_LABELS,
             "sources": rows,
+            "source_types": source_types,
+            "source_groups": source_groups,
+            "source_names": source_names,
+            "filters": {
+                "source_group": (
+                    source_group.value
+                    if source_group
+                    else None
+                ),
+                "source_type": (
+                    source_type.value
+                    if source_type
+                    else None
+                ),
+                "source_name": source_name,
+            },
         },
     )
 

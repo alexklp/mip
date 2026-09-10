@@ -3821,3 +3821,36 @@ a {
         border-top: 1px solid var(--border);
     }
 }
+
+/* Sources table sorting */
+
+.sources-sortable {
+    padding: 0;
+}
+
+.sources-sort-button {
+    width: 100%;
+    padding: 10px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sources-sort-button:hover,
+.sources-sort-button:focus-visible {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.sources-sort-indicator {
+    min-width: 1em;
+    color: var(--gold);
+    font-size: 11px;
+}
