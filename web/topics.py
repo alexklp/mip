@@ -16,6 +16,7 @@ DEFAULT_SNAPSHOT = (
 EXPECTED_SCHEMA = "topics/1"
 VALID_VIEWS = {"all", "ru_space", "ua_space"}
 DETAIL_EVIDENCE_LIMIT = 80
+TOPICS_COMPARE_LIMIT = 50
 
 
 def _timestamp(value: str) -> datetime:
@@ -84,6 +85,61 @@ def _read_snapshot(
     )
 
 
+
+def _comparison_payload(
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Lean hourly series for the Topics comparison chart."""
+    result: dict[str, Any] = {}
+
+    for view in (
+        "all",
+        "ru_space",
+        "ua_space",
+    ):
+        result[view] = {}
+
+        for unit in (
+            "phrases",
+            "words",
+        ):
+            series = {}
+
+            for row in snapshot[
+                "views"
+            ][view]["themes"][unit][
+                :TOPICS_COMPARE_LIMIT
+            ]:
+                marker_id = row["marker_id"]
+
+                marker = snapshot[
+                    "markers"
+                ].get(marker_id)
+
+                if marker is None:
+                    raise ValueError(
+                        "comparison marker missing"
+                    )
+
+                hourly = marker[
+                    "views"
+                ][view]["current"]["hourly"]
+
+                if len(hourly) != 24:
+                    raise ValueError(
+                        "comparison hourly series "
+                        "must have 24 bins"
+                    )
+
+                series[marker_id] = list(
+                    hourly
+                )
+
+            result[view][unit] = series
+
+    return result
+
+
 def load_topics(
     path: Path = DEFAULT_SNAPSHOT,
     *,
@@ -121,6 +177,10 @@ def load_topics(
         topic_data = {
             "summary": snapshot["summary"],
             "views": snapshot["views"],
+            "windows": snapshot["windows"],
+            "comparison": _comparison_payload(
+                snapshot
+            ),
         }
 
         return {

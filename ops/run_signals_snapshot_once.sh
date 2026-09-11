@@ -42,12 +42,12 @@ if env \
         --strategy exact_current_24h \
         --anchors 40 \
         --neighbours 10 \
-        --pairs 10000 \
+        --pairs 20000 \
         --rows 5000 \
         --core-distance 0.18 \
         --related-distance 0.36 \
         --ann-probe-limit 100 \
-        --display-limit 100 \
+        --display-limit 200 \
         --max-related-links 100 \
         --evidence-chars 600 \
         --max-evidence 12 \

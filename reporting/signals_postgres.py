@@ -19,7 +19,7 @@ class PostgresLimits:
     ann_probe_limit: int = 100
 
     def validate(self):
-        for name, ceiling in (("anchors", 200), ("neighbours", 50), ("pairs", 10000),
+        for name, ceiling in (("anchors", 200), ("neighbours", 50), ("pairs", 20000),
                               ("rows", 20000), ("evidence_chars", 2000), ("ann_probe_limit", 1000),
                               ("statement_timeout_ms", 60000)):
             value = getattr(self, name)

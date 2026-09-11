@@ -30,7 +30,7 @@ class RecallConfig:
             raise ValueError("Related threshold не може бути меншим за core")
         if tuple(sorted(set(self.distance_bands))) != self.distance_bands:
             raise ValueError("Межі distance bands мають строго зростати")
-        for name, ceiling in (("display_limit", 200), ("max_related_links", 1000), ("max_pairs", 10000), ("max_evidence", 100), ("evidence_chars", 2000), ("max_contents", 2000)):
+        for name, ceiling in (("display_limit", 200), ("max_related_links", 1000), ("max_pairs", 20000), ("max_evidence", 100), ("evidence_chars", 2000), ("max_contents", 2000)):
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= ceiling:
                 raise ValueError("Некоректний ліміт " + name)
@@ -272,8 +272,13 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             "evidence_omitted_count": max(0, len(candidate_rows) - config.max_evidence),
             "evidence_references": [{"content_id": cid, "text": contents[cid].text[:config.evidence_chars], "text_truncated": len(contents[cid].text) > config.evidence_chars} for cid in group[:config.max_evidence]],
         })
-    candidates.sort(key=lambda c: (-c['cross_space'], -c['source_count'], -c['content_count'],
-                                  -datetime.fromisoformat(c['last_observed']).timestamp(), c['candidate_id']))
+    candidates.sort(key=lambda c: (
+        -datetime.fromisoformat(c['last_observed']).timestamp(),
+        -c['cross_space'],
+        -c['source_count'],
+        -c['content_count'],
+        c['candidate_id'],
+    ))
     eligible_count = len(candidates)
     candidates = candidates[:config.display_limit]
     selected_set = set(selected)

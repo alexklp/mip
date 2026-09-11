@@ -260,6 +260,12 @@
                         data-window-end="{{ snapshot.as_of }}"
                         aria-label="Поширення публікацій за останні 24 години"
                     >
+                        <div
+                            class="signals-spread-clock"
+                            data-spread-clock
+                            aria-hidden="true"
+                        ></div>
+
                         <div class="signals-spread-track">
                             <div class="signals-spread-axis" aria-hidden="true"></div>
 
@@ -650,6 +656,171 @@
     });
 
 
+    function spreadKyivClock(value) {
+        var result = new Intl.DateTimeFormat(
+            "uk-UA",
+            {
+                timeZone: "Europe/Kyiv",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false
+            }
+        ).format(new Date(value));
+
+        return result === "24:00"
+            ? "00:00"
+            : result;
+    }
+
+    function spreadKyivDate(value) {
+        return new Intl.DateTimeFormat(
+            "uk-UA",
+            {
+                timeZone: "Europe/Kyiv",
+                day: "2-digit",
+                month: "2-digit"
+            }
+        ).format(new Date(value));
+    }
+
+    function renderSpreadClock(
+        timeline,
+        start,
+        end
+    ) {
+        var scale = timeline.querySelector(
+            "[data-spread-clock]"
+        );
+
+        if (scale) {
+            scale.replaceChildren();
+
+            [0, 25, 50, 75, 100].forEach(
+                function (percent) {
+                    var tick =
+                        document.createElement("span");
+
+                    tick.className =
+                        "signals-spread-clock-tick";
+
+                    if (percent === 0) {
+                        tick.classList.add(
+                            "is-start"
+                        );
+                    }
+
+                    if (percent === 100) {
+                        tick.classList.add(
+                            "is-end"
+                        );
+                    }
+
+                    tick.style.left =
+                        percent + "%";
+
+                    tick.textContent =
+                        spreadKyivClock(
+                            start +
+                            (
+                                end - start
+                            ) *
+                            (
+                                percent / 100
+                            )
+                        );
+
+                    scale.appendChild(tick);
+                }
+            );
+        }
+
+        var track = timeline.querySelector(
+            ".signals-spread-track"
+        );
+
+        if (!track) return;
+
+        Array.prototype.slice.call(
+            track.querySelectorAll(
+                "[data-spread-midnight]"
+            )
+        ).forEach(function (item) {
+            item.remove();
+        });
+
+        var HOUR_MS =
+            60 * 60 * 1000;
+
+        var probe =
+            Math.ceil(
+                start / HOUR_MS
+            ) * HOUR_MS;
+
+        while (probe < end) {
+            if (
+                probe > start &&
+                spreadKyivClock(probe) ===
+                    "00:00"
+            ) {
+                var x =
+                    (
+                        (
+                            probe - start
+                        ) /
+                        (
+                            end - start
+                        )
+                    ) * 100;
+
+                var marker =
+                    document.createElement(
+                        "span"
+                    );
+
+                marker.className =
+                    "signals-spread-midnight";
+                marker.setAttribute(
+                    "data-spread-midnight",
+                    ""
+                );
+                marker.setAttribute(
+                    "aria-hidden",
+                    "true"
+                );
+                marker.style.left =
+                    x.toFixed(3) + "%";
+
+                if (x < 10) {
+                    marker.classList.add(
+                        "is-left-edge"
+                    );
+                } else if (x > 90) {
+                    marker.classList.add(
+                        "is-right-edge"
+                    );
+                }
+
+                var label =
+                    document.createElement(
+                        "span"
+                    );
+
+                label.className =
+                    "signals-spread-midnight-label";
+                label.textContent =
+                    "00:00 · " +
+                    spreadKyivDate(probe);
+
+                marker.appendChild(label);
+                track.appendChild(marker);
+
+                break;
+            }
+
+            probe += HOUR_MS;
+        }
+    }
+
     function initSpreadTimelines() {
         var DAY_MS = 24 * 60 * 60 * 1000;
         var MIN_SEPARATION_PERCENT = 2.4;
@@ -662,6 +833,12 @@
             if (!Number.isFinite(end)) return;
 
             var start = end - DAY_MS;
+
+            renderSpreadClock(
+                timeline,
+                start,
+                end
+            );
 
             var points = Array.prototype.slice.call(
                 timeline.querySelectorAll('[data-spread-point]')

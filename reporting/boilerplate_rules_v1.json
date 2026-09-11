@@ -95,5 +95,9 @@
       "Блокнот Россия"
     ],
     "pattern": "блокнот\\s+в\\s+(?:[mм][aа](?:[xх]|[kк][cс](?:е|у|ом)?)).{0,120}?объявления\\s+работа.{0,80}?купи\\s*/?\\s*продай\\s+авто"
+  },
+  {
+    "name": "social_platform_footer",
+    "pattern": "(?:(?:\\bвсюди!?\\s*)?\\bобирайте\\s+улюблений\\s+формат\\s*:?\\s*(?:telegram|телеграм|сайт|facebook|youtube|tik\\s*tok|tiktok|viber|instagram)(?:\\s*[|·•/]\\s*(?:telegram|телеграм|сайт|facebook|youtube|tik\\s*tok|tiktok|viber|instagram)){1,}|(?:telegram|телеграм|сайт|facebook|youtube|tik\\s*tok|tiktok|viber|instagram)(?:\\s*[|·•/]\\s*(?:telegram|телеграм|сайт|facebook|youtube|tik\\s*tok|tiktok|viber|instagram)){2,})\\s*$"
   }
 ]

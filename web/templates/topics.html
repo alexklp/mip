@@ -82,6 +82,45 @@
         </div>
     </div>
 
+
+    <section
+        id="topics-compare-panel"
+        class="topics-panel topics-compare-panel"
+    >
+        <div class="topics-panel-head topics-compare-head">
+            <div>
+                <h2>Порівняння динаміки тем</h2>
+                <p id="topics-compare-note">
+                    Публікації за годину · до 5 вибраних маркерів.
+                </p>
+            </div>
+
+            <div
+                id="topics-compare-legend"
+                class="topics-compare-legend"
+            ></div>
+        </div>
+
+        <div class="topics-compare-wrap">
+            <svg
+                id="topics-compare"
+                class="topics-compare-chart"
+                viewBox="0 0 800 220"
+                preserveAspectRatio="none"
+                role="img"
+                aria-label="Порівняння динаміки тематичних маркерів"
+            ></svg>
+
+            <p
+                id="topics-compare-empty"
+                class="topics-empty topics-compare-empty"
+                hidden
+            >
+                Оберіть хоча б одну тему для порівняння.
+            </p>
+        </div>
+    </section>
+
     <div class="topics-workspace">
         <section class="topics-panel topics-cloud-panel">
             <div class="topics-panel-head">
@@ -109,12 +148,25 @@
         </section>
 
         <section class="topics-panel topics-ranking-panel">
-            <div class="topics-panel-head">
+            <div class="topics-panel-head topics-ranking-head">
                 <div>
-                    <h2 id="topics-ranking-title">Топ за 24 год</h2>
+                    <h2 id="topics-ranking-title">Теми для порівняння</h2>
                     <p id="topics-ranking-note">
-                        Найчастіші маркери поточного потоку.
+                        Топ 50 поточного потоку · до 5 для графіка.
                     </p>
+                </div>
+
+                <div
+                    id="topics-compare-controls"
+                    class="topics-compare-controls"
+                >
+                    <span id="topics-compare-count">0 / 5</span>
+                    <button
+                        id="topics-compare-reset"
+                        type="button"
+                    >
+                        Скинути
+                    </button>
                 </div>
             </div>
 
@@ -230,7 +282,9 @@
             unit: "phrases",
             selectedId: null,
             query: "",
-            detailSlice: "current"
+            detailSlice: "current",
+            compareIds: [],
+            compareScope: null
         };
 
         var detailKey = null;
@@ -248,6 +302,27 @@
         var ranking = document.getElementById("topics-ranking");
         var queryInput = document.getElementById("topics-query");
         var spaceSelect = document.getElementById("topics-space");
+        var comparePanel = document.getElementById(
+            "topics-compare-panel"
+        );
+        var compareSvg = document.getElementById(
+            "topics-compare"
+        );
+        var compareEmpty = document.getElementById(
+            "topics-compare-empty"
+        );
+        var compareLegend = document.getElementById(
+            "topics-compare-legend"
+        );
+        var compareControls = document.getElementById(
+            "topics-compare-controls"
+        );
+        var compareCount = document.getElementById(
+            "topics-compare-count"
+        );
+        var compareReset = document.getElementById(
+            "topics-compare-reset"
+        );
 
         function plural(value, one, few, many) {
             var n = Math.abs(Number(value));
@@ -284,6 +359,57 @@
         function currentCloud() {
             return data.views[state.space]
                 .clouds[state.mode][state.unit];
+        }
+
+        function compareScopeKey() {
+            return (
+                state.space +
+                "|" +
+                state.unit
+            );
+        }
+
+        function ensureCompareSelection(rows) {
+            if (state.mode !== "themes") {
+                return;
+            }
+
+            var scope = compareScopeKey();
+
+            var eligible = rows
+                .slice(0, 50)
+                .map(function (row) {
+                    return row.marker_id;
+                });
+
+            if (state.compareScope !== scope) {
+                state.compareScope = scope;
+                state.compareIds = eligible.slice(0, 5);
+                return;
+            }
+
+            state.compareIds = state.compareIds
+                .filter(function (markerId) {
+                    return eligible.indexOf(markerId) !== -1;
+                })
+                .slice(0, 5);
+        }
+
+        function toggleCompare(markerId) {
+            var index = state.compareIds.indexOf(
+                markerId
+            );
+
+            if (index !== -1) {
+                state.compareIds.splice(index, 1);
+            } else if (state.compareIds.length < 5) {
+                state.compareIds.push(markerId);
+            }
+
+            var rows = currentRows();
+
+            renderThemeRanking(rows);
+            renderCompare(rows);
         }
 
         function rowMap(rows) {
@@ -464,11 +590,19 @@
 
         function renderThemeRanking(rows) {
             ranking.replaceChildren();
+            ranking.classList.add("is-compare");
 
-            var visible = filteredRows(rows).slice(0, 10);
-            var max = visible.reduce(function (value, row) {
-                return Math.max(value, row.publications);
-            }, 1);
+            compareControls.hidden = false;
+            compareCount.textContent =
+                state.compareIds.length + " / 5";
+
+            var ranked = rows.slice(0, 50);
+            var visible = filteredRows(ranked);
+            var rankLookup = {};
+
+            ranked.forEach(function (row, index) {
+                rankLookup[row.marker_id] = index + 1;
+            });
 
             if (!visible.length) {
                 ranking.innerHTML =
@@ -476,48 +610,144 @@
                 return;
             }
 
-            visible.forEach(function (row, index) {
-                var button = document.createElement("button");
-                button.type = "button";
-                button.className = "topics-rank-row";
+            visible.forEach(function (row) {
+                var item = document.createElement("div");
+                item.className = "topics-compare-choice";
 
                 if (row.marker_id === state.selectedId) {
-                    button.classList.add("is-selected");
+                    item.classList.add("is-selected");
                 }
 
-                var width = (
-                    100 * row.publications / max
-                ).toFixed(1);
+                var checked =
+                    state.compareIds.indexOf(
+                        row.marker_id
+                    ) !== -1;
 
-                button.innerHTML =
-                    '<span class="topics-rank-number">' +
-                    (index + 1) +
-                    '</span>' +
-                    '<span class="topics-rank-main">' +
-                        '<span class="topics-rank-label"></span>' +
-                        '<span class="topics-rank-track">' +
-                            '<i style="width:' + width + '%"></i>' +
-                        '</span>' +
-                    '</span>' +
-                    '<span class="topics-rank-value">' +
-                        '<strong>' + row.publications + '</strong>' +
-                        '<small>' + row.share.toFixed(1) + '%</small>' +
-                    '</span>';
+                var number = document.createElement(
+                    "span"
+                );
+                number.className =
+                    "topics-compare-rank";
+                number.textContent =
+                    rankLookup[row.marker_id];
 
-                button.querySelector(
-                    ".topics-rank-label"
-                ).textContent = row.label;
+                var checkbox = document.createElement(
+                    "input"
+                );
+                checkbox.type = "checkbox";
+                checkbox.className =
+                    "topics-compare-checkbox";
+                checkbox.checked = checked;
+                checkbox.disabled = (
+                    !checked &&
+                    state.compareIds.length >= 5
+                );
+                checkbox.setAttribute(
+                    "aria-label",
+                    "Порівнювати тему " +
+                    row.label
+                );
 
-                button.addEventListener("click", function () {
-                    selectMarker(row.marker_id);
-                });
+                checkbox.addEventListener(
+                    "click",
+                    function (event) {
+                        event.stopPropagation();
+                    }
+                );
 
-                ranking.appendChild(button);
+                checkbox.addEventListener(
+                    "change",
+                    function () {
+                        toggleCompare(
+                            row.marker_id
+                        );
+                    }
+                );
+
+                var markerButton =
+                    document.createElement(
+                        "button"
+                    );
+
+                markerButton.type = "button";
+                markerButton.className =
+                    "topics-compare-marker";
+
+                var label =
+                    document.createElement(
+                        "span"
+                    );
+
+                label.className =
+                    "topics-compare-marker-label";
+                label.textContent = row.label;
+
+                var sourceMeta =
+                    document.createElement(
+                        "small"
+                    );
+
+                sourceMeta.textContent =
+                    row.sources +
+                    " джер.";
+
+                markerButton.append(
+                    label,
+                    sourceMeta
+                );
+
+                markerButton.addEventListener(
+                    "click",
+                    function () {
+                        selectMarker(
+                            row.marker_id
+                        );
+                    }
+                );
+
+                var value =
+                    document.createElement(
+                        "span"
+                    );
+
+                value.className =
+                    "topics-compare-value";
+
+                var strong =
+                    document.createElement(
+                        "strong"
+                    );
+
+                strong.textContent =
+                    row.publications;
+
+                var small =
+                    document.createElement(
+                        "small"
+                    );
+
+                small.textContent = "публ.";
+
+                value.append(
+                    strong,
+                    small
+                );
+
+                item.append(
+                    number,
+                    checkbox,
+                    markerButton,
+                    value
+                );
+
+                ranking.appendChild(item);
             });
         }
 
         function renderChangeRanking(rows) {
             ranking.replaceChildren();
+            ranking.classList.remove("is-compare");
+            compareControls.hidden = true;
 
             var visible = filteredRows(rows).slice(0, 10);
 
@@ -570,6 +800,319 @@
 
                 ranking.appendChild(button);
             });
+        }
+
+
+        function compareHourDate(index) {
+            var start = new Date(
+                data.windows.current.start
+            );
+
+            return new Date(
+                start.getTime() +
+                index * 3600000
+            );
+        }
+
+        function renderCompare(rows) {
+            comparePanel.hidden = (
+                state.mode !== "themes"
+            );
+
+            if (state.mode !== "themes") {
+                return;
+            }
+
+            compareSvg.replaceChildren();
+            compareLegend.replaceChildren();
+
+            var seriesMap = (
+                (
+                    data.comparison[
+                        state.space
+                    ] || {}
+                )[state.unit] || {}
+            );
+
+            var lookup = rowMap(rows);
+
+            var selected = state.compareIds
+                .map(function (markerId) {
+                    var row = lookup[markerId];
+                    var values =
+                        seriesMap[markerId];
+
+                    if (
+                        !row ||
+                        !Array.isArray(values) ||
+                        values.length !== 24
+                    ) {
+                        return null;
+                    }
+
+                    return {
+                        row: row,
+                        values: values
+                    };
+                })
+                .filter(Boolean);
+
+            compareCount.textContent =
+                state.compareIds.length + " / 5";
+
+            if (!selected.length) {
+                compareSvg.hidden = true;
+                compareEmpty.hidden = false;
+
+                document.getElementById(
+                    "topics-compare-note"
+                ).textContent =
+                    "Оберіть до 5 тем у списку праворуч.";
+
+                return;
+            }
+
+            compareSvg.hidden = false;
+            compareEmpty.hidden = true;
+
+            var maxValue = Math.max.apply(
+                null,
+                [1].concat.apply(
+                    [1],
+                    selected.map(
+                        function (item) {
+                            return item.values;
+                        }
+                    )
+                )
+            );
+
+            [44, 110, 176].forEach(
+                function (y) {
+                    compareSvg.appendChild(
+                        svgElement(
+                            "line",
+                            {
+                                x1: 52,
+                                y1: y,
+                                x2: 762,
+                                y2: y,
+                                class:
+                                    "topics-compare-grid"
+                            }
+                        )
+                    );
+                }
+            );
+
+            [
+                [44, maxValue],
+                [
+                    110,
+                    Math.round(
+                        maxValue / 2
+                    )
+                ],
+                [176, 0]
+            ].forEach(function (item) {
+                var label = svgElement(
+                    "text",
+                    {
+                        x: 42,
+                        y: item[0] + 4,
+                        class:
+                            "topics-compare-axis",
+                        "text-anchor": "end"
+                    }
+                );
+
+                label.textContent = item[1];
+
+                compareSvg.appendChild(
+                    label
+                );
+            });
+
+            [
+                [0, 52],
+                [6, 230],
+                [12, 407],
+                [18, 585],
+                [23, 762]
+            ].forEach(function (item) {
+                var index = item[0];
+                var x = item[1];
+
+                var label = svgElement(
+                    "text",
+                    {
+                        x: x,
+                        y: 203,
+                        class:
+                            "topics-compare-axis",
+                        "text-anchor":
+                            (
+                                index === 0
+                                    ? "start"
+                                    : (
+                                        index === 23
+                                            ? "end"
+                                            : "middle"
+                                    )
+                            )
+                    }
+                );
+
+                label.textContent =
+                    shortKyivClock(
+                        compareHourDate(
+                            index
+                        )
+                    );
+
+                compareSvg.appendChild(
+                    label
+                );
+            });
+
+            selected.forEach(
+                function (
+                    item,
+                    seriesIndex
+                ) {
+                    var seriesClass =
+                        "series-" +
+                        seriesIndex;
+
+                    compareSvg.appendChild(
+                        svgElement(
+                            "polyline",
+                            {
+                                points:
+                                    trendPoints(
+                                        item.values,
+                                        maxValue
+                                    ),
+                                class:
+                                    "topics-compare-line " +
+                                    seriesClass
+                            }
+                        )
+                    );
+
+                    item.values.forEach(
+                        function (
+                            value,
+                            index
+                        ) {
+                            if (!value) {
+                                return;
+                            }
+
+                            var x =
+                                52 +
+                                index *
+                                (710 / 23);
+
+                            var y =
+                                176 -
+                                (
+                                    Number(value) /
+                                    maxValue *
+                                    132
+                                );
+
+                            var point =
+                                svgElement(
+                                    "circle",
+                                    {
+                                        cx: x,
+                                        cy: y,
+                                        r: 3,
+                                        class:
+                                            "topics-compare-point " +
+                                            seriesClass
+                                    }
+                                );
+
+                            var start =
+                                compareHourDate(
+                                    index
+                                );
+
+                            var end =
+                                new Date(
+                                    start.getTime() +
+                                    3600000
+                                );
+
+                            var title =
+                                svgElement(
+                                    "title"
+                                );
+
+                            title.textContent =
+                                item.row.label +
+                                "\n" +
+                                shortKyivDate(
+                                    start
+                                ) +
+                                " · " +
+                                shortKyivClock(
+                                    start
+                                ) +
+                                "–" +
+                                shortKyivClock(
+                                    end
+                                ) +
+                                " " +
+                                kyivOffset(
+                                    start
+                                ) +
+                                "\n" +
+                                value +
+                                " " +
+                                plural(
+                                    value,
+                                    "публікація",
+                                    "публікації",
+                                    "публікацій"
+                                );
+
+                            point.appendChild(
+                                title
+                            );
+
+                            compareSvg.appendChild(
+                                point
+                            );
+                        }
+                    );
+
+                    var legendItem =
+                        document.createElement(
+                            "span"
+                        );
+
+                    legendItem.className =
+                        seriesClass;
+                    legendItem.textContent =
+                        item.row.label;
+                    legendItem.title =
+                        item.row.label;
+
+                    compareLegend.appendChild(
+                        legendItem
+                    );
+                }
+            );
+
+            document.getElementById(
+                "topics-compare-note"
+            ).textContent =
+                "Публікації за годину · " +
+                selected.length +
+                " із 5 тем.";
         }
 
         function metric(value, label, extraClass) {
@@ -2144,13 +2687,13 @@
             document.getElementById(
                 "topics-ranking-title"
             ).textContent = isThemes
-                ? "Топ за 24 год"
+                ? "Теми для порівняння"
                 : "Найбільші зміни";
 
             document.getElementById(
                 "topics-ranking-note"
             ).textContent = isThemes
-                ? "Найчастіші маркери поточного потоку."
+                ? "Топ 50 поточного потоку · до 5 для графіка."
                 : "Зміна частки маркера у потоці, п.п.";
         }
 
@@ -2188,8 +2731,11 @@
             renderCloud(rows);
 
             if (state.mode === "themes") {
+                ensureCompareSelection(rows);
+                renderCompare(rows);
                 renderThemeRanking(rows);
             } else {
+                renderCompare(rows);
                 renderChangeRanking(rows);
             }
 
@@ -2271,6 +2817,18 @@
                 }
             );
         });
+
+        compareReset.addEventListener(
+            "click",
+            function () {
+                state.compareIds = [];
+
+                var rows = currentRows();
+
+                renderThemeRanking(rows);
+                renderCompare(rows);
+            }
+        );
 
         document.getElementById(
             "topics-evidence-more"

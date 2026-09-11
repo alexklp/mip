@@ -19,6 +19,16 @@ from test_signals_postgres import FakeConnection
 
 
 class Phase4Tests(unittest.TestCase):
+    def test_pair_budget_operational_ceiling(self):
+        RecallConfig(max_pairs=20000).validate()
+        pg.PostgresLimits(pairs=20000).validate()
+
+        with self.assertRaises(ValueError):
+            RecallConfig(max_pairs=20001).validate()
+
+        with self.assertRaises(ValueError):
+            pg.PostgresLimits(pairs=20001).validate()
+
     def data(self):
         data = multi_source(fixture(*(occurrence(c, c) for c in 'abc'),
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abc')))
@@ -121,7 +131,7 @@ class Phase4Tests(unittest.TestCase):
         self.assertEqual(groups['empty'], dict(selected=0, available=0, limit_reached=False))
         self.assertTrue(groups['z_group']['limit_reached'])
 
-    def test_rank_prioritizes_source_then_content_then_recency(self):
+    def test_rank_prioritizes_recency_then_signal_strength(self):
         data = multi_source(fixture(occurrence('a'), occurrence('b', 'b'), occurrence('c', 'c', hours=25),
             occurrence('d', 'd', hours=25), occurrence('e', 'e', hours=26), occurrence('e3', 'e', source='third', hours=26),
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abcde'),
@@ -130,7 +140,7 @@ class Phase4Tests(unittest.TestCase):
         data = replace(data, occurrences=(*data.occurrences, occurrence('e2', 'e', source='ru2', hours=26)),
                        pairs=(('c', 'd', .1),))
         result = snapshot(data, RecallConfig())
-        self.assertEqual([c['candidate_id'] for c in result['candidates']], ['e', 'c', 'a', 'b'])
+        self.assertEqual([c['candidate_id'] for c in result['candidates']], ['a', 'b', 'c', 'e'])
         validate_snapshot(result)
 
     def test_missing_and_excluded_routing_do_not_make_false_critical(self):
@@ -147,7 +157,7 @@ class Phase4Tests(unittest.TestCase):
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abc')))
         data = replace(data, pairs=())
         result = snapshot(data, RecallConfig(display_limit=2))
-        self.assertEqual([r['candidate_id'] for r in result['candidates']], ['c', 'a'])
+        self.assertEqual([r['candidate_id'] for r in result['candidates']], ['a', 'b'])
         self.assertTrue(result['presentation']['display_limit_reached'])
         self.assertEqual(result['presentation']['eligible_candidate_count'], 3)
         self.assertEqual(result, snapshot(replace(data, occurrences=tuple(reversed(data.occurrences))), RecallConfig(display_limit=2)))

@@ -363,8 +363,13 @@ def validate_snapshot(value: dict) -> None:
                 string(row['text'], config.evidence_chars)
                 if type(row['text_truncated']) is not bool:
                     raise ValueError("Некоректний прапорець evidence")
-        ranked = sorted(value['candidates'], key=lambda c: (-c['cross_space'], -c['source_count'],
-            -c['content_count'], -timestamp(c['last_observed']).timestamp(), c['candidate_id']))
+        ranked = sorted(value['candidates'], key=lambda c: (
+            -timestamp(c['last_observed']).timestamp(),
+            -c['cross_space'],
+            -c['source_count'],
+            -c['content_count'],
+            c['candidate_id'],
+        ))
         if ranked != value['candidates']:
             raise ValueError("Некоректне ранжування candidates")
         if seen_contents - set(selected_ids) or len(seen_contents) > config.max_contents:
