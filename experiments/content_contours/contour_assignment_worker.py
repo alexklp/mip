@@ -124,6 +124,11 @@ def main() -> int:
         action="store_true",
         help="Persist assignments. Default is dry-run.",
     )
+    parser.add_argument(
+        "--c1-only",
+        action="store_true",
+        help="Process only C1 exact object aliases.",
+    )
     args = parser.parse_args()
 
     if args.write:
@@ -237,6 +242,9 @@ def main() -> int:
                     proposed[key] = row
 
             # Calibrated deterministic C2/C3 rules.
+            if args.c1_only:
+                continue
+
             for contour_id, facet_code, rule_code, pattern in RULES:
                 if not pattern.search(full):
                     continue
@@ -267,6 +275,7 @@ def main() -> int:
         print(f"c1_exact_aliases={len(aliases)}")
         print(f"assignment_version={ASSIGNMENT_VERSION}")
         print(f"mode={'WRITE' if args.write else 'DRY-RUN'}")
+        print(f"scope={'C1' if args.c1_only else 'ALL'}")
         print(f"proposed_total={len(proposed)}")
 
         print("\n===== PROPOSED BY SCOPE =====")
