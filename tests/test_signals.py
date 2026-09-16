@@ -10,8 +10,19 @@ import unittest
 from unittest.mock import patch
 
 from reporting.signals_data import Content, Occurrence, SignalData, Source
-from reporting.signals_detector import RecallConfig, cosine_distance
-from reporting.signals_snapshot import build_snapshot, deterministic_json, validate_snapshot, write_snapshot
+from reporting.signals_detector import (
+    ALGORITHM_VERSION,
+    MERGE_ALGORITHM_VERSION,
+    RecallConfig,
+    _merge_supported_groups,
+    cosine_distance,
+)
+from reporting.signals_snapshot import (
+    build_snapshot,
+    deterministic_json,
+    validate_snapshot,
+    write_snapshot,
+)
 
 
 AS_OF = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
@@ -129,6 +140,186 @@ class SignalTests(unittest.TestCase):
         self.assertGreater(cosine_distance(a, c), CONFIG.max_distance)
         data = fixture(occurrence("a", "1"), occurrence("b", "0"), occurrence("c", "2"), contents=(Content("1", "А", a), Content("0", "Б", b), Content("2", "В", c)))
         self.assertEqual([row["content_ids"] for row in snapshot(multi_source(data))["candidates"]], [["0", "1"], ["2"]])
+
+    def test_supported_core_merge_requires_two_cross_links(self):
+        groups = [
+            ["a", "b"],
+            ["c", "d"],
+            ["e"],
+        ]
+        selected = ["a", "b", "c", "d", "e"]
+        pairs = {
+            ("a", "c"): 0.18,
+            ("b", "c"): 0.19,
+            ("d", "e"): 0.10,
+        }
+
+        # На 0.18 між першими cores є лише один link:
+        # жодного merge.
+        self.assertEqual(
+            _merge_supported_groups(
+                groups,
+                pairs,
+                selected,
+                merge_distance=0.18,
+                min_cross_links=2,
+            ),
+            groups,
+        )
+
+        # На 0.19 є два незалежні cross-links:
+        # перші cores зливаються.
+        # Один дуже близький d-e link НЕ тягне за собою e.
+        self.assertEqual(
+            _merge_supported_groups(
+                groups,
+                pairs,
+                selected,
+                merge_distance=0.19,
+                min_cross_links=2,
+            ),
+            [
+                ["a", "b", "c", "d"],
+                ["e"],
+            ],
+        )
+
+    def test_merge_algorithm_version_and_config_contract(self):
+        strict = snapshot(
+            multi_source(fixture(occurrence("strict"))),
+            replace(
+                CONFIG,
+                max_distance=0.18,
+                related_distance=0.36,
+            ),
+        )
+        self.assertEqual(strict["algorithm_version"], ALGORITHM_VERSION)
+        self.assertNotIn("merge_distance", strict["recall"])
+
+        merged = snapshot(
+            multi_source(fixture(occurrence("merged"))),
+            replace(
+                CONFIG,
+                max_distance=0.18,
+                related_distance=0.36,
+                merge_distance=0.19,
+                merge_min_cross_links=2,
+            ),
+        )
+        self.assertEqual(
+            merged["algorithm_version"],
+            MERGE_ALGORITHM_VERSION,
+        )
+        self.assertEqual(merged["recall"]["merge_distance"], 0.19)
+        self.assertEqual(
+            merged["recall"]["merge_min_cross_links"],
+            2,
+        )
+        validate_snapshot(merged)
+
+        for bad in (
+            replace(
+                CONFIG,
+                max_distance=0.18,
+                related_distance=0.36,
+                merge_distance=0.17,
+            ),
+            replace(
+                CONFIG,
+                max_distance=0.18,
+                related_distance=0.36,
+                merge_distance=0.37,
+            ),
+            replace(
+                CONFIG,
+                max_distance=0.18,
+                related_distance=0.36,
+                merge_distance=0.19,
+                merge_min_cross_links=1,
+            ),
+        ):
+            with self.subTest(config=bad), self.assertRaises(ValueError):
+                snapshot(fixture(), bad)
+
+    def test_supported_core_merge_is_opt_in_and_rejects_single_bridge(self):
+        contents = tuple(
+            Content(cid, cid, has_embedding=True)
+            for cid in "abcdef"
+        )
+        data = multi_source(
+            fixture(
+                *(occurrence(cid, cid) for cid in "abcdef"),
+                contents=contents,
+            )
+        )
+        data = replace(
+            data,
+            pairs=(
+                ("a", "b", 0.10),
+                ("c", "d", 0.10),
+                ("e", "f", 0.10),
+                ("a", "c", 0.185),
+                ("b", "c", 0.190),
+                ("d", "e", 0.05),
+            ),
+        )
+
+        base = replace(
+            CONFIG,
+            max_distance=0.18,
+            related_distance=0.36,
+        )
+
+        strict = snapshot(data, base)
+        self.assertEqual(
+            [c["content_ids"] for c in strict["candidates"]],
+            [["a", "b"], ["c", "d"], ["e", "f"]],
+        )
+        self.assertNotIn(
+            "strict_core_group_count",
+            strict["presentation"],
+        )
+
+        merged = snapshot(
+            data,
+            replace(
+                base,
+                merge_distance=0.19,
+                merge_min_cross_links=2,
+            ),
+        )
+
+        self.assertEqual(
+            [c["content_ids"] for c in merged["candidates"]],
+            [["a", "b", "c", "d"], ["e", "f"]],
+        )
+        self.assertEqual(
+            merged["presentation"]["strict_core_group_count"],
+            3,
+        )
+        self.assertEqual(
+            merged["presentation"]["core_group_count"],
+            2,
+        )
+
+        # a-c / b-c стали внутрішніми merge-links;
+        # d-e — один bridge і не повинен об'єднати третій core.
+        membership = {
+            cid: candidate["candidate_id"]
+            for candidate in merged["candidates"]
+            for cid in candidate["content_ids"]
+        }
+        self.assertNotEqual(membership["d"], membership["e"])
+
+        self.assertFalse(
+            any(
+                membership.get(link["left_content_id"])
+                == membership.get(link["right_content_id"])
+                for link in merged["related_links"]
+            )
+        )
+
+        validate_snapshot(merged)
 
     def test_unverified_neutral_distances(self):
         candidate = snapshot(multi_source(fixture(occurrence("one"))))["candidates"][0]

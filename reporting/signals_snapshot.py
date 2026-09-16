@@ -7,7 +7,11 @@ from pathlib import Path
 import tempfile
 
 from reporting.signals_data import SignalData, require_utc, windows, validate_routing_coverage
-from reporting.signals_detector import ALGORITHM_VERSION, RecallConfig, detect
+from reporting.signals_detector import (
+    RecallConfig,
+    algorithm_version,
+    detect,
+)
 
 
 SCHEMA_VERSION = "signals/4"
@@ -21,17 +25,36 @@ def build_snapshot(data: SignalData, *, as_of: datetime, config: RecallConfig, g
     """
     require_utc(as_of)
     generated_at = require_utc(generated_at if generated_at is not None else as_of)
+    recall = {
+        "max_distance": config.max_distance,
+        "related_distance": config.related_distance,
+        "max_related_links": config.max_related_links,
+        "display_limit": config.display_limit,
+        "distance_bands": list(config.distance_bands),
+        "max_contents": config.max_contents,
+        "max_pairs": config.max_pairs,
+        "max_evidence": config.max_evidence,
+        "evidence_chars": config.evidence_chars,
+        "band_rule": "distance <= upper_bound",
+        "distance_reference": "representative",
+    }
+    if config.merge_distance is not None:
+        recall["merge_distance"] = config.merge_distance
+        recall["merge_min_cross_links"] = config.merge_min_cross_links
+
     return {
         "schema_version": SCHEMA_VERSION,
-        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_version": algorithm_version(config),
         "generated_at": generated_at.isoformat(),
         "as_of": as_of.isoformat(),
         "windows": {name: {"start": start.isoformat(), "end": end.isoformat(), "membership_field": "collected_at", "bounds": "[start,end)"} for name, (start, end) in windows(as_of).items()},
         "embedding_model": data.embedding_model,
         "embedding_dimension": data.dimension,
-        "recall": {"max_distance": config.max_distance, "related_distance": config.related_distance, "max_related_links": config.max_related_links, "display_limit": config.display_limit, "distance_bands": list(config.distance_bands), "max_contents": config.max_contents, "max_pairs": config.max_pairs, "max_evidence": config.max_evidence, "evidence_chars": config.evidence_chars, "band_rule": "distance <= upper_bound", "distance_reference": "representative"},
+        "recall": recall,
         **detect(data, as_of=as_of, config=config),
     }
+
+
 
 
 def deterministic_json(snapshot: dict) -> str:
@@ -86,11 +109,26 @@ def validate_snapshot(value: dict) -> None:
         if value['schema_version'] != SCHEMA_VERSION:
             raise ValueError("Непідтримувана версія snapshot")
         recall = value['recall']
-        config = RecallConfig(recall['max_distance'], tuple(recall['distance_bands']),
-            recall['max_contents'], recall['max_pairs'], recall['max_evidence'], recall['evidence_chars'],
-            recall['related_distance'], recall['max_related_links'], recall['display_limit'])
+        config = RecallConfig(
+            recall['max_distance'],
+            tuple(recall['distance_bands']),
+            recall['max_contents'],
+            recall['max_pairs'],
+            recall['max_evidence'],
+            recall['evidence_chars'],
+            recall['related_distance'],
+            recall['max_related_links'],
+            recall['display_limit'],
+            merge_distance=recall.get('merge_distance'),
+            merge_min_cross_links=recall.get('merge_min_cross_links', 2),
+        )
         config.validate()
-        if value['algorithm_version'] != ALGORITHM_VERSION or recall['distance_reference'] != 'representative' or recall['band_rule'] != 'distance <= upper_bound':
+        expected_algorithm = algorithm_version(config)
+        if (
+            value['algorithm_version'] != expected_algorithm
+            or recall['distance_reference'] != 'representative'
+            or recall['band_rule'] != 'distance <= upper_bound'
+        ):
             raise ValueError("Некоректний контракт алгоритму")
         as_of, generated = timestamp(value['as_of']), timestamp(value['generated_at'])
         if generated < as_of:
@@ -201,6 +239,13 @@ def validate_snapshot(value: dict) -> None:
         for key in ('core_group_count', 'eligible_candidate_count', 'displayed_candidate_count',
                     'related_links_available', 'related_link_count', 'display_limit'):
             nonnegative(presentation[key])
+        if config.merge_distance is not None:
+            nonnegative(presentation['strict_core_group_count'])
+            if presentation['strict_core_group_count'] < presentation['core_group_count']:
+                raise ValueError("Merge не може збільшувати кількість strict cores")
+        elif 'strict_core_group_count' in presentation:
+            raise ValueError("Неочікувана merge metadata")
+
         suppressed = presentation['suppressed']
         if set(suppressed) != {'singleton_single_source', 'repeated_content_single_source', 'core_single_source'}:
             raise ValueError("Некоректні причини suppression")
@@ -271,9 +316,19 @@ def validate_snapshot(value: dict) -> None:
             for row in distances:
                 distance = row['distance']
                 if distance is None:
-                    if len(members) != 1 or row['distance_band'] != 'unavailable':
+                    if (
+                        row['distance_band'] != 'unavailable'
+                        or (config.merge_distance is None and len(members) != 1)
+                    ):
                         raise ValueError("Невідома відстань у семантичній групі")
-                elif type(distance) not in (float, int) or not 0 <= distance <= config.max_distance or row['distance_band'] != config.band(distance) or (row['content_id'] == cid and distance != 0):
+                elif (
+                    type(distance) not in (float, int)
+                    or not 0 <= distance <= (
+                        2 if config.merge_distance is not None else config.max_distance
+                    )
+                    or row['distance_band'] != config.band(distance)
+                    or (row['content_id'] == cid and distance != 0)
+                ):
                     raise ValueError("Некоректна відстань пакета")
             nonnegative(candidate['evidence_omitted_count'])
             if set(candidate['dynamics']) != {'ru_space', 'ua_space'}:
@@ -363,6 +418,7 @@ def validate_snapshot(value: dict) -> None:
                 string(row['text'], config.evidence_chars)
                 if type(row['text_truncated']) is not bool:
                     raise ValueError("Некоректний прапорець evidence")
+
         ranked = sorted(value['candidates'], key=lambda c: (
             -timestamp(c['last_observed']).timestamp(),
             -c['cross_space'],
@@ -415,6 +471,18 @@ def main(argv=None) -> int:
     parser.add_argument('--rows', type=int, required=True)
     parser.add_argument('--max-distance', '--core-distance', type=float, default=0.18)
     parser.add_argument('--related-distance', type=float, default=0.36)
+    parser.add_argument(
+        '--merge-distance',
+        type=float,
+        default=None,
+        help='Другий етап merge strict cores; за замовчуванням вимкнений',
+    )
+    parser.add_argument(
+        '--merge-min-cross-links',
+        type=int,
+        default=2,
+        help='Мінімальна кількість content-pairs між strict cores для merge',
+    )
     parser.add_argument('--max-related-links', type=int, default=100)
     parser.add_argument('--display-limit', type=int, default=20)
     parser.add_argument('--ann-probe-limit', type=int, default=100)
@@ -451,8 +519,13 @@ def main(argv=None) -> int:
         config = RecallConfig(args.max_distance, tuple(args.distance_bands),
             max_contents=max_contents, max_pairs=args.pairs,
             max_evidence=args.max_evidence, evidence_chars=args.evidence_chars,
-            related_distance=args.related_distance, max_related_links=args.max_related_links, display_limit=args.display_limit)
+            related_distance=args.related_distance,
+            max_related_links=args.max_related_links,
+            display_limit=args.display_limit,
+            merge_distance=args.merge_distance,
+            merge_min_cross_links=args.merge_min_cross_links)
         config.validate()
+
         # Не читаємо .env та конфігурацію застосунку. Libpq відкриває лише
         # явно запитане оператором підключення; секрети не друкуються.
         stage = 'доступність драйвера'
@@ -479,12 +552,25 @@ def main(argv=None) -> int:
         stage = 'SELECT та контракт даних'
         data = adapter.read(as_of=as_of, embedding_model=args.model, dimension=args.dimension)
         stage = 'валідація snapshot'
-        result = build_snapshot(data, as_of=as_of, config=config, generated_at=datetime.now(timezone.utc))
+        result = build_snapshot(
+            data,
+            as_of=as_of,
+            config=config,
+            generated_at=datetime.now(timezone.utc),
+        )
         validate_snapshot(result)
         if args.benchmark:
-            print(deterministic_json({'status': 'UNVERIFIED', 'timings': adapter.timings,
-                'as_of': result['as_of'], 'routing_coverage': result['routing_coverage'],
-                'presentation': result['presentation'], 'selection': result['selection'], 'critical_incomplete': result['critical_incomplete']}), end='')
+            print(deterministic_json({
+                'status': 'UNVERIFIED',
+                'algorithm_version': result['algorithm_version'],
+                'recall': result['recall'],
+                'timings': adapter.timings,
+                'as_of': result['as_of'],
+                'routing_coverage': result['routing_coverage'],
+                'presentation': result['presentation'],
+                'selection': result['selection'],
+                'critical_incomplete': result['critical_incomplete'],
+            }), end='')
         if result['critical_incomplete']:
             stage = 'критично неповні evidence'
             raise ValueError("Критично неповні evidence; попередній snapshot збережено")

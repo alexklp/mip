@@ -8,6 +8,7 @@ from reporting.signals_data import SPACES, ROUTING_DECISIONS, SignalData, window
 
 
 ALGORITHM_VERSION = "signals-routing-core-review/4"
+MERGE_ALGORITHM_VERSION = "signals-routing-core-merge-review/5"
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,8 @@ class RecallConfig:
     related_distance: float = 0.36
     max_related_links: int = 100
     display_limit: int = 20
+    merge_distance: float | None = None
+    merge_min_cross_links: int = 2
 
     def validate(self) -> None:
         values = (self.max_distance, self.related_distance, *self.distance_bands)
@@ -28,6 +31,18 @@ class RecallConfig:
             raise ValueError("Cosine distance має бути в межах [0, 2]")
         if self.related_distance < self.max_distance:
             raise ValueError("Related threshold не може бути меншим за core")
+        if self.merge_distance is not None:
+            if (
+                type(self.merge_distance) not in (int, float)
+                or not math.isfinite(self.merge_distance)
+                or not self.max_distance <= self.merge_distance <= self.related_distance
+            ):
+                raise ValueError("Merge threshold має бути між core та related")
+            if (
+                type(self.merge_min_cross_links) is not int
+                or not 2 <= self.merge_min_cross_links <= 100
+            ):
+                raise ValueError("Некоректна кількість cross-links для merge")
         if tuple(sorted(set(self.distance_bands))) != self.distance_bands:
             raise ValueError("Межі distance bands мають строго зростати")
         for name, ceiling in (("display_limit", 200), ("max_related_links", 1000), ("max_pairs", 20000), ("max_evidence", 100), ("evidence_chars", 2000), ("max_contents", 2000)):
@@ -38,6 +53,15 @@ class RecallConfig:
     def band(self, distance: float) -> str:
         """band_0 включає першу межу; останній band не має верхньої межі."""
         return f"band_{sum(distance > edge for edge in self.distance_bands)}"
+
+
+def algorithm_version(config: RecallConfig) -> str:
+    """Версія алгоритму залежить від фактично увімкненого grouping contract."""
+    return (
+        MERGE_ALGORITHM_VERSION
+        if config.merge_distance is not None
+        else ALGORITHM_VERSION
+    )
 
 
 def cosine_distance(left: tuple, right: tuple) -> float:
@@ -54,8 +78,114 @@ def counts(rows) -> dict:
     }
 
 
+def _merge_supported_groups(
+    groups,
+    pair_distances,
+    selected,
+    *,
+    merge_distance: float,
+    min_cross_links: int,
+):
+    """Об'єднуємо strict cores лише за повторюваною міжгруповою підтримкою.
+
+    Один близький міст не зливає cores. Транзитивність допускається лише
+    між cores, кожне ребро між якими має щонайменше min_cross_links
+    незалежних content-pairs у межах merge_distance.
+    """
+    if not groups:
+        return []
+
+    if (
+        type(merge_distance) not in (int, float)
+        or not math.isfinite(merge_distance)
+        or not 0 <= merge_distance <= 2
+    ):
+        raise ValueError("Некоректний merge distance")
+
+    if type(min_cross_links) is not int or min_cross_links < 2:
+        raise ValueError("Core merge потребує щонайменше двох cross-links")
+
+    group_of = {
+        cid: group_index
+        for group_index, group in enumerate(groups)
+        for cid in group
+    }
+
+    support = {}
+
+    for (left, right), distance_value in pair_distances.items():
+        if distance_value > merge_distance:
+            continue
+
+        left_group = group_of.get(left)
+        right_group = group_of.get(right)
+
+        if (
+            left_group is None
+            or right_group is None
+            or left_group == right_group
+        ):
+            continue
+
+        edge = tuple(sorted((left_group, right_group)))
+        support[edge] = support.get(edge, 0) + 1
+
+    parent = list(range(len(groups)))
+
+    def find(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left, right):
+        left_root = find(left)
+        right_root = find(right)
+
+        if left_root == right_root:
+            return
+
+        # Менший strict-core index завжди стає коренем:
+        # результат не залежить від порядку dict/pairs.
+        if left_root > right_root:
+            left_root, right_root = right_root, left_root
+
+        parent[right_root] = left_root
+
+    for (left_group, right_group), link_count in sorted(support.items()):
+        if link_count >= min_cross_links:
+            union(left_group, right_group)
+
+    components = {}
+
+    for group_index, group in enumerate(groups):
+        root = find(group_index)
+        components.setdefault(root, []).extend(group)
+
+    selected_order = {
+        cid: index
+        for index, cid in enumerate(selected)
+    }
+
+    merged = [
+        sorted(
+            members,
+            key=lambda cid: selected_order[cid],
+        )
+        for _, members in sorted(
+            components.items(),
+            key=lambda item: min(
+                selected_order[cid]
+                for cid in item[1]
+            ),
+        )
+    ]
+
+    return merged
+
+
 def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
-    """Обмежений complete-link recall без транзитивного злиття.
+    """Двоступеневий recall: strict complete-link cores + opt-in supported merge.
 
     Відбір за свіжістю та спостережуваністю; content hash розв'язує рівність.
     Production використовує SQL-пари; локальний fallback має бюджет.
@@ -189,6 +319,24 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
         else:
             membership[cid] = membership[target[0]]
             target.append(cid)
+
+    strict_groups = [list(group) for group in groups]
+
+    if config.merge_distance is not None:
+        groups = _merge_supported_groups(
+            strict_groups,
+            pair_distances,
+            selected,
+            merge_distance=config.merge_distance,
+            min_cross_links=config.merge_min_cross_links,
+        )
+
+    final_membership = {
+        cid: group_index
+        for group_index, group in enumerate(groups)
+        for cid in group
+    }
+
     truncated = truncated or exhausted
     candidates = []
     suppressed = dict(singleton_single_source=0, repeated_content_single_source=0, core_single_source=0)
@@ -248,8 +396,17 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
         for cid in group:
             value = distance(cid, representative)
             distances.append({"content_id": cid, "distance": value, "distance_band": config.band(value) if value is not None else "unavailable"})
+        search_text = " ".join(
+            dict.fromkeys(
+                contents[cid].title.strip()
+                for cid in group
+                if contents[cid].title.strip()
+            )
+        )[:12000]
+
         candidates.append({
             "candidate_id": representative,
+            "search_text": search_text,
             "last_observed": candidate_rows[-1].collected_at.isoformat(),
             "representative_content_id": representative,
             "content_ids": group,
@@ -285,7 +442,10 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
     related = [{"left_content_id": a, "right_content_id": b, "distance": d,
                 "interpretation_status": "unverified"}
                for (a, b), d in pair_distances.items()
-               if a in selected_set and b in selected_set and config.max_distance < d <= config.related_distance]
+               if a in selected_set
+               and b in selected_set
+               and final_membership.get(a) != final_membership.get(b)
+               and config.max_distance < d <= config.related_distance]
     related.sort(key=lambda row: (row['distance'], row['left_content_id'], row['right_content_id']))
     related_available = len(related)
     related = related[:config.max_related_links]
@@ -294,6 +454,8 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
         display_limit_reached=eligible_count > len(candidates), suppressed=suppressed,
         related_links_available=related_available, related_link_count=len(related),
         related_limit_reached=related_available > len(related))
+    if config.merge_distance is not None:
+        presentation["strict_core_group_count"] = len(strict_groups)
     truncated = truncated or presentation['display_limit_reached'] or presentation['related_limit_reached']
     missing = any(contents[cid].embedding is None and not contents[cid].has_embedding for cid in eligible_ids)
     missing = missing or any(coverage[name][space]["missing_embedding_content_count"] for name in bounds for space in SPACES)

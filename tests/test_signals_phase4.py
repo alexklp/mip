@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from reporting import signals_postgres as pg
 from reporting.signals_data import Content, Source
-from reporting.signals_detector import RecallConfig
+from reporting.signals_detector import MERGE_ALGORITHM_VERSION, RecallConfig
 from reporting.signals_snapshot import main, validate_snapshot
 from test_signals import AS_OF, fixture, occurrence, multi_source, snapshot
 from test_signals_postgres import FakeConnection
@@ -211,6 +211,45 @@ class Phase4Tests(unittest.TestCase):
             mutate(damaged['selection'])
             with self.assertRaises(ValueError):
                 validate_snapshot(damaged)
+
+    def test_cli_merge_contract_is_opt_in(self):
+        helper = postgres_tests.RunnerTests()
+        conn = FakeConnection()
+        out = io.StringIO()
+
+        with (
+            patch.dict('sys.modules', helper.driver(conn)),
+            patch('sys.stdout', out),
+        ):
+            self.assertEqual(
+                main(
+                    helper.args()
+                    + [
+                        '--merge-distance', '0.19',
+                        '--merge-min-cross-links', '2',
+                    ]
+                ),
+                0,
+            )
+
+        result = json.loads(out.getvalue())
+
+        self.assertEqual(
+            result['algorithm_version'],
+            MERGE_ALGORITHM_VERSION,
+        )
+        self.assertEqual(
+            result['recall']['merge_distance'],
+            0.19,
+        )
+        self.assertEqual(
+            result['recall']['merge_min_cross_links'],
+            2,
+        )
+        self.assertEqual(
+            result['presentation']['strict_core_group_count'],
+            1,
+        )
 
     def test_cli_ann_probe_and_no_snapshot(self):
         helper = postgres_tests.RunnerTests()
