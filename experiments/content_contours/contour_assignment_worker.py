@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """Content Contours persistence worker v1.
 
-v1 persists only calibrated CONFIRMED assignments:
-- C1: exact verified object alias;
-- C2: deterministic high-precision anchors for sanctions, military aid,
-      defence industry;
-- C3: deterministic presidential/state-decision anchor.
+v1 persistence contract:
+- C1 exact object aliases:
+  verified registry entries -> CONFIRMED;
+  candidate registry entries -> CANDIDATE;
+  conflict / unsupported verification states -> ignored;
+- C2: deterministic high-precision CONFIRMED anchors for sanctions,
+      military aid, defence industry;
+- C3: deterministic presidential/state-decision CONFIRMED anchor.
 
-Semantic-only candidates are intentionally not persisted in v1 because no
-accepted candidate threshold/policy has been measured yet.
+Semantic-only candidates are intentionally not persisted by this worker.
 """
 
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import re
 import subprocess
 from collections import Counter
@@ -26,11 +29,26 @@ ASSIGNMENT_VERSION = 1
 
 
 def norm_text(title: str | None, text: str | None) -> str:
-    return re.sub(
-        r"\s+",
-        " ",
-        f"{title or ''} {text or ''}".casefold(),
-    ).strip()
+    value = f"{title or ''} {text or ''}".casefold()
+
+    value = value.translate(
+        str.maketrans(
+            {
+                "’": "'",
+                "ʼ": "'",
+                "`": "'",
+                "‐": "-",
+                "-": "-",
+                "‒": "-",
+                "–": "-",
+                "—": "-",
+                "−": "-",
+                "ё": "е",
+            }
+        )
+    )
+
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def alias_pattern(alias: str) -> re.Pattern:
@@ -106,13 +124,29 @@ def git_revision() -> str:
 
 
 def require_clean_git() -> None:
+    worker_path = Path(__file__).resolve()
+    repo_root = Path(
+        subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"],
+            text=True,
+        ).strip()
+    ).resolve()
+    relative_path = worker_path.relative_to(repo_root)
+
     dirty = subprocess.check_output(
-        ["git", "status", "--porcelain"],
+        [
+            "git",
+            "status",
+            "--porcelain",
+            "--",
+            str(relative_path),
+        ],
         text=True,
     ).strip()
+
     if dirty:
         raise RuntimeError(
-            "Refusing --write with dirty working tree. "
+            "Refusing --write with dirty contour assignment worker. "
             "Commit the worker first."
         )
 
@@ -151,7 +185,8 @@ def main() -> int:
                     e.reference_id,
                     e.object_id,
                     e.reference_text,
-                    o.canonical_name
+                    o.canonical_name,
+                    e.verification_status
                 FROM contour_reference_entries e
                 JOIN contour_reference_objects o
                   ON o.object_id = e.object_id
@@ -159,6 +194,13 @@ def main() -> int:
                   AND e.entry_type = 'alias'
                   AND e.active
                   AND e.match_mode IN ('exact', 'both')
+                  AND e.verification_status IN (
+                      'public_official_current',
+                      'public_official_historical',
+                      'public_corroborated',
+                      'internal_verified',
+                      'candidate'
+                  )
                 ORDER BY e.reference_id
                 """
             )
@@ -180,9 +222,16 @@ def main() -> int:
                 object_id,
                 canonical_name,
                 reference_text,
+                verification_status,
                 alias_pattern(reference_text),
             )
-            for reference_id, object_id, reference_text, canonical_name
+            for (
+                reference_id,
+                object_id,
+                reference_text,
+                canonical_name,
+                verification_status,
+            )
             in aliases
         ]
 
@@ -210,6 +259,7 @@ def main() -> int:
                 object_id,
                 canonical_name,
                 alias,
+                verification_status,
                 pattern,
             ) in compiled_aliases:
                 if not pattern.search(full):
@@ -227,18 +277,41 @@ def main() -> int:
                     "contour_id": 1,
                     "facet_code": None,
                     "object_id": object_id,
-                    "status": "confirmed",
+                    "status": (
+                        "candidate"
+                        if verification_status == "candidate"
+                        else "confirmed"
+                    ),
                     "evidence_type": "exact_reference",
                     "reference_id": reference_id,
                     "rule_code": None,
-                    "reason": f"exact alias: {alias}",
+                    "reason": (
+                        f"exact alias: {alias}; "
+                        f"reference_status={verification_status}"
+                    ),
                     "label": f"C1:{canonical_name}",
                 }
 
                 # Multiple aliases may identify the same object.
-                # Keep deterministic smallest reference_id as winning evidence.
+                # Verified evidence always wins over candidate evidence;
+                # reference_id provides deterministic tie-breaking.
                 old = proposed.get(key)
-                if old is None or reference_id < old["reference_id"]:
+
+                row_priority = (
+                    0 if row["status"] == "confirmed" else 1,
+                    reference_id,
+                )
+
+                old_priority = (
+                    (
+                        0 if old["status"] == "confirmed" else 1,
+                        old["reference_id"],
+                    )
+                    if old is not None
+                    else None
+                )
+
+                if old is None or row_priority < old_priority:
                     proposed[key] = row
 
             # Calibrated deterministic C2/C3 rules.
@@ -270,6 +343,7 @@ def main() -> int:
                 }
 
         counts = Counter(row["label"] for row in proposed.values())
+        status_counts = Counter(row["status"] for row in proposed.values())
 
         print(f"content_total={len(content)}")
         print(f"c1_exact_aliases={len(aliases)}")
@@ -277,6 +351,12 @@ def main() -> int:
         print(f"mode={'WRITE' if args.write else 'DRY-RUN'}")
         print(f"scope={'C1' if args.c1_only else 'ALL'}")
         print(f"proposed_total={len(proposed)}")
+        print(
+            "proposed_confirmed="
+            f"{status_counts.get('confirmed', 0)} "
+            "proposed_candidate="
+            f"{status_counts.get('candidate', 0)}"
+        )
 
         print("\n===== PROPOSED BY SCOPE =====")
         for label, count in sorted(counts.items()):
@@ -289,7 +369,7 @@ def main() -> int:
         revision = git_revision()
 
         with conn.cursor() as cur:
-            inserted = 0
+            written = 0
 
             for row in proposed.values():
                 cur.execute(
@@ -313,7 +393,25 @@ def main() -> int:
                         %s, %s, %s, %s, %s, %s,
                         %s, %s, NULL, %s, NULL, %s, %s
                     )
-                    ON CONFLICT DO NOTHING
+                    ON CONFLICT (
+                        content_id,
+                        monitoring_contour_id,
+                        assignment_version,
+                        facet_code,
+                        object_id
+                    )
+                    DO UPDATE SET
+                        status = EXCLUDED.status,
+                        evidence_type = EXCLUDED.evidence_type,
+                        reference_id = EXCLUDED.reference_id,
+                        embedding_model_id = EXCLUDED.embedding_model_id,
+                        rule_code = EXCLUDED.rule_code,
+                        score = EXCLUDED.score,
+                        reason = EXCLUDED.reason,
+                        code_revision = EXCLUDED.code_revision
+                    WHERE
+                        content_contour_assignments.status = 'candidate'
+                        AND EXCLUDED.status = 'confirmed'
                     """,
                     (
                         row["content_id"],
@@ -329,7 +427,7 @@ def main() -> int:
                         revision,
                     ),
                 )
-                inserted += cur.rowcount
+                written += cur.rowcount
 
         conn.commit()
 
