@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import tempfile
 import time
 from collections import Counter, defaultdict
@@ -38,7 +39,7 @@ HERE = Path(__file__).resolve().parent
 DEFAULT_OUTPUT = HERE / "topics.latest.json"
 
 SCHEMA_VERSION = "topics/1"
-ALGORITHM_VERSION = "topics-lexical-rolling/1"
+ALGORITHM_VERSION = "topics-lexical-monitored-cache/2"
 
 SOURCE_GROUPS = ("ru_space", "ua_space")
 VIEWS = ("all",) + SOURCE_GROUPS
@@ -74,6 +75,7 @@ WITH latest AS (
         routing_version,
         decision
     FROM content_routing_decisions
+    WHERE created_at < %s
     ORDER BY
         content_id,
         routing_version DESC,
@@ -100,10 +102,11 @@ JOIN sources s
   ON s.source_id = io.source_id
 JOIN latest r
   ON r.content_id = io.content_id
-WHERE r.decision = 'analyze'
+WHERE r.decision IN ('analyze', 'maybe')
   AND s.source_group IN ('ua_space', 'ru_space')
   AND COALESCE(io.published_at, io.collected_at) >= %s
   AND COALESCE(io.published_at, io.collected_at) < %s
+  AND io.collected_at < %s
 ORDER BY
     COALESCE(io.published_at, io.collected_at),
     io.occurrence_id
@@ -182,7 +185,12 @@ def fetch_rows() -> tuple[datetime, list[dict[str, Any]]]:
 
         raw = conn.execute(
             SQL,
-            (start_at, as_of),
+            (
+                as_of,
+                start_at,
+                as_of,
+                as_of,
+            ),
         ).fetchall()
 
     rows = []
@@ -225,6 +233,157 @@ def fetch_rows() -> tuple[datetime, list[dict[str, Any]]]:
     return as_of, rows
 
 
+
+FEED_BOILERPLATE_RE = re.compile(
+    r"\s*(?:<p>\s*)?The post\b.*?\bfirst appeared on\b.*?(?:</p>\s*)?$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+ENTITY_MARKER_ALIASES = {
+    "володимир путін": {
+        "words": {
+            "путін",
+            "путин",
+        },
+        "phrases": {
+            "володимир путін",
+            "владимир путин",
+        },
+    },
+    "володимир зеленський": {
+        "words": {
+            "зеленський",
+            "зеленский",
+        },
+        "phrases": {
+            "володимир зеленський",
+            "владимир зеленский",
+        },
+    },
+}
+
+
+def strip_feed_boilerplate(text: str) -> str:
+    """Remove known RSS/CMS footer noise from Topics input only."""
+    return FEED_BOILERPLATE_RE.sub("", text)
+
+
+def canonicalize_entity_terms(
+    words: set[str],
+    phrases: set[str],
+) -> tuple[set[str], set[str]]:
+    """
+    Collapse selected cross-language unigram/bigram aliases into one
+    phrase marker per entity.
+
+    The canonical marker is inserted once per content, so publication
+    counts remain document-distinct rather than alias-additive.
+    """
+    words = set(words)
+    phrases = set(phrases)
+
+    for canonical, aliases in ENTITY_MARKER_ALIASES.items():
+        matched = bool(
+            words.intersection(aliases["words"])
+            or phrases.intersection(aliases["phrases"])
+        )
+
+        if not matched:
+            continue
+
+        words.difference_update(aliases["words"])
+        phrases.difference_update(aliases["phrases"])
+        phrases.add(canonical)
+
+    return words, phrases
+
+
+
+TOPICS_NLP_CACHE_VERSION = "topics-nlp-cache/1"
+
+TOPICS_NLP_CACHE_PATH = (
+    Path.home()
+    / ".local"
+    / "state"
+    / "mip"
+    / "topics_nlp_cache_v1.jsonl"
+)
+
+TOPICS_MIN_NLP_COVERAGE_PCT = 95.0
+
+
+def topics_nlp_cache_input_hash(
+    text: str,
+    source_names: list[str],
+) -> str:
+    payload = json.dumps(
+        {
+            "cache_version": TOPICS_NLP_CACHE_VERSION,
+            "text": text,
+            "source_names": sorted(source_names),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    return hashlib.sha256(
+        payload.encode("utf-8")
+    ).hexdigest()
+
+
+def load_topics_nlp_cache() -> dict[
+    tuple[str, str],
+    dict[str, Any],
+]:
+    result = {}
+
+    if not TOPICS_NLP_CACHE_PATH.is_file():
+        return result
+
+    with TOPICS_NLP_CACHE_PATH.open(
+        encoding="utf-8"
+    ) as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+
+            if (
+                row.get("cache_version")
+                != TOPICS_NLP_CACHE_VERSION
+            ):
+                continue
+
+            content_id = row.get("content_id")
+            fingerprint = row.get("input_hash")
+            tokens = row.get("tokens", [])
+            surfaces = row.get("surfaces", [])
+
+            if (
+                not content_id
+                or not fingerprint
+                or row.get("lang") == "error"
+                or not isinstance(tokens, list)
+                or not isinstance(surfaces, list)
+                or len(tokens) != len(surfaces)
+            ):
+                continue
+
+            result[
+                (
+                    str(content_id),
+                    fingerprint,
+                )
+            ] = row
+
+    return result
+
+
 def process_contents(
     rows: list[dict[str, Any]],
 ) -> tuple[
@@ -255,6 +414,10 @@ def process_contents(
     phrase_labels: dict[str, Counter] = defaultdict(Counter)
     language_counts = Counter()
 
+    nlp_cache = load_topics_nlp_cache()
+    cache_hits = 0
+    cache_misses = 0
+
     total = len(contents)
     started = time.perf_counter()
 
@@ -262,20 +425,35 @@ def process_contents(
         contents.items(),
         1,
     ):
-        cleaned = clean_text(
-            text,
-            sorted(content_sources[content_id]),
-            rules,
+        source_names = sorted(
+            content_sources[content_id]
         )
 
-        lang = detect_language(cleaned)
+        fingerprint = (
+            topics_nlp_cache_input_hash(
+                text,
+                source_names,
+            )
+        )
+
+        cached = nlp_cache.get(
+            (
+                str(content_id),
+                fingerprint,
+            )
+        )
+
+        if cached is None:
+            cache_misses += 1
+            continue
+
+        cache_hits += 1
+
+        lang = cached["lang"]
+        tokens = cached["tokens"]
+        surfaces = cached["surfaces"]
+
         language_counts[lang] += 1
-
-        tokens, surfaces = analysis_tokens_with_surfaces(
-            cleaned,
-            lang,
-            stopwords,
-        )
 
         words = document_terms(
             tokens,
@@ -287,6 +465,11 @@ def process_contents(
             tokens,
             ngram=2,
             stopwords=stopwords,
+        )
+
+        words, phrases = canonicalize_entity_terms(
+            words,
+            phrases,
         )
 
         visible_words = {
@@ -330,10 +513,24 @@ def process_contents(
                 flush=True,
             )
 
+    print(
+        "Topics NLP cache: "
+        f"hits={cache_hits} "
+        f"misses={cache_misses}",
+        flush=True,
+    )
+
+    cache_status = {
+        "hits": cache_hits,
+        "misses": cache_misses,
+        "total": total,
+    }
+
     return (
         terms_by_content,
         phrase_labels,
         language_counts,
+        cache_status,
     )
 
 
@@ -1523,7 +1720,7 @@ def build_snapshot() -> dict[str, Any]:
 
     if not rows:
         raise RuntimeError(
-            "No analyze occurrences "
+            "No monitored occurrences "
             "in the last 48 hours"
         )
 
@@ -1531,9 +1728,66 @@ def build_snapshot() -> dict[str, Any]:
         terms_by_content,
         phrase_labels,
         language_counts,
+        cache_status,
     ) = process_contents(rows)
 
     nlp_finished = time.perf_counter()
+
+    covered_content_ids = set(
+        terms_by_content
+    )
+
+    analyzed_publications = sum(
+        row["content_id"] in covered_content_ids
+        for row in rows
+    )
+
+    total_publications = len(rows)
+
+    publication_coverage_pct = (
+        100.0
+        * analyzed_publications
+        / total_publications
+        if total_publications
+        else 0.0
+    )
+
+    material_coverage_pct = (
+        100.0
+        * cache_status["hits"]
+        / cache_status["total"]
+        if cache_status["total"]
+        else 0.0
+    )
+
+    nlp_coverage = {
+        "input_publications": total_publications,
+        "analyzed_publications": analyzed_publications,
+        "publication_coverage_pct": round(
+            publication_coverage_pct,
+            3,
+        ),
+        "input_materials": cache_status["total"],
+        "analyzed_materials": cache_status["hits"],
+        "missing_materials": cache_status["misses"],
+        "material_coverage_pct": round(
+            material_coverage_pct,
+            3,
+        ),
+        "minimum_required_pct": (
+            TOPICS_MIN_NLP_COVERAGE_PCT
+        ),
+    }
+
+    if (
+        publication_coverage_pct
+        < TOPICS_MIN_NLP_COVERAGE_PCT
+    ):
+        raise RuntimeError(
+            "Topics NLP cache coverage too low: "
+            f"{publication_coverage_pct:.2f}% "
+            f"< {TOPICS_MIN_NLP_COVERAGE_PCT:.2f}%"
+        )
 
     (
         _term_to_marker,
@@ -1605,6 +1859,16 @@ def build_snapshot() -> dict[str, Any]:
             "collected_at як fallback часу."
         )
 
+    if cache_status["misses"]:
+        warnings.append(
+            "NLP cache coverage: "
+            f"{publication_coverage_pct:.2f}% "
+            f"публікацій; "
+            f"{cache_status['misses']} "
+            "матеріалів ще не мають "
+            "актуального NLP cache."
+        )
+
     routing_versions = sorted(
         {
             row["routing_version"]
@@ -1647,9 +1911,14 @@ def build_snapshot() -> dict[str, Any]:
             "routing": {
                 "resolution": (
                     "latest decision "
-                    "per content_id"
+                    "per content_id "
+                    "with created_at < as_of"
                 ),
-                "decision": "analyze",
+                "decision": "analyze_or_maybe",
+                "decisions": [
+                    "analyze",
+                    "maybe",
+                ],
                 "routing_versions": (
                     routing_versions
                 ),
@@ -1669,6 +1938,7 @@ def build_snapshot() -> dict[str, Any]:
             ),
         },
         "summary": summary,
+        "nlp_coverage": nlp_coverage,
         "languages": dict(
             language_counts
         ),
@@ -1676,7 +1946,9 @@ def build_snapshot() -> dict[str, Any]:
         "markers": markers,
         "occurrences": occurrences,
         "warnings": warnings,
-        "incomplete": False,
+        "incomplete": bool(
+            cache_status["misses"]
+        ),
         "critical_incomplete": False,
         "timings": {
             "db_read_seconds": round(

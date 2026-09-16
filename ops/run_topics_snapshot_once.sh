@@ -26,10 +26,29 @@ fi
     cd "$ROOT"
 
     set +e
+
+    echo "TOPICS CACHE START $(date --iso-8601=seconds)"
+
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=reporting:. \
+        nice -n 10 \
+        "$PYTHON" \
+        reporting/build_topics_nlp_cache.py \
+        --since-hours 48 \
+        --workers 4 \
+        --chunk 25
+
+    cache_rc=$?
+
+    echo "TOPICS CACHE END rc=$cache_rc $(date --iso-8601=seconds)"
+
+    echo "TOPICS SNAPSHOT BUILD $(date --iso-8601=seconds)"
+
     nice -n 10 \
         "$PYTHON" \
         reporting/topics_snapshot.py \
         --output reporting/topics.latest.json
+
     rc=$?
     set -e
 
