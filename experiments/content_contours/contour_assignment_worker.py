@@ -431,7 +431,7 @@ def main() -> int:
 
         conn.commit()
 
-        print(f"\ninserted={inserted}")
+        print(f"\nwritten={written}")
         print(f"code_revision={revision}")
 
     return 0
