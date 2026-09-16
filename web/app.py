@@ -6,6 +6,7 @@ GET /materials  -- список публікацій (item_occurrences) з жи�
 """
 
 import csv
+import datetime
 import io
 import sys
 from pathlib import Path
@@ -31,6 +32,18 @@ from web.materials import (
     fetch_materials,
 )
 from web.overview import fetch_overview_stats
+from web.contours import (
+    fetch_contours,
+    fetch_c1_summary,
+    fetch_c1_daily_trend,
+    fetch_c1_active_objects,
+    fetch_c1_changes,
+)
+from web.objects import (
+    fetch_c1_evidence,
+    fetch_object_evidence,
+    fetch_objects_overview,
+)
 from web.sources import fetch_sources_overview
 from web.theses import EXPORT_PER_CONTOUR_LIMIT, fetch_theses_by_contour
 from web.timefmt import (
@@ -235,6 +248,291 @@ def materials(
             "materials": rows,
             "sources": sources,
             "filters": filters,
+        },
+    )
+
+
+CONTOUR_SHORT_NAMES = {
+    "dshv_objects": "Об'єкти ДШВ",
+    "world_context": "Світ",
+    "national_context": "Держава",
+    "enemy_media": "Противник",
+}
+
+
+@app.get("/contours", response_class=HTMLResponse)
+def contours_page(
+    request: Request,
+    contour: str = "dshv_objects",
+    object_id: int | None = None,
+    day: datetime.date | None = None,
+) -> HTMLResponse:
+    """Аналітичний простір чотирьох контурів моніторингу."""
+    try:
+        with read_connection() as conn:
+            contour_rows = fetch_contours(conn)
+
+            contour_by_code = {
+                row["code"]: row
+                for row in contour_rows
+            }
+
+            if contour not in contour_by_code:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Контур моніторингу не знайдено.",
+                )
+
+            tabs = [
+                {
+                    **row,
+                    "short_name": CONTOUR_SHORT_NAMES.get(
+                        row["code"],
+                        row["name"],
+                    ),
+                }
+                for row in contour_rows
+            ]
+
+            context = {
+                "active_page": "contours",
+                "contours": tabs,
+                "current_contour": contour_by_code[contour],
+                "current_code": contour,
+                "page_updated_at": datetime.datetime.now(
+                    datetime.timezone.utc
+                ),
+            }
+
+            if contour == "dshv_objects":
+                summary = fetch_c1_summary(conn)
+                trend = fetch_c1_daily_trend(
+                    conn,
+                    object_id=object_id,
+                )
+                active_objects = fetch_c1_active_objects(
+                    conn,
+                    day=day,
+                )
+                changes = fetch_c1_changes(conn)
+                context["changes"] = changes
+                all_objects = fetch_objects_overview(conn)
+
+                trend_days = {
+                    row["day"]
+                    for row in trend
+                }
+
+                if day is not None and day not in trend_days:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="День поза межами поточного 7-денного вікна.",
+                    )
+
+                trend_max = max(
+                    (int(row["materials"]) for row in trend),
+                    default=0,
+                ) or 1
+
+                trend_view = [
+                    {
+                        **row,
+                        "height_pct": round(
+                            100 * int(row["materials"]) / trend_max
+                        ),
+                    }
+                    for row in trend
+                ]
+
+                rank_max = max(
+                    (
+                        int(row["materials"])
+                        for row in active_objects
+                    ),
+                    default=0,
+                ) or 1
+
+                active_view = [
+                    {
+                        **row,
+                        "bar_pct": round(
+                            100 * int(row["materials"]) / rank_max
+                        ),
+                    }
+                    for row in active_objects
+                ]
+
+                selected_id = object_id
+
+                selected = (
+                    next(
+                        (
+                            row
+                            for row in all_objects
+                            if row["object_id"] == selected_id
+                        ),
+                        None,
+                    )
+                    if selected_id is not None
+                    else None
+                )
+
+                if selected_id is not None and selected is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Об'єкт моніторингу не знайдено.",
+                    )
+
+                evidence = (
+                    fetch_object_evidence(
+                        conn,
+                        object_id=selected["object_id"],
+                        day=day,
+                    )
+                    if selected
+                    else fetch_c1_evidence(
+                        conn,
+                        day=day,
+                    )
+                )
+
+                quiet_objects = [
+                    row
+                    for row in all_objects
+                    if int(row["contents_24h"]) == 0
+                ]
+
+                if selected:
+                    space_values = [
+                        ("UA", int(selected["ua_24h"])),
+                        ("RU", int(selected["ru_24h"])),
+                    ]
+                    channel_values = [
+                        ("Telegram", int(selected["tg_24h"])),
+                        ("RSS", int(selected["rss_24h"])),
+                    ]
+
+                    space_max = max(
+                        (value for _, value in space_values),
+                        default=0,
+                    ) or 1
+                    channel_max = max(
+                        (value for _, value in channel_values),
+                        default=0,
+                    ) or 1
+
+                    space_breakdown = [
+                        {
+                            "label": label,
+                            "value": value,
+                            "bar_pct": round(
+                                100 * value / space_max
+                            ),
+                        }
+                        for label, value in space_values
+                    ]
+
+                    channel_breakdown = [
+                        {
+                            "label": label,
+                            "value": value,
+                            "bar_pct": round(
+                                100 * value / channel_max
+                            ),
+                        }
+                        for label, value in channel_values
+                    ]
+                else:
+                    space_breakdown = []
+                    channel_breakdown = []
+
+                context.update(
+                    {
+                        "summary": summary,
+                        "trend": trend_view,
+                        "active_objects": active_view,
+                        "all_objects": all_objects,
+                        "quiet_objects": quiet_objects,
+                        "selected": selected,
+                        "selected_day": day,
+                        "evidence": evidence,
+                        "space_breakdown": space_breakdown,
+                        "channel_breakdown": channel_breakdown,
+                    }
+                )
+
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        print(
+            f"/contours: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    return templates.TemplateResponse(
+        request,
+        "contours.html",
+        context,
+    )
+
+
+@app.get("/objects", response_class=HTMLResponse)
+def objects_page(
+    request: Request,
+    object_id: int | None = None,
+) -> HTMLResponse:
+    """Моніторинг канонічних об'єктів C1 та evidence по вибраному об'єкту."""
+    try:
+        with read_connection() as conn:
+            objects = fetch_objects_overview(conn)
+
+            selected = None
+            evidence = []
+
+            if objects:
+                if object_id is None:
+                    selected = objects[0]
+                else:
+                    selected = next(
+                        (
+                            row
+                            for row in objects
+                            if row["object_id"] == object_id
+                        ),
+                        None,
+                    )
+
+                    if selected is None:
+                        raise HTTPException(
+                            status_code=404,
+                            detail="Об'єкт моніторингу не знайдено.",
+                        )
+
+                evidence = fetch_object_evidence(
+                    conn,
+                    object_id=selected["object_id"],
+                )
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        print(f"/objects: db error: {exc}", file=sys.stderr)
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    return templates.TemplateResponse(
+        request,
+        "objects.html",
+        {
+            "active_page": "objects",
+            "objects": objects,
+            "selected": selected,
+            "evidence": evidence,
         },
     )
 

@@ -1,0 +1,481 @@
+{% extends "base.html" %}
+{% block title %}Контури — МІП{% endblock %}
+
+{% block content %}
+<div class="page-shell contours-page">
+
+    <header class="page-header">
+        <div>
+            <h1 class="page-title">Контури моніторингу</h1>
+            <p class="page-lede">
+                Ситуаційна картина за напрямами моніторингу.
+            </p>
+        </div>
+
+        <div class="page-freshness" aria-label="Час оновлення">
+            <span class="signals-live-dot" aria-hidden="true"></span>
+            <span>Оновлено {{ fmt_kyiv_zoned(page_updated_at) }}</span>
+        </div>
+    </header>
+
+    <nav class="contour-tabs" aria-label="Контури моніторингу">
+        {% for tab in contours %}
+            <a
+                href="/contours?contour={{ tab.code }}"
+                class="contour-tab"
+                {% if tab.code == current_code %}
+                    aria-current="page"
+                {% endif %}
+                title="{{ tab.name }}"
+            >
+                {{ tab.short_name }}
+            </a>
+        {% endfor %}
+    </nav>
+
+    {% if current_code == "dshv_objects" %}
+
+        <section class="contour-intro">
+            <div>
+                <h2>{{ current_contour.name }}</h2>
+                <p>
+                    Що нового з'явилося про об'єкти, які ми моніторимо?
+                </p>
+            </div>
+
+        </section>
+
+        {% if changes %}
+        <section
+            class="contour-changes"
+            aria-labelledby="contour-changes-title"
+        >
+            <div class="contour-changes-head">
+                <div>
+                    <h3 id="contour-changes-title">Що змінилось</h3>
+                    <p>
+                        Нові події за останні 7 повних днів.
+                    </p>
+                </div>
+            </div>
+
+            <div class="contour-change-list">
+                {% for item in changes %}
+                    <a
+                        class="contour-change-row"
+                        href="/contours?contour=dshv_objects&object_id={{ item.object_id }}&day={{ item.day.isoformat() }}"
+                    >
+                        <div class="contour-change-main">
+                            <span class="contour-change-kind">
+                                {% if item.event_type == "peak" %}
+                                    Новий 30-денний максимум
+                                {% elif item.event_type == "return" %}
+                                    Після паузи
+                                {% else %}
+                                    Перша зафіксована згадка
+                                {% endif %}
+                            </span>
+
+                            <strong>{{ item.canonical_name }}</strong>
+
+                            <span class="contour-change-detail">
+                                {% if item.event_type == "peak" %}
+                                    Матеріалів: {{ item.materials }}
+                                    · попередній максимум: {{ item.previous_max }}
+                                {% elif item.event_type == "return" %}
+                                    {{ item.quiet_days }}
+                                    днів без знайдених згадок
+                                {% else %}
+                                    Уперше зафіксовано в доступній історії МІП
+                                {% endif %}
+                            </span>
+                        </div>
+
+                        <time datetime="{{ item.day.isoformat() }}">
+                            {{ item.day.strftime("%d.%m") }}
+                        </time>
+                    </a>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        <section class="contour-dashboard-grid">
+
+            <article class="contour-panel">
+                <div class="contour-panel-head">
+                    <div>
+                        <h3>
+                            {% if selected %}
+                                Динаміка · {{ selected.canonical_name }}
+                            {% else %}
+                                Динаміка згадок
+                            {% endif %}
+                        </h3>
+                        <p>
+                            {% if selected %}
+                                Унікальні матеріали про вибраний об'єкт · календарні дні · Київ
+                            {% else %}
+                                Унікальні матеріали · календарні дні · Київ
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                <div
+                    class="contour-trend"
+                    aria-label="Матеріали за останні 30 календарних днів"
+                >
+                    {% for row in trend %}
+                        <a
+                            class="contour-trend-column{% if selected_day == row.day %} is-selected{% endif %}"
+                            href="{% if selected_day == row.day %}/contours?contour=dshv_objects{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% else %}/contours?contour=dshv_objects&day={{ row.day.isoformat() }}{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% endif %}"
+                            aria-pressed="{% if selected_day == row.day %}true{% else %}false{% endif %}"
+                            title="{% if selected_day == row.day %}Скинути фільтр за {{ row.day.strftime('%d.%m.%Y') }}{% else %}Показати матеріали за {{ row.day.strftime('%d.%m.%Y') }}{% endif %}"
+                        >
+                            <div class="contour-trend-value">
+                                {{ row.materials }}
+                            </div>
+
+                            <div class="contour-trend-track">
+                                <div
+                                    class="contour-trend-bar"
+                                    style="height: {{ row.height_pct }}%;"
+                                    title="{{ row.materials }} матеріалів; {{ row.sources }} джерел"
+                                ></div>
+                            </div>
+
+                            <div class="contour-trend-day">
+                                {{ row.day.strftime("%d.%m") }}
+                            </div>
+                            <div class="contour-trend-source">
+                                {{ row.sources }} дж.
+                            </div>
+                        </a>
+                    {% endfor %}
+                </div>
+            </article>
+
+            <article class="contour-panel">
+                <div class="contour-panel-head">
+                    <div>
+                        <h3>
+                            {% if selected_day %}
+                                Активні об'єкти · {{ selected_day.strftime("%d.%m.%Y") }}
+                            {% else %}
+                                Активні об'єкти · 30 днів
+                            {% endif %}
+                        </h3>
+                        <p>
+                            {{ active_objects|length }} об'єктів ·
+                            один матеріал може стосуватися кількох об'єктів.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="contour-ranking">
+                    {% for row in active_objects %}
+                        <a
+                            class="contour-rank-row
+                                {% if selected and row.object_id == selected.object_id %}
+                                    is-selected
+                                {% endif %}"
+                            href="{% if selected and row.object_id == selected.object_id %}/contours?contour=dshv_objects{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}{% else %}/contours?contour=dshv_objects&object_id={{ row.object_id }}{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}{% endif %}"
+                            aria-pressed="{% if selected and row.object_id == selected.object_id %}true{% else %}false{% endif %}"
+                        >
+                            <div class="contour-rank-head">
+                                <span>{{ row.canonical_name }}</span>
+                                <strong>{{ row.materials }}</strong>
+                            </div>
+
+                            <div class="contour-rank-track">
+                                <div
+                                    class="contour-rank-fill"
+                                    style="width: {{ row.bar_pct }}%;"
+                                ></div>
+                            </div>
+
+                            <small>
+                                {{ row.sources }} джерел
+                            </small>
+                        </a>
+                    {% endfor %}
+                </div>
+            </article>
+
+        </section>
+
+        {% if selected or selected_day %}
+        <div class="contour-active-filters" aria-label="Активні фільтри">
+            <span class="contour-active-filters-label">Показано:</span>
+
+            {% if selected %}
+                <span class="contour-filter-chip">
+                    Об'єкт · {{ selected.canonical_name }}
+                </span>
+            {% endif %}
+
+            {% if selected_day %}
+                <span class="contour-filter-chip">
+                    День · {{ selected_day.strftime("%d.%m.%Y") }}
+                </span>
+            {% endif %}
+
+            <a
+                class="contour-filter-reset"
+                href="/contours?contour=dshv_objects"
+            >
+                Скинути
+            </a>
+        </div>
+        {% endif %}
+
+        {% if selected %}
+        <section class="contour-object">
+
+            <header class="contour-object-head">
+                <div>
+                    <span class="contour-eyebrow">Вибраний об'єкт</span>
+                    <h2>{{ selected.canonical_name }}</h2>
+                </div>
+
+                <div class="contour-object-summary">
+                    <strong>{{ selected.contents_24h }}</strong>
+                    <span>матеріалів · 24 год</span>
+
+                    <strong>{{ selected.sources_24h }}</strong>
+                    <span>джерел · 24 год</span>
+                </div>
+            </header>
+
+            <div class="contour-object-grid">
+
+                <article class="contour-panel">
+                    <h3>Де з'являється</h3>
+
+                    <div class="contour-breakdown-group">
+                        <h4>Інформаційний простір</h4>
+
+                        {% for item in space_breakdown %}
+                            <div class="contour-breakdown-row">
+                                <span>{{ item.label }}</span>
+                                <div class="contour-breakdown-track">
+                                    <div
+                                        class="contour-breakdown-fill"
+                                        style="width: {{ item.bar_pct }}%;"
+                                    ></div>
+                                </div>
+                                <strong>{{ item.value }}</strong>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="contour-breakdown-group">
+                        <h4>Тип джерела</h4>
+
+                        {% for item in channel_breakdown %}
+                            <div class="contour-breakdown-row">
+                                <span>{{ item.label }}</span>
+                                <div class="contour-breakdown-track">
+                                    <div
+                                        class="contour-breakdown-fill"
+                                        style="width: {{ item.bar_pct }}%;"
+                                    ></div>
+                                </div>
+                                <strong>{{ item.value }}</strong>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <p class="contour-method-note">
+                        Показники рахуються окремо:
+                        той самий матеріал може бути зафіксований
+                        у кількох джерелах.
+                    </p>
+                </article>
+
+                <article class="contour-panel">
+                    <h3>Активність об'єкта</h3>
+
+                    <div class="contour-object-numbers">
+                        <div>
+                            <strong>{{ selected.contents_24h }}</strong>
+                            <span>матеріалів · 24 год</span>
+                        </div>
+                        <div>
+                            <strong>{{ selected.contents_30d }}</strong>
+                            <span>матеріалів · 30 днів</span>
+                        </div>
+                        <div>
+                            <strong>{{ selected.sources_24h }}</strong>
+                            <span>джерел · 24 год</span>
+                        </div>
+                    </div>
+
+                    <div class="contour-last-seen">
+                        <span>Остання згадка</span>
+                        <strong>
+                            {% if selected.last_seen %}
+                                {{ fmt_kyiv_zoned(selected.last_seen) }}
+                            {% else %}
+                                Не зафіксовано
+                            {% endif %}
+                        </strong>
+                    </div>
+                </article>
+
+            </div>
+        </section>
+
+        {% endif %}
+
+        <section class="contour-evidence">
+            <div class="contour-section-head">
+                <div>
+                    {% if selected %}
+                        <h2>Що саме опубліковано</h2>
+                        <p>
+                            Публікації про вибраний об'єкт
+                            {% if selected_day %}
+                                за {{ selected_day.strftime("%d.%m.%Y") }}.
+                            {% else %}
+                                за останні 30 днів.
+                            {% endif %}
+                            Одна строка — одна публікація, не окрема подія.
+                        </p>
+                    {% else %}
+                        <h2>Матеріали контуру</h2>
+                        <p>
+                            {% if selected_day %}
+                                Публікації про об'єкти ДШВ за
+                                {{ selected_day.strftime("%d.%m.%Y") }}.
+                            {% else %}
+                                Останні публікації про об'єкти ДШВ за 30 днів.
+                                Виберіть об'єкт вище, щоб звузити перелік.
+                            {% endif %}
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if evidence %}
+                <div class="contour-evidence-list">
+                    {% for row in evidence %}
+                        <article class="contour-evidence-item">
+
+                            <div class="contour-evidence-meta">
+                                <time>
+                                    {{ fmt_kyiv_zoned(row.observed_at) }}
+                                </time>
+                                <span>{{ row.source_name }}</span>
+                                <span>
+                                    {% if row.source_type == "telegram" %}
+                                        Telegram
+                                    {% elif row.source_type == "rss" %}
+                                        RSS
+                                    {% else %}
+                                        {{ row.source_type }}
+                                    {% endif %}
+                                </span>
+
+                                {% if row.multi_object %}
+                                    <span class="badge badge-maybe">
+                                        Кілька об'єктів
+                                    </span>
+                                {% endif %}
+                            </div>
+
+                            <h3>
+                                {% if
+                                    row.external_ref
+                                    and row.external_ref.startswith("http")
+                                %}
+                                    <a
+                                        href="{{ row.external_ref }}"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        {{ row.display_title }}
+                                    </a>
+                                {% else %}
+                                    {{ row.display_title }}
+                                {% endif %}
+                            </h3>
+
+                            {% if row.preview_text %}
+                                <p>{{ row.preview_text }}</p>
+                            {% endif %}
+
+                            <div class="contour-evidence-match">
+                                Знайдено як:
+                                <strong>
+                                    {{ row.matched_alias or "—" }}
+                                </strong>
+                            </div>
+
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="materials-empty">
+                    {% if selected_day and selected %}
+                        За {{ selected_day.strftime("%d.%m.%Y") }}
+                        публікацій про цей об'єкт не зафіксовано.
+                    {% elif selected_day %}
+                        За {{ selected_day.strftime("%d.%m.%Y") }}
+                        публікацій про об'єкти контуру не зафіксовано.
+                    {% elif selected %}
+                        За останні 30 днів публікацій
+                        про цей об'єкт не зафіксовано.
+                    {% else %}
+                        За останні 30 днів публікацій
+                        про об'єкти контуру не зафіксовано.
+                    {% endif %}
+                </div>
+            {% endif %}
+        </section>
+
+        <details class="contour-quiet">
+            <summary>
+                Інші об'єкти без нових згадок за 24 години
+                <span>{{ quiet_objects|length }}</span>
+            </summary>
+
+            <div class="contour-quiet-list">
+                {% for row in quiet_objects %}
+                    <a
+                        href="/contours?contour=dshv_objects&object_id={{ row.object_id }}{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}"
+                    >
+                        <span>{{ row.canonical_name }}</span>
+                        <small>
+                            {% if row.contents_30d %}
+                                {{ row.contents_30d }}
+                                за 30 днів
+                            {% elif row.last_seen %}
+                                остання:
+                                {{ fmt_kyiv_zoned(row.last_seen) }}
+                            {% else %}
+                                згадок не зафіксовано
+                            {% endif %}
+                        </small>
+                    </a>
+                {% endfor %}
+            </div>
+        </details>
+
+    {% else %}
+
+        <section class="contour-placeholder">
+            <span class="contour-eyebrow">Контур</span>
+            <h2>{{ current_contour.name }}</h2>
+            <p>{{ current_contour.description }}</p>
+            <p class="contour-placeholder-note">
+                Аналітичний блок цього контуру ще не підключено
+                до нового робочого простору.
+            </p>
+        </section>
+
+    {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Об'єкти — МІП{% endblock %}
+
+{% block content %}
+    <h1 class="page-title">Наші об'єкти</h1>
+    <p class="page-lede">
+        Що нового про об'єкти, які ми моніторимо, і де це опубліковано.
+    </p>
+
+    <div class="table-scroll">
+        <table class="materials-table">
+            <thead>
+                <tr>
+                    <th>Об'єкт</th>
+                    <th>24 год</th>
+                    <th>7 днів</th>
+                    <th>Джерел 24 год</th>
+                    <th>UA / RU</th>
+                    <th>TG / RSS</th>
+                    <th>Остання згадка</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in objects %}
+                    <tr>
+                        <td>
+                            <a href="/objects?object_id={{ row.object_id }}">
+                                {{ row.canonical_name }}
+                            </a>
+                        </td>
+                        <td>{{ row.contents_24h }}</td>
+                        <td>{{ row.contents_7d }}</td>
+                        <td>{{ row.sources_24h }}</td>
+                        <td>{{ row.ua_24h }} / {{ row.ru_24h }}</td>
+                        <td>{{ row.tg_24h }} / {{ row.rss_24h }}</td>
+                        <td>
+                            {% if row.last_seen %}
+                                {{ fmt_kyiv_zoned(row.last_seen) }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if selected %}
+        <h2 class="section-title">
+            {{ selected.canonical_name }}
+        </h2>
+
+        <p class="page-lede">
+            Публікації за останні 7 днів. Одна строка — одна публікація,
+            а не окрема подія.
+        </p>
+
+        {% if evidence %}
+            <div class="table-scroll">
+                <table class="materials-table">
+                    <thead>
+                        <tr>
+                            <th>Час</th>
+                            <th>Джерело</th>
+                            <th>Простір</th>
+                            <th>Матеріал</th>
+                            <th>Збіг</th>
+                            <th>Кілька об'єктів</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in evidence %}
+                            <tr>
+                                <td>{{ fmt_kyiv_zoned(row.observed_at) }}</td>
+                                <td>{{ row.source_name }}</td>
+                                <td>
+                                    {% if row.source_group == "ua_space" %}
+                                        Український
+                                    {% elif row.source_group == "ru_space" %}
+                                        Російський
+                                    {% else %}
+                                        Інший
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.external_ref and row.external_ref.startswith("http") %}
+                                        <a href="{{ row.external_ref }}"
+                                           target="_blank"
+                                           rel="noopener noreferrer">
+                                            {{ row.display_title }}
+                                        </a>
+                                    {% else %}
+                                        {{ row.display_title }}
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.matched_alias or "—" }}</td>
+                                <td>{{ "так" if row.multi_object else "ні" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="materials-count">
+                За останні 7 днів публікацій не знайдено.
+            </p>
+        {% endif %}
+    {% endif %}
+{% endblock %}
