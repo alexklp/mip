@@ -150,16 +150,7 @@ def process_one(
 def fetch_documents(
     since_hours: int,
 ) -> list[tuple[str, str, list[str], str]]:
-    sql = ts.SQL.replace(
-        "WHERE r.decision = 'analyze'",
-        "WHERE r.decision IN ('analyze', 'maybe')",
-        1,
-    )
-
-    if sql == ts.SQL:
-        raise RuntimeError(
-            "routing gate replacement failed"
-        )
+    sql = ts.SQL
 
     with psycopg.connect(ts.DB_DSN) as conn:
         conn.execute(
