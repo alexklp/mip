@@ -1,8 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Джерела — МІП{% endblock %}
 {% block content %}
-    <h1 class="page-title">Джерела моніторингу</h1>
-    <p class="page-lede">Охоплення за джерелами: скільки надійшло і коли востаннє.</p>
+<section class="page-shell sources-page">
+    <header class="page-header">
+        <div>
+            <h1 class="page-title">Джерела моніторингу</h1>
+            <p class="page-lede">
+                Охоплення за джерелами: скільки надійшло і коли востаннє.
+            </p>
+        </div>
+
+        <div class="page-freshness" aria-label="Час оновлення">
+            <span class="signals-live-dot" aria-hidden="true"></span>
+            <span>Оновлено {{ fmt_kyiv_zoned(page_updated_at) }}</span>
+        </div>
+    </header>
 
     <form method="get" action="/sources" class="filter-panel">
         <div class="filter-field">
@@ -405,4 +417,5 @@
     })();
     </script>
 
+</section>
 {% endblock %}

@@ -2,8 +2,8 @@
 {% block title %}Тематичний простір — МІП{% endblock %}
 
 {% block content %}
-<section class="topics-page" data-state="{{ state }}">
-    <header class="topics-header">
+<section class="page-shell topics-page" data-state="{{ state }}">
+    <header class="page-header">
         <div>
             <h1 class="page-title">Тематичний простір</h1>
             <p class="page-lede">
@@ -12,7 +12,7 @@
         </div>
 
         {% if snapshot %}
-        <div class="topics-freshness">
+        <div class="page-freshness" aria-label="Час оновлення">
             <span class="signals-live-dot" aria-hidden="true"></span>
             <span>Оновлено {{ fmt_kyiv_zoned(snapshot.generated_at) }}</span>
         </div>
@@ -32,19 +32,19 @@
     {% endif %}
 
     {% if snapshot %}
-    <div class="topics-summary">
-        <div class="topics-summary-item">
+    <div class="page-summary topics-summary">
+        <div class="page-summary-item topics-summary-item">
             <span>Вікно</span>
             <strong>24 години</strong>
             <span>до {{ fmt_kyiv_zoned(snapshot.as_of) }}</span>
         </div>
 
-        <div class="topics-summary-item">
+        <div class="page-summary-item topics-summary-item">
             <span>Публікації</span>
             <strong id="topics-summary-publications">{{ snapshot.summary["all"].current.publications }}</strong>
         </div>
 
-        <div class="topics-summary-item">
+        <div class="page-summary-item topics-summary-item">
             <span>Джерела</span>
             <strong id="topics-summary-sources">{{ snapshot.summary["all"].current.sources }}</strong>
         </div>
@@ -596,8 +596,8 @@
             compareCount.textContent =
                 state.compareIds.length + " / 5";
 
-            var ranked = rows.slice(0, 50);
-            var visible = filteredRows(ranked);
+            var ranked = rows.slice();
+            var visible = filteredRows(ranked).slice(0, 50);
             var rankLookup = {};
 
             ranked.forEach(function (row, index) {
@@ -638,9 +638,15 @@
                 checkbox.className =
                     "topics-compare-checkbox";
                 checkbox.checked = checked;
+                var compareEligible =
+                    rankLookup[row.marker_id] <= 50;
+
                 checkbox.disabled = (
-                    !checked &&
-                    state.compareIds.length >= 5
+                    !compareEligible ||
+                    (
+                        !checked &&
+                        state.compareIds.length >= 5
+                    )
                 );
                 checkbox.setAttribute(
                     "aria-label",

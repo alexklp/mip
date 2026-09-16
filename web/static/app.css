@@ -4225,3 +4225,1331 @@ a {
         display: none;
     }
 }
+
+
+/* ---------- Контури v1 ---------- */
+
+.contours-page {
+    max-width: 1160px;
+    overflow-wrap: anywhere;
+}
+
+.contours-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+}
+
+.contour-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin: 0 0 1.5rem;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.contour-tab {
+    flex: 0 0 auto;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.55rem 0.9rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-bottom: 2px solid transparent;
+}
+
+.contour-tab:hover {
+    color: var(--text);
+    background: var(--surface);
+}
+
+.contour-tab[aria-current="page"] {
+    color: var(--gold);
+    border-bottom-color: var(--gold);
+}
+
+.contour-intro {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+    margin-bottom: 1rem;
+}
+
+.contour-intro h2 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.contour-intro p {
+    margin: 0.25rem 0 0;
+    color: var(--text-muted);
+}
+
+.contour-freshness {
+    flex-shrink: 0;
+    text-align: right;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.contour-freshness span,
+.contour-freshness strong {
+    display: block;
+}
+
+.contour-freshness strong {
+    margin-top: 0.15rem;
+    color: var(--text);
+    font-size: 0.8125rem;
+}
+
+.contour-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+}
+
+.contour-kpi {
+    min-height: 110px;
+    padding: 0.85rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.contour-kpi > span,
+.contour-kpi > small {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.contour-kpi > strong {
+    display: block;
+    margin: 0.25rem 0 0.2rem;
+    color: var(--text);
+    font-size: 1.75rem;
+    line-height: 1.1;
+}
+
+.contour-kpi-primary > strong {
+    color: var(--gold);
+}
+
+.contour-kpi > strong small {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.contour-dashboard-grid,
+.contour-object-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+    gap: 0.9rem;
+    margin-bottom: 1.75rem;
+}
+
+.contour-panel {
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+}
+
+.contour-panel h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.contour-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.contour-panel-head p,
+.contour-section-head p {
+    margin: 0.2rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.contour-trend {
+    height: 220px;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.65rem;
+    align-items: end;
+    padding-top: 0.5rem;
+}
+
+.contour-trend-column {
+    height: 100%;
+    display: grid;
+    grid-template-rows: 22px 1fr 22px 18px;
+    min-width: 0;
+    text-align: center;
+}
+
+.contour-trend-value {
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.contour-trend-track {
+    min-height: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    border-bottom: 1px solid var(--border-interactive);
+}
+
+.contour-trend-bar {
+    width: min(42px, 72%);
+    min-height: 2px;
+    background: var(--gold);
+    border-radius: 2px 2px 0 0;
+}
+
+.contour-trend-day {
+    padding-top: 0.25rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.contour-trend-source {
+    color: var(--text-faint);
+    font-size: 0.65rem;
+}
+
+.contour-ranking {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.contour-rank-row {
+    display: block;
+    padding: 0.55rem 0.65rem;
+    color: var(--text);
+    text-decoration: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+}
+
+.contour-rank-row:hover {
+    background: var(--surface-2);
+}
+
+.contour-rank-row.is-selected {
+    border-color: var(--gold);
+    background: var(--gold-chip-bg);
+}
+
+.contour-rank-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.78rem;
+}
+
+.contour-rank-head span {
+    min-width: 0;
+}
+
+.contour-rank-head strong {
+    flex-shrink: 0;
+}
+
+.contour-rank-track {
+    height: 6px;
+    margin: 0.35rem 0 0.25rem;
+    background: var(--surface-2);
+    overflow: hidden;
+    border-radius: 2px;
+}
+
+.contour-rank-fill,
+.contour-breakdown-fill {
+    height: 100%;
+    background: var(--gold);
+}
+
+.contour-rank-row small {
+    color: var(--text-faint);
+    font-size: 0.68rem;
+}
+
+.contour-object {
+    margin-bottom: 1.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+}
+
+.contour-object-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 0.9rem;
+}
+
+.contour-eyebrow {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: var(--gold);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.contour-object-head h2 {
+    margin: 0;
+    max-width: 750px;
+    font-size: 1.15rem;
+}
+
+.contour-object-summary {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.1rem 0.45rem;
+    align-items: baseline;
+    flex-shrink: 0;
+}
+
+.contour-object-summary strong {
+    color: var(--gold);
+    text-align: right;
+}
+
+.contour-object-summary span {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.contour-breakdown-group {
+    margin-top: 1rem;
+}
+
+.contour-breakdown-group h4 {
+    margin: 0 0 0.55rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.contour-breakdown-row {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) 34px;
+    gap: 0.55rem;
+    align-items: center;
+    margin-bottom: 0.45rem;
+    font-size: 0.78rem;
+}
+
+.contour-breakdown-track {
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.contour-breakdown-row strong {
+    text-align: right;
+}
+
+.contour-method-note {
+    margin: 0.8rem 0 0;
+    color: var(--text-faint);
+    font-size: 0.68rem;
+}
+
+.contour-object-numbers {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-top: 1rem;
+}
+
+.contour-object-numbers div {
+    padding-left: 0.65rem;
+    border-left: 2px solid var(--border-interactive);
+}
+
+.contour-object-numbers strong,
+.contour-object-numbers span {
+    display: block;
+}
+
+.contour-object-numbers strong {
+    color: var(--gold);
+    font-size: 1.25rem;
+}
+
+.contour-object-numbers span {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+}
+
+.contour-last-seen {
+    margin-top: 1.25rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.contour-last-seen span,
+.contour-last-seen strong {
+    display: block;
+}
+
+.contour-last-seen span {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.contour-last-seen strong {
+    margin-top: 0.15rem;
+    font-size: 0.85rem;
+}
+
+.contour-evidence {
+    margin-bottom: 1.75rem;
+}
+
+.contour-section-head {
+    margin-bottom: 0.75rem;
+}
+
+.contour-section-head h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.contour-evidence-list {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+}
+
+.contour-evidence-item {
+    padding: 0.9rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.contour-evidence-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.contour-evidence-item h3 {
+    margin: 0.35rem 0 0;
+    font-size: 0.92rem;
+}
+
+.contour-evidence-item h3 a {
+    color: var(--text);
+    text-decoration-color: var(--border-interactive);
+    text-underline-offset: 3px;
+}
+
+.contour-evidence-item h3 a:hover {
+    color: var(--gold);
+}
+
+.contour-evidence-item p {
+    max-width: 90ch;
+    margin: 0.35rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.contour-evidence-match {
+    margin-top: 0.4rem;
+    color: var(--text-faint);
+    font-size: 0.7rem;
+}
+
+.contour-evidence-match strong {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.contour-quiet {
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.contour-quiet summary {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.contour-quiet summary span {
+    color: var(--text);
+}
+
+.contour-quiet-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 1rem;
+    padding: 0 0 0.9rem;
+}
+
+.contour-quiet-list a {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.4rem 0.5rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.75rem;
+    border-radius: var(--radius);
+}
+
+.contour-quiet-list a:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.contour-quiet-list small {
+    flex-shrink: 0;
+    color: var(--text-faint);
+    text-align: right;
+}
+
+.contour-placeholder {
+    max-width: 760px;
+    padding: 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.contour-placeholder h2 {
+    margin: 0;
+}
+
+.contour-placeholder p {
+    color: var(--text-muted);
+}
+
+.contour-placeholder-note {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+    .contour-intro,
+    .contour-object-head {
+        flex-direction: column;
+    }
+
+    .contour-freshness {
+        text-align: left;
+    }
+
+    .contour-kpis,
+    .contour-dashboard-grid,
+    .contour-object-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .contour-quiet-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    .contour-kpis {
+        grid-template-columns: 1fr;
+    }
+
+    .contour-tabs {
+        margin-left: -1rem;
+        margin-right: -1rem;
+        padding-left: 1rem;
+    }
+
+    .contour-trend {
+        gap: 0.3rem;
+    }
+
+    .contour-object-numbers {
+        grid-template-columns: 1fr;
+    }
+
+    .contour-object-summary {
+        grid-template-columns: auto 1fr;
+    }
+}
+
+
+/* ---------- Контури: interaction pass ---------- */
+
+.contour-ranking {
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 0.3rem;
+    scrollbar-gutter: stable;
+}
+
+.contour-ranking::-webkit-scrollbar {
+    width: 8px;
+}
+
+.contour-ranking::-webkit-scrollbar-thumb {
+    background: var(--border-interactive);
+    border-radius: 4px;
+}
+
+.contour-ranking::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.contour-rank-row.is-selected {
+    cursor: pointer;
+}
+
+.contour-rank-row.is-selected::after {
+    content: "Натисніть ще раз, щоб скинути";
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--text-faint);
+    font-size: 0.65rem;
+}
+
+
+/* ---------- MIP UI Shell v1 ---------- */
+
+/*
+ * Shared geometry for analytical pages.
+ * Page-specific layouts live inside this frame; they do not redefine it.
+ */
+.page-shell {
+    width: 100%;
+    max-width: 1160px;
+    margin: 0;
+    padding: 0;
+    overflow-wrap: anywhere;
+}
+
+/*
+ * Neutralize historical per-page outer geometry.
+ * Kept explicit during migration so older CSS can be removed later
+ * only after the common shell is visually verified.
+ */
+.page-shell.topics-page,
+.page-shell.signals-page,
+.page-shell.contours-page,
+.page-shell.sources-page {
+    width: 100%;
+    max-width: 1160px;
+    margin: 0;
+    padding: 0;
+}
+
+.page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin: 0 0 1.25rem;
+    min-height: 3.75rem;
+}
+
+.page-header > div:first-child {
+    min-width: 0;
+}
+
+.page-header .page-title {
+    margin: 0 0 0.3rem;
+    font-size: 1.625rem;
+    line-height: 1.2;
+}
+
+.page-header .page-lede {
+    margin: 0;
+    max-width: 66ch;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+}
+
+/*
+ * One visual component for page freshness.
+ * Snapshot-backed pages already use it.
+ * Live DB pages will receive a truthful timestamp in the next step.
+ */
+.page-freshness {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+    .page-header {
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 0;
+    }
+
+    .page-freshness {
+        align-self: flex-start;
+    }
+}
+
+/* ---------- MIP UI language v1 ---------- */
+
+/*
+ * System interaction state = teal/cyan.
+ * Domain/data emphasis may keep its own semantic color.
+ */
+
+:root {
+    --focus-ring: 0 0 0 3px var(--teal-mid);
+}
+
+/* Shared interactive focus */
+.topics-search:focus-within,
+.signals-search:focus-within {
+    border-color: var(--teal-mid);
+    box-shadow: 0 0 0 1px var(--teal-mid);
+}
+
+/* Topics: replace historical hard-coded active/focus tones */
+.topics-search:focus-within {
+    border-color: var(--teal-mid);
+}
+
+.topics-segment button[aria-pressed="true"] {
+    background: var(--teal-chip-bg);
+    color: var(--teal-tint);
+}
+
+/* Contours: navigation selection is product UI, not C1 data */
+.contour-tab[aria-current="page"] {
+    color: var(--teal-tint);
+    border-bottom-color: var(--teal-mid);
+}
+
+/* Selected watchlist object is an interaction state */
+.contour-rank-row.is-selected {
+    border-color: var(--teal-mid);
+    background: var(--teal-chip-bg);
+}
+
+/*
+ * Keep C1 quantitative emphasis orange:
+ * - KPI primary value
+ * - trend bars
+ * - ranking bars
+ * - breakdown bars
+ */
+.contour-kpi-primary > strong {
+    color: var(--gold);
+}
+
+.contour-rank-fill,
+.contour-breakdown-fill {
+    background: var(--gold);
+}
+
+/* ---------- MIP UI language v1.1: restrained active controls ---------- */
+
+.topics-segment button[aria-pressed="true"] {
+    background: var(--mundir);
+    color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--teal-mid);
+}
+
+
+
+/* ---------- MIP Controls v1 ---------- */
+
+:root {
+    --control-height: 36px;
+}
+
+/*
+ * One desktop geometry for analytical controls.
+ * Labels may differ by page; the controls themselves should not.
+ */
+.topics-search,
+.signals-search,
+.topics-filter select,
+.signals-toolbar select,
+.filter-field select,
+.filter-submit {
+    height: var(--control-height);
+    min-height: var(--control-height);
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.8125rem;
+}
+
+/* Search fields */
+.topics-search,
+.signals-search {
+    padding: 0 0.65rem;
+}
+
+.topics-search input,
+.signals-search input {
+    font-size: 0.8125rem;
+}
+
+/* Selects */
+.topics-filter select,
+.signals-toolbar select,
+.filter-field select {
+    padding: 0 1.9rem 0 0.7rem;
+}
+
+/* Sources keeps explicit labels, but uses the same compact rhythm. */
+.filter-panel {
+    gap: 0.55rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.filter-field {
+    gap: 0.25rem;
+}
+
+.filter-submit {
+    padding: 0 1rem;
+    background: var(--mundir);
+    border-color: var(--mundir);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.filter-submit:hover {
+    background: var(--surface-2);
+    border-color: var(--border-interactive);
+}
+
+/* Shared focus language */
+.topics-search:focus-within,
+.signals-search:focus-within,
+.topics-filter select:focus-visible,
+.signals-toolbar select:focus-visible,
+.filter-field select:focus-visible,
+.filter-submit:focus-visible {
+    border-color: var(--teal-mid);
+    box-shadow: 0 0 0 1px var(--teal-mid);
+}
+
+/*
+ * Segmented controls share the same outer geometry.
+ * Active fill remains restrained; teal is only the state marker.
+ */
+.topics-segment {
+    height: var(--control-height);
+}
+
+.topics-segment button {
+    min-height: var(--control-height);
+}
+
+.topics-segment button[aria-pressed="true"] {
+    background: var(--mundir);
+    color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--teal-mid);
+}
+
+/* Touch targets return to 44px on narrow screens. */
+@media (max-width: 700px) {
+    :root {
+        --control-height: 44px;
+    }
+
+    .filter-panel {
+        padding: 0.75rem;
+    }
+
+    .filter-field {
+        flex: 1 1 100%;
+    }
+
+    .filter-field select,
+    .filter-submit {
+        width: 100%;
+    }
+}
+
+
+/* ---------- MIP Page Summary v1 ---------- */
+
+/*
+ * Stable strip directly below the page header.
+ * Number of metrics may differ, geometry does not.
+ */
+.page-summary {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    min-height: 38px;
+    margin: 0 0 0.55rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.page-summary-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    min-height: 38px;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.page-summary-item strong {
+    color: var(--text);
+    font-size: 0.82rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Neutralize historical per-page summary geometry. */
+.page-summary.topics-summary,
+.page-summary.signals-summary {
+    display: flex;
+    min-height: 38px;
+    margin: 0 0 0.55rem;
+    padding: 0;
+    gap: 0.55rem;
+    border: 0;
+    background: transparent;
+}
+
+.page-summary-item.topics-summary-item,
+.page-summary-item.signals-summary-item {
+    min-height: 38px;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.page-summary-item.signals-summary-item {
+    border-right: 1px solid var(--border);
+}
+
+@media (max-width: 700px) {
+    .page-summary {
+        gap: 0.45rem;
+    }
+
+    .page-summary-item {
+        min-height: 44px;
+        align-items: center;
+    }
+}
+
+/* ---------- MIP Toolbar alignment v1 ---------- */
+
+.topics-toolbar,
+.signals-toolbar {
+    margin-top: 0;
+    margin-bottom: 0.55rem;
+}
+
+/* ---------- MIP Toolbar geometry v2 ---------- */
+
+.topics-toolbar,
+.signals-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.55rem;
+}
+
+.topics-search,
+.signals-search {
+    flex: 0 0 365px;
+    width: 365px;
+    min-width: 0;
+}
+
+.signals-filter,
+.topics-filter {
+    flex: 0 0 auto;
+}
+
+@media (max-width: 900px) {
+    .topics-toolbar,
+    .signals-toolbar {
+        flex-wrap: wrap;
+    }
+
+    .topics-search,
+    .signals-search {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}
+
+/* ---------- MIP Search control v1 ---------- */
+
+.topics-search,
+.signals-search {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.topics-search > span[aria-hidden="true"],
+.signals-search > span[aria-hidden="true"] {
+    flex: 0 0 auto;
+    line-height: 1;
+}
+
+.topics-search input,
+.signals-search input {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8125rem;
+}
+
+.topics-search input::placeholder,
+.signals-search input::placeholder {
+    color: var(--text-faint);
+}
+
+/* ---------- MIP Panel density v1 ---------- */
+
+/* Shared analytical surface language */
+.filter-panel,
+.table-scroll,
+.contour-kpi,
+.contour-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+/* Sources: denser analytical table */
+.materials-table th {
+    padding: 0.55rem 0.75rem;
+    background: var(--surface-2);
+}
+
+.materials-table td {
+    padding: 0.6rem 0.75rem;
+}
+
+.materials-count {
+    margin-bottom: 0.7rem;
+}
+
+/* Contours: reduce dashboard-card bulk */
+.contour-kpis {
+    gap: 0.55rem;
+    margin-bottom: 0.7rem;
+}
+
+.contour-kpi {
+    min-height: 96px;
+    padding: 0.75rem 0.85rem;
+}
+
+.contour-dashboard-grid,
+.contour-object-grid {
+    gap: 0.7rem;
+    margin-bottom: 1.35rem;
+}
+
+.contour-panel {
+    padding: 0.75rem;
+}
+
+.contour-panel-head {
+    margin-bottom: 0.7rem;
+}
+
+/* Keep hierarchy, but match the denser analytical rhythm */
+.contour-panel h3 {
+    font-size: 0.9rem;
+}
+
+
+/* ---------- Contours interaction v2 ---------- */
+
+.contour-trend-column {
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease;
+}
+
+.contour-trend-column:hover {
+    background: var(--surface-2);
+}
+
+.contour-trend-column.is-selected {
+    border-color: var(--teal-mid);
+    background: var(--teal-chip-bg);
+}
+
+.contour-trend-column.is-selected .contour-trend-day {
+    color: var(--teal-tint);
+    font-weight: 700;
+}
+
+.contour-active-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: -0.65rem 0 1.1rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.contour-active-filters-label {
+    color: var(--text-faint);
+}
+
+.contour-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid var(--teal-mid);
+    border-radius: var(--radius);
+    background: var(--teal-chip-bg);
+    color: var(--text);
+}
+
+.contour-filter-reset {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.contour-filter-reset:hover {
+    border-color: var(--border-interactive);
+    color: var(--text);
+}
+
+
+/* ---------- Contours neutral selection v2 ---------- */
+
+.contour-trend-column.is-selected {
+    background: var(--surface-2);
+    border-color: var(--border-interactive);
+    box-shadow: inset 0 -2px 0 var(--teal-mid);
+}
+
+.contour-trend-column.is-selected .contour-trend-day {
+    color: var(--text);
+    font-weight: 700;
+}
+
+.contour-rank-row.is-selected {
+    background: var(--surface-2);
+    border-color: var(--border-interactive);
+    box-shadow: inset 3px 0 0 var(--teal-mid);
+}
+
+.contour-rank-row.is-selected .contour-rank-head span,
+.contour-rank-row.is-selected small {
+    color: var(--text);
+}
+
+.contour-filter-chip {
+    background: var(--surface-2);
+    border-color: var(--border-interactive);
+    box-shadow: inset 0 -2px 0 var(--teal-mid);
+}
+
+
+/* ---------- C1 30-day trend v1 ---------- */
+
+.contour-trend {
+    grid-template-columns: repeat(30, minmax(0, 1fr));
+    gap: 0.18rem;
+}
+
+.contour-trend-column {
+    grid-template-rows: 20px 1fr 20px;
+}
+
+.contour-trend-value {
+    font-size: 0.66rem;
+}
+
+.contour-trend-day {
+    font-size: 0.62rem;
+}
+
+.contour-trend-source {
+    display: none;
+}
+
+/* Keep the month readable: show periodic dates, last date and selection. */
+.contour-trend-column:not(:nth-child(5n + 1)):not(:last-child):not(.is-selected)
+    .contour-trend-day {
+    visibility: hidden;
+}
+
+
+/* ---------- C1 changes v1 ---------- */
+
+.contour-changes {
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface);
+}
+
+.contour-changes-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.7rem;
+}
+
+.contour-changes-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.contour-changes-head p {
+    margin: 0.2rem 0 0;
+    font-size: 0.78rem;
+    opacity: 0.68;
+}
+
+.contour-change-list {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.contour-change-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    min-height: 54px;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid transparent;
+    border-left: 3px solid var(--teal-mid);
+    border-radius: 0.45rem;
+    background: var(--surface-2);
+    color: inherit;
+    text-decoration: none;
+}
+
+.contour-change-row:hover {
+    border-color: var(--border);
+    border-left-color: var(--teal-mid);
+}
+
+.contour-change-main {
+    display: grid;
+    grid-template-columns: minmax(145px, auto) minmax(240px, 1fr) minmax(210px, auto);
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.contour-change-kind {
+    font-size: 0.72rem;
+    font-weight: 650;
+    opacity: 0.78;
+}
+
+.contour-change-main strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.84rem;
+}
+
+.contour-change-detail {
+    font-size: 0.76rem;
+    opacity: 0.72;
+}
+
+.contour-change-row time {
+    font-size: 0.75rem;
+    opacity: 0.62;
+    white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+    .contour-change-main {
+        grid-template-columns: 1fr;
+        gap: 0.18rem;
+    }
+
+    .contour-change-main strong {
+        white-space: normal;
+    }
+}

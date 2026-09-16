@@ -632,6 +632,9 @@ def sources_page(
         "sources.html",
         {
             "active_page": "sources",
+            "page_updated_at": datetime.datetime.now(
+                datetime.timezone.utc
+            ),
             "current_period": period,
             "periods": PERIOD_LABELS,
             "sources": rows,

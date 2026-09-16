@@ -27,15 +27,54 @@
     {% if value is not none %}{{ '+' if value > 0 else '' }}{{ value }}{% else %}—{% endif %}
 {%- endmacro %}
 
+{% macro signal_title(candidate, compact=false) -%}
+    {%- if candidate.cross_space -%}
+        {%- if compact -%}
+            {%- set titles = namespace(ua='', ru='') -%}
+            {%- for item in candidate.chronology -%}
+                {%- if not titles.ua and item.source_group == 'ua_space' and item.title -%}
+                    {%- set titles.ua = item.title -%}
+                {%- endif -%}
+                {%- if not titles.ru and item.source_group == 'ru_space' and item.title -%}
+                    {%- set titles.ru = item.title -%}
+                {%- endif -%}
+            {%- endfor -%}
+
+            {%- if titles.ua and titles.ru -%}
+                UA: {{ titles.ua|truncate(90, true, '…') }} · RU: {{ titles.ru|truncate(90, true, '…') }}
+            {%- else -%}
+                Пов’язані публікації у двох просторах
+            {%- endif -%}
+        {%- else -%}
+            Пов’язані публікації у двох просторах
+        {%- endif -%}
+    {%- else -%}
+        {%- set title = namespace(
+            value=(
+                candidate.chronology[0].title
+                if candidate.chronology and candidate.chronology[0].title
+                else 'Пов’язані публікації'
+            )
+        ) -%}
+        {%- for item in candidate.chronology
+            if item.content_id == candidate.representative_content_id -%}
+            {%- if item.title -%}
+                {%- set title.value = item.title -%}
+            {%- endif -%}
+        {%- endfor -%}
+        {{ title.value }}
+    {%- endif -%}
+{%- endmacro %}
+
 {% block content %}
-<section class="signals-page" data-state="{{ state }}">
-    <header class="signals-header">
+<section class="page-shell signals-page" data-state="{{ state }}">
+    <header class="page-header">
         <div>
             <h1 class="page-title">Сигнали</h1>
             <p class="page-lede">Схожі публікації з кількох джерел, згруповані для швидкої перевірки.</p>
         </div>
         {% if snapshot %}
-        <div class="signals-freshness" aria-label="Час оновлення">
+        <div class="page-freshness" aria-label="Час оновлення">
             <span class="signals-live-dot" aria-hidden="true"></span>
             <span>Оновлено {{ fmt_kyiv_zoned(snapshot.generated_at) }}</span>
         </div>
@@ -53,16 +92,16 @@
     {% endif %}
 
     {% if snapshot %}
-    <div class="signals-summary" aria-label="Стан вибірки">
-        <div class="signals-summary-item">
-            <span>Виявлено</span>
-            <strong>{{ snapshot.candidates|length }}</strong>
-            <span>{{ plural(snapshot.candidates|length, 'сигнал', 'сигнали', 'сигналів') }}</span>
-        </div>
-        <div class="signals-summary-item">
+    <div class="page-summary signals-summary" aria-label="Стан вибірки">
+        <div class="page-summary-item signals-summary-item">
             <span>Вікно</span>
             <strong>24 години</strong>
             <span>до {{ fmt_kyiv_zoned(snapshot.as_of) }}</span>
+        </div>
+        <div class="page-summary-item signals-summary-item">
+            <span>Виявлено</span>
+            <strong>{{ snapshot.candidates|length }}</strong>
+            <span>{{ plural(snapshot.candidates|length, 'сигнал', 'сигнали', 'сигналів') }}</span>
         </div>
     </div>
 
@@ -117,10 +156,7 @@
             </div>
             <div class="signals-queue-list" role="tablist" aria-orientation="vertical">
             {% for candidate in snapshot.candidates %}
-                {% set title = namespace(value='Пов’язані публікації') %}
-                {% for item in candidate.chronology if item.content_id == candidate.representative_content_id %}
-                    {% if item.title %}{% set title.value = item.title %}{% endif %}
-                {% endfor %}
+                {% set rendered_title = signal_title(candidate, compact=true) %}
                 {% set first = candidate.chronology[0] if candidate.chronology else none %}
                 {% set last = candidate.chronology[-1] if candidate.chronology else none %}
                 {% set flags = namespace(new=false, growing=false) %}
@@ -155,14 +191,14 @@
                     data-reviewed="false"
                     data-watch="false"
                     data-forward="false"
-                    data-search="{{ title.value }}{% for evidence in candidate.chronology %} {{ evidence.source_name or evidence.source_id }}{% endfor %}"
+                    data-search="{{ candidate.search_text or rendered_title }}{% for evidence in candidate.chronology %} {{ evidence.source_name or evidence.source_id }}{% endfor %}"
                 >
                     <span class="signals-queue-topline">
                         <span class="signals-queue-rank">{{ '%02d'|format(loop.index) }}</span>
                         <span class="signals-queue-space">{{ 'Між просторами' if candidate.cross_space else space_name(candidate.source_groups[0]) }}</span>
                         <span class="signals-queue-count">{{ candidate.source_count }} дж.</span>
                     </span>
-                    <span class="signals-queue-title">{{ title.value }}</span>
+                    <span class="signals-queue-title">{{ rendered_title }}</span>
                     <span class="signals-queue-meta">
                         <span>{{ candidate.occurrence_count }} публ. · {{ candidate.content_count }} мат.</span>
                         {% if first and last %}<span>{{ fmt_kyiv_zoned(first.published_at or first.collected_at) }} → {{ fmt_kyiv_zoned(last.published_at or last.collected_at) }}</span>{% endif %}
@@ -175,10 +211,7 @@
 
         <div class="signals-detail" role="region" aria-label="Деталі вибраного сигналу">
         {% for candidate in snapshot.candidates %}
-            {% set title = namespace(value='Пов’язані публікації') %}
-            {% for item in candidate.chronology if item.content_id == candidate.representative_content_id %}
-                {% if item.title %}{% set title.value = item.title %}{% endif %}
-            {% endfor %}
+            {% set rendered_title = signal_title(candidate) %}
             <article
                 class="signals-panel"
                 id="signal-panel-{{ candidate.candidate_id }}"
@@ -191,7 +224,7 @@
                     <div class="signals-panel-eyebrow">
                         <span class="badge {{ 'signals-badge-cross' if candidate.cross_space else 'signals-badge-space' }}">{{ 'Між просторами' if candidate.cross_space else space_name(candidate.source_groups[0]) ~ ' простір' }}</span>
                     </div>
-                    <h2>{{ title.value }}</h2>
+                    <h2>{{ rendered_title }}</h2>
                     <div class="signals-panel-counts" aria-label="Обсяг сигналу">
                         <span><strong>{{ candidate.source_count }}</strong> {{ plural(candidate.source_count, 'джерело', 'джерела', 'джерел') }}</span>
                         <span><strong>{{ candidate.occurrence_count }}</strong> {{ plural(candidate.occurrence_count, 'публікація', 'публікації', 'публікацій') }}</span>
@@ -317,6 +350,78 @@
                     {% endif %}
                 </section>
 
+                {% if candidate.cross_space %}
+                <section class="signals-section signals-key-evidence" aria-labelledby="key-evidence-title-{{ candidate.candidate_id }}">
+                    <div class="signals-section-head">
+                        <h3 id="key-evidence-title-{{ candidate.candidate_id }}">Формулювання у просторах</h3>
+                        <span>По одному зафіксованому прикладу з кожного простору</span>
+                    </div>
+
+                    <div class="signals-evidence-list">
+                    {% for group in ['ua_space', 'ru_space'] if group in candidate.source_groups %}
+                        {% set sample = namespace(
+                            found=false,
+                            content_id=none,
+                            title='',
+                            source_name='',
+                            source_type='',
+                            observed_at=none
+                        ) %}
+
+                        {% for evidence in candidate.chronology if evidence.source_group == group %}
+                            {% if not sample.found %}
+                                {% set sample.found = true %}
+                                {% set sample.content_id = evidence.content_id %}
+                                {% set sample.title = evidence.title or '' %}
+                                {% set sample.source_name = evidence.source_name or evidence.source_id %}
+                                {% set sample.source_type = evidence.source_type or '' %}
+                                {% set sample.observed_at = evidence.published_at or evidence.collected_at %}
+                            {% endif %}
+                        {% endfor %}
+
+                        <article class="signals-evidence">
+                            <header>
+                                <div>
+                                    <strong>{{ space_name(group) }} простір</strong>
+                                    {% if sample.source_name %}
+                                    <span class="signals-source-type">
+                                        · {{ sample.source_name }}
+                                        {% if sample.source_type %} · {{ source_type_name(sample.source_type) }}{% endif %}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </header>
+
+                            {% if sample.title %}
+                            <h4>{{ sample.title }}</h4>
+                            {% endif %}
+
+                            {% set excerpt_found = namespace(value=false) %}
+                            {% for excerpt in candidate.evidence_references
+                                if sample.content_id and excerpt.content_id == sample.content_id %}
+                                {% set excerpt_found.value = true %}
+                                <blockquote>{{ excerpt.text }}{% if excerpt.text_truncated %}…{% endif %}</blockquote>
+                            {% endfor %}
+
+                            {% if sample.found and not excerpt_found.value %}
+                            <span class="signals-link-missing">
+                                Текстовий фрагмент цього прикладу не потрапив до evidence-вибірки.
+                            </span>
+                            {% endif %}
+
+                            {% if sample.observed_at %}
+                            <dl class="signals-evidence-time">
+                                <div>
+                                    <dt>Зафіксовано</dt>
+                                    <dd>{{ fmt_kyiv_zoned(sample.observed_at) }}</dd>
+                                </div>
+                            </dl>
+                            {% endif %}
+                        </article>
+                    {% endfor %}
+                    </div>
+                </section>
+                {% else %}
                 {% for excerpt in candidate.evidence_references if excerpt.content_id == candidate.representative_content_id %}
                 <section class="signals-section signals-key-evidence" aria-labelledby="key-evidence-title-{{ candidate.candidate_id }}">
                     <div class="signals-section-head">
@@ -325,6 +430,7 @@
                     <blockquote>{{ excerpt.text }}{% if excerpt.text_truncated %}…{% endif %}</blockquote>
                 </section>
                 {% endfor %}
+                {% endif %}
 
                 <section class="signals-section signals-section-evidence" aria-labelledby="evidence-title-{{ candidate.candidate_id }}">
                     <div class="signals-section-head">
@@ -468,7 +574,10 @@
             var matchesSpace = selectedSpace === 'all' ||
                 (selectedSpace === 'cross'
                     ? item.dataset.cross === 'true'
-                    : item.dataset.space.split(' ').indexOf(selectedSpace) !== -1);
+                    : (
+                        item.dataset.cross !== 'true' &&
+                        item.dataset.space.split(' ').indexOf(selectedSpace) !== -1
+                    ));
 
             var matchesWorkState =
                 selectedWorkState === 'all' ||
