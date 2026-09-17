@@ -542,13 +542,28 @@ def main(argv=None) -> int:
                 if set(watermarks) != set(args.source_groups):
                     raise ValueError("Немає watermark для кожної вибраної групи")
                 as_of = min(watermarks.values())
-        adapter_class = (
-            ExactPostgresSignalAdapter
-            if args.strategy == 'exact_current_24h'
-            else PostgresSignalAdapter
-        )
-        adapter = adapter_class(connection, model_id=args.model_id,
-            source_groups=args.source_groups, limits=limits, max_distance=args.related_distance)
+        if args.strategy == 'exact_current_24h':
+            critical_distance = (
+                args.merge_distance
+                if args.merge_distance is not None
+                else args.core_distance
+            )
+            adapter = ExactPostgresSignalAdapter(
+                connection,
+                model_id=args.model_id,
+                source_groups=args.source_groups,
+                limits=limits,
+                max_distance=args.related_distance,
+                critical_distance=critical_distance,
+            )
+        else:
+            adapter = PostgresSignalAdapter(
+                connection,
+                model_id=args.model_id,
+                source_groups=args.source_groups,
+                limits=limits,
+                max_distance=args.related_distance,
+            )
         stage = 'SELECT та контракт даних'
         data = adapter.read(as_of=as_of, embedding_model=args.model, dimension=args.dimension)
         stage = 'валідація snapshot'

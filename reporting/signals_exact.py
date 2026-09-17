@@ -104,6 +104,7 @@ class ExactPostgresSignalAdapter:
         source_groups=SPACES,
         limits=PostgresLimits(),
         max_distance=0.36,
+        critical_distance=0.18,
     ):
         limits.validate()
         if type(model_id) is not int or model_id <= 0:
@@ -116,12 +117,18 @@ class ExactPostgresSignalAdapter:
             raise ValueError("Некоректні групи джерел")
         if not math.isfinite(max_distance) or not 0 <= max_distance <= 2:
             raise ValueError("Некоректний поріг відстані")
+        if (
+            not math.isfinite(critical_distance)
+            or not 0 <= critical_distance <= max_distance
+        ):
+            raise ValueError("Некоректний критичний поріг відстані")
 
         self.connection = connection
         self.model_id = model_id
         self.groups = tuple(sorted(source_groups))
         self.limits = limits
         self.max_distance = max_distance
+        self.critical_distance = critical_distance
         self.timings = []
 
     def _query(self, name, sql, params):
@@ -241,6 +248,20 @@ class ExactPostgresSignalAdapter:
             p,
         )
         pair_limited = len(raw_pairs) > self.limits.pairs
+        critical_pair_limited = False
+        if pair_limited:
+            first_omitted_distance = float(
+                raw_pairs[self.limits.pairs]["distance"]
+            )
+            if (
+                not math.isfinite(first_omitted_distance)
+                or not 0 <= first_omitted_distance <= 2
+            ):
+                raise ValueError("Некоректна exact cosine distance")
+            critical_pair_limited = (
+                first_omitted_distance <= self.critical_distance
+            )
+
         raw_pairs = raw_pairs[: self.limits.pairs]
 
         pairs = []
@@ -322,7 +343,7 @@ class ExactPostgresSignalAdapter:
         )
 
         critical = (
-            pair_limited
+            critical_pair_limited
             or row_limited
             or (not current_ids and current_analyze > 0)
         )
