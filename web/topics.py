@@ -15,7 +15,6 @@ DEFAULT_SNAPSHOT = (
 
 EXPECTED_SCHEMA = "topics/1"
 VALID_VIEWS = {"all", "ru_space", "ua_space"}
-DETAIL_EVIDENCE_LIMIT = 80
 TOPICS_COMPARE_LIMIT = 50
 
 
@@ -248,7 +247,7 @@ def load_topic_marker(
         occurrence_refs = source.get(
             "occurrence_refs",
             [],
-        )[:DETAIL_EVIDENCE_LIMIT]
+        )
 
         occurrences = []
 

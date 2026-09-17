@@ -51,7 +51,6 @@ CHANGE_LIMIT = 40
 THEME_MIN_PUBLICATIONS = 2
 CHANGE_MIN_PUBLICATIONS = 3
 
-EVIDENCE_LIMIT = 200
 SOURCE_LIMIT = 20
 
 CLOUD_PHRASES = 52
@@ -239,7 +238,7 @@ FEED_BOILERPLATE_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
-ENTITY_MARKER_ALIASES = {
+MARKER_FAMILIES = {
     "володимир путін": {
         "words": {
             "путін",
@@ -260,6 +259,21 @@ ENTITY_MARKER_ALIASES = {
             "владимир зеленский",
         },
     },
+    "ліндсі грем": {
+        "words": set(),
+        "phrases": {
+            "ліндсі грем",
+            "ліндсі грема",
+            "линдси грэм",
+        },
+    },
+    "пекельний санкція": {
+        "words": set(),
+        "phrases": {
+            "пекельний санкція",
+            "адский санкция",
+        },
+    },
 }
 
 
@@ -268,13 +282,13 @@ def strip_feed_boilerplate(text: str) -> str:
     return FEED_BOILERPLATE_RE.sub("", text)
 
 
-def canonicalize_entity_terms(
+def canonicalize_marker_families(
     words: set[str],
     phrases: set[str],
 ) -> tuple[set[str], set[str]]:
     """
     Collapse selected cross-language unigram/bigram aliases into one
-    phrase marker per entity.
+    canonical marker family.
 
     The canonical marker is inserted once per content, so publication
     counts remain document-distinct rather than alias-additive.
@@ -282,7 +296,7 @@ def canonicalize_entity_terms(
     words = set(words)
     phrases = set(phrases)
 
-    for canonical, aliases in ENTITY_MARKER_ALIASES.items():
+    for canonical, aliases in MARKER_FAMILIES.items():
         matched = bool(
             words.intersection(aliases["words"])
             or phrases.intersection(aliases["phrases"])
@@ -467,7 +481,7 @@ def process_contents(
             stopwords=stopwords,
         )
 
-        words, phrases = canonicalize_entity_terms(
+        words, phrases = canonicalize_marker_families(
             words,
             phrases,
         )
@@ -1364,10 +1378,13 @@ def build_marker_details(
                         ]
                     )
 
+                source_ranking = source_rank(
+                    selected
+                )
+
                 occurrence_refs = [
                     row["occurrence_id"]
-                    for row
-                    in selected[:EVIDENCE_LIMIT]
+                    for row in selected
                 ]
 
                 referenced_occurrences.update(
@@ -1400,7 +1417,7 @@ def build_marker_details(
                     "hourly": hourly,
                     "hourly_sources": hourly_sources,
                     "source_ranking": (
-                        source_rank(selected)
+                        source_ranking
                     ),
                     "evidence_total": len(
                         selected
@@ -1408,10 +1425,7 @@ def build_marker_details(
                     "occurrence_refs": (
                         occurrence_refs
                     ),
-                    "evidence_limit_reached": (
-                        len(selected)
-                        > EVIDENCE_LIMIT
-                    ),
+                    "evidence_limit_reached": False,
                 }
 
             detail["views"][view] = (
