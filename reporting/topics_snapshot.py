@@ -51,6 +51,35 @@ CHANGE_LIMIT = 40
 THEME_MIN_PUBLICATIONS = 2
 CHANGE_MIN_PUBLICATIONS = 3
 
+# Presentation-only hygiene.
+# Не змінює NLP/cache і не видаляє дані:
+# прибирає очевидні source-attribution та службові фрази
+# з аналітичного ранжування/хмари.
+PRESENTATION_PHRASE_NOISE = {
+    "інформатор україна",
+    "риа новости",
+    "передает риа",
+    "передаёт риа",
+    "писала газета",
+    "приняли участие",
+    "речь идет",
+    "речь идёт",
+}
+
+
+def presentation_marker_visible(
+    unit: str,
+    label: str,
+) -> bool:
+    if unit != "phrases":
+        return True
+
+    key = " ".join(
+        (label or "").casefold().split()
+    )
+
+    return key not in PRESENTATION_PHRASE_NOISE
+
 SOURCE_LIMIT = 20
 
 CLOUD_PHRASES = 52
@@ -396,6 +425,72 @@ def load_topics_nlp_cache() -> dict[
             ] = row
 
     return result
+
+
+
+OPERATIONAL_ALERT_PATTERNS = (
+    re.compile(
+        r"(?:^|\n|[.!?]\s*)"
+        r"(?:🟢|🔴|🟡|⚠️|❗)?\s*"
+        r".{0,100}?"
+        r"(?:—|-)\s*"
+        r"відбій\s+повітряної\s+тривоги\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bповітряна\s+тривога\s+досі\s+триває\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:^|\n)\s*"
+        r"(?:🔴|🟡|⚠️|❗)?\s*"
+        r"повітряна\s+тривога[!.\s]*(?:$|\n)",
+        re.IGNORECASE,
+    ),
+)
+
+
+def is_operational_alert_notice(
+    row: dict[str, Any],
+) -> bool:
+    """
+    Reporting-only suppression of short Telegram alert notices.
+
+    Дані не видаляються. Такі повідомлення лише не входять
+    до тематичного корпусу Topics, де повторюваний службовий
+    формат непропорційно спотворює тематичне ранжування.
+    """
+    if (
+        row.get("source_type") or ""
+    ).casefold() != "telegram":
+        return False
+
+    value = " ".join(
+        (row.get("text_content") or "").split()
+    )
+
+    if not value or len(value) > 700:
+        return False
+
+    return any(
+        pattern.search(value)
+        for pattern in OPERATIONAL_ALERT_PATTERNS
+    )
+
+
+def filter_operational_alert_notices(
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    kept = []
+    suppressed = 0
+
+    for row in rows:
+        if is_operational_alert_notice(row):
+            suppressed += 1
+        else:
+            kept.append(row)
+
+    return kept, suppressed
 
 
 def process_contents(
@@ -816,6 +911,12 @@ def theme_rows(
         if meta["unit"] != unit:
             continue
 
+        if not presentation_marker_visible(
+            unit,
+            meta["label"],
+        ):
+            continue
+
         current = get_stat(
             stats,
             "current",
@@ -878,6 +979,12 @@ def change_rows(
 
     for mid, meta in marker_meta.items():
         if meta["unit"] != unit:
+            continue
+
+        if not presentation_marker_visible(
+            unit,
+            meta["label"],
+        ):
             continue
 
         current = get_stat(
@@ -1720,6 +1827,25 @@ def build_snapshot() -> dict[str, Any]:
     started = time.perf_counter()
 
     as_of, rows = fetch_rows()
+
+    input_publications = len(rows)
+
+    (
+        rows,
+        suppressed_operational_alerts,
+    ) = filter_operational_alert_notices(
+        rows
+    )
+
+    print(
+        "Topics corpus filter: "
+        f"input={input_publications} "
+        "operational_alerts_suppressed="
+        f"{suppressed_operational_alerts} "
+        f"remaining={len(rows)}",
+        flush=True,
+    )
+
     db_finished = time.perf_counter()
 
     current_start = (
