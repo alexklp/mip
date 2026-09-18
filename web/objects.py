@@ -118,6 +118,7 @@ def fetch_object_evidence(
                 io.occurrence_id,
                 io.content_id,
                 COALESCE(io.published_at, io.collected_at) AS observed_at,
+                io.published_at AS published_at,
                 s.source_id,
                 s.name AS source_name,
                 s.source_group,
@@ -201,6 +202,7 @@ def fetch_c1_evidence(
                 io.occurrence_id,
                 io.content_id,
                 COALESCE(io.published_at, io.collected_at) AS observed_at,
+                io.published_at AS published_at,
                 s.source_id,
                 s.name AS source_name,
                 s.source_group,
@@ -258,6 +260,7 @@ def fetch_c1_evidence(
                 io.occurrence_id,
                 io.content_id,
                 COALESCE(io.published_at, io.collected_at),
+                io.published_at,
                 s.source_id,
                 s.name,
                 s.source_group,
@@ -273,3 +276,149 @@ def fetch_c1_evidence(
             (day, days, day, day, C1_EVIDENCE_LIMIT),
         )
         return cur.fetchall()
+
+
+
+def fetch_object_breakdown(
+    conn,
+    *,
+    object_id: int,
+    days: int = 30,
+    day=None,
+) -> dict:
+    """Publication breakdown for one C1 object in the active UI window."""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            WITH object_content AS (
+                SELECT DISTINCT
+                    a.content_id
+                FROM content_contour_assignments a
+                JOIN contour_reference_objects o
+                  ON o.object_id = a.object_id
+                 AND o.monitoring_contour_id = a.monitoring_contour_id
+                WHERE a.monitoring_contour_id = 1
+                  AND a.object_id = %s
+                  AND a.evidence_type = 'exact_reference'
+{_C1_ANALYTICAL_GATE_SQL}
+                  AND o.active
+            ),
+            activity AS (
+                SELECT
+                    io.occurrence_id,
+                    io.source_id,
+                    s.name AS source_name,
+                    s.source_group,
+                    s.source_type,
+                    COALESCE(
+                        io.published_at,
+                        io.collected_at
+                    ) AS observed_at
+                FROM object_content oc
+                JOIN item_occurrences io
+                  ON io.content_id = oc.content_id
+                JOIN sources s
+                  ON s.source_id = io.source_id
+                WHERE (
+                    (
+                        %s::date IS NULL
+                        AND COALESCE(
+                            io.published_at,
+                            io.collected_at
+                        ) >= now() - (%s * interval '1 day')
+                    )
+                    OR (
+                        %s::date IS NOT NULL
+                        AND (
+                            COALESCE(
+                                io.published_at,
+                                io.collected_at
+                            ) AT TIME ZONE 'Europe/Kyiv'
+                        )::date = %s::date
+                    )
+                )
+            ),
+            rollup AS (
+                SELECT
+                    'space'::text AS dimension,
+                    COALESCE(source_group, 'other')::text AS code,
+                    COALESCE(source_group, 'other')::text AS label,
+                    count(*) AS publications
+                FROM activity
+                GROUP BY source_group
+
+                UNION ALL
+
+                SELECT
+                    'type'::text,
+                    COALESCE(source_type, 'other')::text,
+                    COALESCE(source_type, 'other')::text,
+                    count(*)
+                FROM activity
+                GROUP BY source_type
+
+                UNION ALL
+
+                SELECT
+                    'source'::text,
+                    source_id::text,
+                    source_name::text,
+                    count(*)
+                FROM activity
+                GROUP BY source_id, source_name
+            )
+            SELECT
+                dimension,
+                code,
+                label,
+                publications
+            FROM rollup
+            ORDER BY
+                dimension,
+                publications DESC,
+                label
+            """,
+            (object_id, day, days, day, day),
+        )
+        rows = cur.fetchall()
+
+    space_names = {
+        "ua_space": "Український",
+        "ru_space": "Російський",
+        "other": "Інше",
+    }
+    type_names = {
+        "telegram": "Telegram",
+        "rss": "RSS",
+        "other": "Інше",
+    }
+
+    result = {
+        "spaces": [],
+        "types": [],
+        "sources": [],
+    }
+
+    for row in rows:
+        item = dict(row)
+        item["publications"] = int(item["publications"])
+
+        if item["dimension"] == "space":
+            item["label"] = space_names.get(
+                item["code"],
+                item["label"],
+            )
+            result["spaces"].append(item)
+
+        elif item["dimension"] == "type":
+            item["label"] = type_names.get(
+                item["code"],
+                item["label"],
+            )
+            result["types"].append(item)
+
+        elif item["dimension"] == "source":
+            result["sources"].append(item)
+
+    result["sources"] = result["sources"][:5]
+    return result

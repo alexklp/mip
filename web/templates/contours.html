@@ -39,66 +39,35 @@
             <div>
                 <h2>{{ current_contour.name }}</h2>
                 <p>
-                    Що нового з'явилося про об'єкти, які ми моніторимо?
+                    Поточна картина згадок про об'єкти контуру.
                 </p>
             </div>
 
-        </section>
+            <div
+                class="contour-summary-strip"
+                aria-label="Поточна активність контуру"
+            >
+                <div class="contour-summary-item">
+                    <strong>{{ summary.objects_total }}</strong>
+                    <span>об'єктів у моніторингу</span>
+                </div>
 
-        {% if changes %}
-        <section
-            class="contour-changes"
-            aria-labelledby="contour-changes-title"
-        >
-            <div class="contour-changes-head">
-                <div>
-                    <h3 id="contour-changes-title">Що змінилось</h3>
-                    <p>
-                        Нові події за останні 7 повних днів.
-                    </p>
+                <div class="contour-summary-item">
+                    <strong>{{ dashboard_objects|length }}</strong>
+                    <span>активні об'єкти за 24 год</span>
+                </div>
+
+                <div class="contour-summary-item">
+                    <strong>{{ summary.materials_24h }}</strong>
+                    <span>матеріалів за 24 год</span>
+                </div>
+
+                <div class="contour-summary-item">
+                    <strong>{{ summary.sources_24h }}</strong>
+                    <span>джерел за 24 год</span>
                 </div>
             </div>
-
-            <div class="contour-change-list">
-                {% for item in changes %}
-                    <a
-                        class="contour-change-row"
-                        href="/contours?contour=dshv_objects&object_id={{ item.object_id }}&day={{ item.day.isoformat() }}"
-                    >
-                        <div class="contour-change-main">
-                            <span class="contour-change-kind">
-                                {% if item.event_type == "peak" %}
-                                    Новий 30-денний максимум
-                                {% elif item.event_type == "return" %}
-                                    Після паузи
-                                {% else %}
-                                    Перша зафіксована згадка
-                                {% endif %}
-                            </span>
-
-                            <strong>{{ item.canonical_name }}</strong>
-
-                            <span class="contour-change-detail">
-                                {% if item.event_type == "peak" %}
-                                    Матеріалів: {{ item.materials }}
-                                    · попередній максимум: {{ item.previous_max }}
-                                {% elif item.event_type == "return" %}
-                                    {{ item.quiet_days }}
-                                    днів без знайдених згадок
-                                {% else %}
-                                    Уперше зафіксовано в доступній історії МІП
-                                {% endif %}
-                            </span>
-                        </div>
-
-                        <time datetime="{{ item.day.isoformat() }}">
-                            {{ item.day.strftime("%d.%m") }}
-                        </time>
-                    </a>
-                {% endfor %}
-            </div>
         </section>
-        {% endif %}
 
         <section class="contour-dashboard-grid">
 
@@ -107,9 +76,9 @@
                     <div>
                         <h3>
                             {% if selected %}
-                                Динаміка · {{ selected.canonical_name }}
+                                Динаміка · {{ selected.display_name }}
                             {% else %}
-                                Динаміка згадок
+                                Динаміка контуру · 30 днів
                             {% endif %}
                         </h3>
                         <p>
@@ -128,25 +97,34 @@
                 >
                     {% for row in trend %}
                         <a
-                            class="contour-trend-column{% if selected_day == row.day %} is-selected{% endif %}"
+                            class="contour-trend-column{% if selected_day == row.day %} is-selected{% endif %}{% if loop.last %} is-today{% endif %}"
                             href="{% if selected_day == row.day %}/contours?contour=dshv_objects{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% else %}/contours?contour=dshv_objects&day={{ row.day.isoformat() }}{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% endif %}"
                             aria-pressed="{% if selected_day == row.day %}true{% else %}false{% endif %}"
                             title="{% if selected_day == row.day %}Скинути фільтр за {{ row.day.strftime('%d.%m.%Y') }}{% else %}Показати матеріали за {{ row.day.strftime('%d.%m.%Y') }}{% endif %}"
                         >
-                            <div class="contour-trend-value">
-                                {{ row.materials }}
-                            </div>
+                            <div
+                                class="contour-trend-track"
+                                style="--bar-height: {{ row.height_pct }}%;"
+                            >
+                                {% if row.materials %}
+                                    <div
+                                        class="contour-trend-value"
+                                        title="{{ row.materials }} матеріалів; {{ row.sources }} джерел"
+                                    >
+                                        {{ row.materials }}
+                                    </div>
 
-                            <div class="contour-trend-track">
-                                <div
-                                    class="contour-trend-bar"
-                                    style="height: {{ row.height_pct }}%;"
-                                    title="{{ row.materials }} матеріалів; {{ row.sources }} джерел"
-                                ></div>
+                                    <div
+                                        class="contour-trend-bar"
+                                        style="height: {{ row.height_pct }}%;"
+                                        title="{{ row.materials }} матеріалів; {{ row.sources }} джерел"
+                                    ></div>
+                                {% endif %}
                             </div>
 
                             <div class="contour-trend-day">
                                 {{ row.day.strftime("%d.%m") }}
+
                             </div>
                             <div class="contour-trend-source">
                                 {{ row.sources }} дж.
@@ -159,33 +137,27 @@
             <article class="contour-panel">
                 <div class="contour-panel-head">
                     <div>
-                        <h3>
-                            {% if selected_day %}
-                                Активні об'єкти · {{ selected_day.strftime("%d.%m.%Y") }}
-                            {% else %}
-                                Активні об'єкти · 30 днів
-                            {% endif %}
-                        </h3>
+                        <h3>Активність об'єктів · 24 год</h3>
                         <p>
-                            {{ active_objects|length }} об'єктів ·
-                            один матеріал може стосуватися кількох об'єктів.
+                            {{ dashboard_objects|length }}
+                            конкретних об'єктів із активністю.
                         </p>
                     </div>
                 </div>
 
-                <div class="contour-ranking">
-                    {% for row in active_objects %}
+                {% if dashboard_objects %}
+                <div class="contour-ranking contour-dashboard-objects">
+                    {% for row in dashboard_objects %}
                         <a
                             class="contour-rank-row
                                 {% if selected and row.object_id == selected.object_id %}
                                     is-selected
                                 {% endif %}"
-                            href="{% if selected and row.object_id == selected.object_id %}/contours?contour=dshv_objects{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}{% else %}/contours?contour=dshv_objects&object_id={{ row.object_id }}{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}{% endif %}"
-                            aria-pressed="{% if selected and row.object_id == selected.object_id %}true{% else %}false{% endif %}"
+                            href="/contours?contour=dshv_objects&object_id={{ row.object_id }}"
                         >
                             <div class="contour-rank-head">
-                                <span>{{ row.canonical_name }}</span>
-                                <strong>{{ row.materials }}</strong>
+                                <span>{{ row.display_name }}</span>
+                                <strong>{{ row.contents_24h }}</strong>
                             </div>
 
                             <div class="contour-rank-track">
@@ -196,14 +168,1290 @@
                             </div>
 
                             <small>
-                                {{ row.sources }} джерел
+                                {{ row.sources_24h }} дж.
+                                · UA {{ row.ua_24h }}
+                                · RU {{ row.ru_24h }}
                             </small>
                         </a>
                     {% endfor %}
                 </div>
+                {% else %}
+                    <div class="contour-dashboard-empty">
+                        За останні 24 години згадок
+                        про конкретні об'єкти не зафіксовано.
+                    </div>
+                {% endif %}
             </article>
 
         </section>
+
+        {% if not selected and not selected_day
+              and contour_topics
+              and contour_topics.state == "ready"
+              and contour_topics["phrases"] %}
+
+        <section class="contour-analysis-workspace">
+
+            <div class="contour-analysis-toolbar">
+                <div class="topics-segment" aria-label="Аналітичний шар контуру">
+                    <button
+                        type="button"
+                        aria-pressed="true"
+                    >
+                        Теми
+                    </button>
+                    <button
+                        type="button"
+                        disabled
+                        title="Scoped detection сигналів буде додано окремим аналітичним зрізом"
+                    >
+                        Сигнали
+                    </button>
+                </div>
+
+                <span class="contour-analysis-scope">
+                    C1 · 30 днів ·
+                    {{ contour_topics.summary.materials }} матеріалів ·
+                    {{ contour_topics.summary.sources }} джерел
+                </span>
+            </div>
+
+
+            <section class="topics-panel topics-compare-panel">
+                <div class="topics-panel-head topics-compare-head">
+                    <div>
+                        <h2>Порівняння динаміки тем</h2>
+                        <p>
+                            Публікації за днями ·
+                            до 5 вибраних тем · час публікації.
+                        </p>
+                    </div>
+
+                    <div
+                        id="c1-topics-legend"
+                        class="topics-compare-legend"
+                    ></div>
+                </div>
+
+                <div class="topics-compare-wrap">
+                    <svg
+                        id="c1-topics-compare"
+                        class="topics-compare-chart"
+                        viewBox="0 0 800 220"
+                        preserveAspectRatio="none"
+                        role="img"
+                        aria-label="Порівняння динаміки тем контуру за 30 днів"
+                    ></svg>
+
+                    <p
+                        id="c1-topics-compare-empty"
+                        class="topics-empty topics-compare-empty"
+                        hidden
+                    >
+                        Оберіть хоча б одну тему для порівняння.
+                    </p>
+                </div>
+            </section>
+
+
+            <div class="topics-workspace">
+
+                <section class="topics-panel topics-cloud-panel">
+                    <div class="topics-panel-head">
+                        <div>
+                            <h2>Тематичне поле</h2>
+                            <p>
+                                Локальні теми навколо об'єктів ДШВ ·
+                                розмір маркера відповідає кількості публікацій.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="topics-cloud-wrap">
+                        <svg
+                            id="c1-topics-cloud"
+                            class="topics-cloud"
+                            viewBox="-35 -30 1270 740"
+                            preserveAspectRatio="xMidYMid meet"
+                            aria-label="Тематичне поле контуру ДШВ"
+                        ></svg>
+                    </div>
+                </section>
+
+
+                <section class="topics-panel topics-ranking-panel">
+                    <div class="topics-panel-head topics-ranking-head">
+                        <div>
+                            <h2>Теми для порівняння</h2>
+                            <p>
+                                C1 · 30 днів · до 5 тем для графіка.
+                            </p>
+                        </div>
+
+                        <div class="topics-compare-controls">
+                            <span id="c1-topics-count">0 / 5</span>
+                            <button
+                                id="c1-topics-reset"
+                                type="button"
+                            >
+                                Скинути
+                            </button>
+                        </div>
+                    </div>
+
+                    <div
+                        id="c1-topics-ranking"
+                        class="topics-ranking is-compare"
+                    ></div>
+                </section>
+
+            </div>
+
+            <script
+                id="c1-topics-data"
+                type="application/json"
+            >{{ contour_topics | tojson }}</script>
+
+        </section>
+
+
+        <script>
+        (function () {
+            "use strict";
+
+            var root = document.getElementById(
+                "c1-topics-data"
+            );
+
+            if (!root) return;
+
+            var data = JSON.parse(root.textContent);
+
+            var phrases = data.phrases || [];
+            var comparison = data.comparison || {};
+            var seriesMap = comparison.series || {};
+            var days = comparison.days || [];
+            var cloudItems = data.cloud || [];
+
+            var compareSvg = document.getElementById(
+                "c1-topics-compare"
+            );
+            var compareEmpty = document.getElementById(
+                "c1-topics-compare-empty"
+            );
+            var legend = document.getElementById(
+                "c1-topics-legend"
+            );
+            var ranking = document.getElementById(
+                "c1-topics-ranking"
+            );
+            var cloud = document.getElementById(
+                "c1-topics-cloud"
+            );
+            var count = document.getElementById(
+                "c1-topics-count"
+            );
+            var reset = document.getElementById(
+                "c1-topics-reset"
+            );
+
+            var evidenceTitle = null;
+            var evidenceNote = null;
+            var evidenceBody = null;
+            var topicFilterReset = null;
+            var originalEvidence = null;
+
+            var topicRequest = 0;
+
+
+            function ensureEvidenceDom() {
+                evidenceTitle =
+                    document.getElementById(
+                        "c1-evidence-title"
+                    );
+
+                evidenceNote =
+                    document.getElementById(
+                        "c1-evidence-note"
+                    );
+
+                evidenceBody =
+                    document.getElementById(
+                        "c1-evidence-body"
+                    );
+
+                topicFilterReset =
+                    document.getElementById(
+                        "c1-topic-filter-reset"
+                    );
+
+                if (
+                    !originalEvidence &&
+                    evidenceTitle &&
+                    evidenceNote &&
+                    evidenceBody
+                ) {
+                    originalEvidence = {
+                        title:
+                            evidenceTitle.textContent.trim(),
+                        note:
+                            evidenceNote.textContent.trim(),
+                        body:
+                            evidenceBody.innerHTML
+                    };
+                }
+
+                if (
+                    topicFilterReset &&
+                    !topicFilterReset.dataset.bound
+                ) {
+                    topicFilterReset.addEventListener(
+                        "click",
+                        resetTopicSelection
+                    );
+
+                    topicFilterReset.dataset.bound =
+                        "true";
+                }
+
+                return Boolean(
+                    evidenceTitle &&
+                    evidenceNote &&
+                    evidenceBody
+                );
+            }
+
+            var SVG_NS = "http://www.w3.org/2000/svg";
+
+
+            var phraseMap = {};
+
+            phrases.forEach(function (row) {
+                phraseMap[row.marker_id] = row;
+            });
+
+            var eligible = phrases
+                .filter(function (row) {
+                    return Array.isArray(
+                        seriesMap[row.marker_id]
+                    );
+                });
+
+            var selected = eligible
+                .slice(0, 5)
+                .map(function (row) {
+                    return row.marker_id;
+                });
+
+            /*
+             * Поточна тема для drill-down / фільтра.
+             * Вона навмисно не пов'язана з selected,
+             * який відповідає лише за comparison chart.
+             */
+            var selectedTopicId = null;
+
+
+            function svgElement(name, attrs) {
+                var node = document.createElementNS(
+                    SVG_NS,
+                    name
+                );
+
+                Object.keys(attrs || {}).forEach(
+                    function (key) {
+                        node.setAttribute(
+                            key,
+                            attrs[key]
+                        );
+                    }
+                );
+
+                return node;
+            }
+
+
+            function toggle(markerId) {
+                var index = selected.indexOf(markerId);
+
+                if (index !== -1) {
+                    selected.splice(index, 1);
+                } else if (selected.length < 5) {
+                    selected.push(markerId);
+                }
+
+                renderAll();
+            }
+
+
+            function formatTopicDate(value) {
+                if (!value) return "—";
+
+                return new Intl.DateTimeFormat(
+                    "uk-UA",
+                    {
+                        timeZone: "Europe/Kyiv",
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false
+                    }
+                ).format(
+                    new Date(value)
+                ).replace(",", " ·");
+            }
+
+
+            function topicSpaceName(value) {
+                return {
+                    ua_space: "Український",
+                    ru_space: "Російський"
+                }[value] || "Інший";
+            }
+
+
+            function topicSourceType(value) {
+                var key = (
+                    value || ""
+                ).toLocaleLowerCase("uk");
+
+                return {
+                    telegram: "Telegram",
+                    rss: "RSS",
+                    web: "Сайт"
+                }[key] || value || "Джерело";
+            }
+
+
+            function renderTopicEvidence(detail) {
+                ensureEvidenceDom();
+
+                if (
+                    !evidenceBody ||
+                    !evidenceTitle ||
+                    !evidenceNote
+                ) {
+                    return;
+                }
+
+                var rows = detail.occurrences || [];
+                var marker = detail.marker || {};
+                var label = marker.label || "—";
+
+                evidenceTitle.textContent =
+                    "Матеріали за темою · " +
+                    label;
+
+                evidenceNote.textContent =
+                    detail.publications +
+                    " публ. · " +
+                    detail.materials +
+                    " мат. · " +
+                    detail.sources +
+                    " джер. · 30 днів.";
+
+                if (
+                    detail.evidence_limit_reached
+                ) {
+                    evidenceNote.textContent +=
+                        " Показано " +
+                        rows.length +
+                        " із " +
+                        detail.evidence_total +
+                        ".";
+                }
+
+                evidenceBody.replaceChildren();
+
+                if (!rows.length) {
+                    var empty =
+                        document.createElement(
+                            "div"
+                        );
+
+                    empty.className =
+                        "materials-empty";
+
+                    empty.textContent =
+                        "Публікацій за вибраною " +
+                        "темою не знайдено.";
+
+                    evidenceBody.appendChild(
+                        empty
+                    );
+
+                    return;
+                }
+
+                var list =
+                    document.createElement(
+                        "div"
+                    );
+
+                list.className =
+                    "contour-evidence-list";
+
+
+                rows.forEach(function (row) {
+                    var article =
+                        document.createElement(
+                            "article"
+                        );
+
+                    article.className =
+                        "contour-evidence-item";
+
+                    article.dataset.space =
+                        row.source_group || "";
+
+
+                    var meta =
+                        document.createElement(
+                            "div"
+                        );
+
+                    meta.className =
+                        "contour-evidence-meta";
+
+
+                    var space =
+                        document.createElement(
+                            "span"
+                        );
+
+                    space.className =
+                        "contour-space-label";
+
+                    if (
+                        row.source_group ===
+                        "ua_space"
+                    ) {
+                        space.classList.add(
+                            "is-ua"
+                        );
+                    } else if (
+                        row.source_group ===
+                        "ru_space"
+                    ) {
+                        space.classList.add(
+                            "is-ru"
+                        );
+                    }
+
+                    space.textContent =
+                        topicSpaceName(
+                            row.source_group
+                        );
+
+
+                    var source =
+                        document.createElement(
+                            "strong"
+                        );
+
+                    source.className =
+                        "contour-evidence-source";
+
+                    source.textContent =
+                        row.source_name || "—";
+
+
+                    var type =
+                        document.createElement(
+                            "span"
+                        );
+
+                    type.className =
+                        "contour-evidence-type";
+
+                    type.textContent =
+                        topicSourceType(
+                            row.source_type
+                        );
+
+
+                    meta.append(
+                        space,
+                        source,
+                        type
+                    );
+
+
+                    if (row.published_at) {
+                        var time =
+                            document.createElement(
+                                "time"
+                            );
+
+                        time.className =
+                            "contour-evidence-time";
+
+                        time.dateTime =
+                            row.published_at;
+
+                        time.textContent =
+                            formatTopicDate(
+                                row.published_at
+                            );
+
+                        meta.appendChild(time);
+                    }
+
+
+                    article.appendChild(meta);
+
+
+                    if (row.text_preview) {
+                        var preview =
+                            document.createElement(
+                                "p"
+                            );
+
+                        preview.textContent =
+                            row.text_preview;
+
+                        article.appendChild(
+                            preview
+                        );
+                    }
+
+
+                    var footer =
+                        document.createElement(
+                            "div"
+                        );
+
+                    footer.className =
+                        "contour-evidence-footer";
+
+
+                    var matched =
+                        document.createElement(
+                            "div"
+                        );
+
+                    matched.className =
+                        "contour-evidence-match";
+
+                    matched.append(
+                        "Тема: "
+                    );
+
+                    var matchedStrong =
+                        document.createElement(
+                            "strong"
+                        );
+
+                    matchedStrong.textContent =
+                        label;
+
+                    matched.appendChild(
+                        matchedStrong
+                    );
+
+                    footer.appendChild(
+                        matched
+                    );
+
+
+                    if (
+                        row.external_ref &&
+                        /^https?:\/\//i.test(
+                            row.external_ref
+                        )
+                    ) {
+                        var link =
+                            document.createElement(
+                                "a"
+                            );
+
+                        link.className =
+                            "contour-evidence-open";
+
+                        link.href =
+                            row.external_ref;
+
+                        link.target =
+                            "_blank";
+
+                        link.rel =
+                            "noopener noreferrer";
+
+                        link.textContent =
+                            "Відкрити джерело ↗";
+
+                        footer.appendChild(
+                            link
+                        );
+                    }
+
+
+                    article.appendChild(
+                        footer
+                    );
+
+                    list.appendChild(
+                        article
+                    );
+                });
+
+
+                evidenceBody.appendChild(
+                    list
+                );
+            }
+
+
+            function renderTopicError() {
+                ensureEvidenceDom();
+
+                if (
+                    !evidenceBody ||
+                    !evidenceNote
+                ) {
+                    return;
+                }
+
+                evidenceNote.textContent =
+                    "Не вдалося завантажити " +
+                    "матеріали вибраної теми.";
+
+                evidenceBody.replaceChildren();
+
+                var error =
+                    document.createElement(
+                        "div"
+                    );
+
+                error.className =
+                    "materials-empty";
+
+                error.textContent =
+                    "Тематичний зріз тимчасово " +
+                    "недоступний.";
+
+                evidenceBody.appendChild(
+                    error
+                );
+            }
+
+
+            function resetTopicSelection() {
+                ensureEvidenceDom();
+
+                topicRequest += 1;
+                selectedTopicId = null;
+
+                if (evidenceTitle) {
+                    evidenceTitle.textContent =
+                        originalEvidence.title;
+                }
+
+                if (evidenceNote) {
+                    evidenceNote.textContent =
+                        originalEvidence.note;
+                }
+
+                if (evidenceBody) {
+                    evidenceBody.innerHTML =
+                        originalEvidence.body;
+                }
+
+                if (topicFilterReset) {
+                    topicFilterReset.hidden = true;
+                }
+
+                renderRanking();
+                renderCloud();
+            }
+
+
+            function selectTopic(markerId) {
+                ensureEvidenceDom();
+
+                var row =
+                    phraseMap[markerId];
+
+                if (!row) {
+                    return;
+                }
+
+                selectedTopicId = markerId;
+
+                renderRanking();
+                renderCloud();
+
+                if (topicFilterReset) {
+                    topicFilterReset.hidden = false;
+                }
+
+                if (
+                    evidenceTitle &&
+                    evidenceNote &&
+                    evidenceBody
+                ) {
+                    evidenceTitle.textContent =
+                        "Матеріали за темою · " +
+                        row.label;
+
+                    evidenceNote.textContent =
+                        "Завантаження матеріалів…";
+
+                    evidenceBody.innerHTML =
+                        '<div class="materials-empty">' +
+                        'Завантаження…' +
+                        '</div>';
+                }
+
+                topicRequest += 1;
+
+                var requestId =
+                    topicRequest;
+
+                fetch(
+                    "/contours/topic/" +
+                    encodeURIComponent(
+                        markerId
+                    )
+                )
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error(
+                                "HTTP " +
+                                response.status
+                            );
+                        }
+
+                        return response.json();
+                    })
+                    .then(function (detail) {
+                        if (
+                            requestId !==
+                            topicRequest ||
+                            selectedTopicId !==
+                            markerId
+                        ) {
+                            return;
+                        }
+
+                        renderTopicEvidence(
+                            detail
+                        );
+                    })
+                    .catch(function () {
+                        if (
+                            requestId !==
+                            topicRequest ||
+                            selectedTopicId !==
+                            markerId
+                        ) {
+                            return;
+                        }
+
+                        renderTopicError();
+                    });
+            }
+
+
+            function renderCompare() {
+                compareSvg.replaceChildren();
+                legend.replaceChildren();
+
+                count.textContent =
+                    selected.length + " / 5";
+
+                var active = selected
+                    .map(function (markerId) {
+                        var row = phraseMap[markerId];
+                        var values = seriesMap[markerId];
+
+                        if (
+                            !row ||
+                            !Array.isArray(values) ||
+                            values.length !== days.length
+                        ) {
+                            return null;
+                        }
+
+                        return {
+                            row: row,
+                            values: values
+                        };
+                    })
+                    .filter(Boolean);
+
+                if (!active.length || !days.length) {
+                    compareSvg.hidden = true;
+                    compareEmpty.hidden = false;
+                    return;
+                }
+
+                compareSvg.hidden = false;
+                compareEmpty.hidden = true;
+
+                var maxValue = 1;
+
+                active.forEach(function (item) {
+                    item.values.forEach(function (value) {
+                        maxValue = Math.max(
+                            maxValue,
+                            Number(value) || 0
+                        );
+                    });
+                });
+
+
+                [44, 110, 176].forEach(function (y) {
+                    compareSvg.appendChild(
+                        svgElement("line", {
+                            x1: 42,
+                            y1: y,
+                            x2: 786,
+                            y2: y,
+                            class: "topics-compare-grid"
+                        })
+                    );
+                });
+
+
+                days.forEach(function (day, index) {
+                    if (
+                        index !== 0 &&
+                        index !== days.length - 1 &&
+                        index % 5 !== 0
+                    ) {
+                        return;
+                    }
+
+                    var x =
+                        42 +
+                        (
+                            744 *
+                            index /
+                            Math.max(1, days.length - 1)
+                        );
+
+                    var label = svgElement(
+                        "text",
+                        {
+                            x: x,
+                            y: 212,
+                            "text-anchor":
+                                index === 0
+                                    ? "start"
+                                    : (
+                                        index === days.length - 1
+                                            ? "end"
+                                            : "middle"
+                                    ),
+                            class: "topics-compare-axis"
+                        }
+                    );
+
+                    label.textContent =
+                        day.slice(8, 10) +
+                        "." +
+                        day.slice(5, 7);
+
+                    compareSvg.appendChild(label);
+                });
+
+
+                active.forEach(function (item, seriesIndex) {
+                    var points = item.values.map(
+                        function (value, index) {
+                            var x =
+                                42 +
+                                (
+                                    744 *
+                                    index /
+                                    Math.max(
+                                        1,
+                                        item.values.length - 1
+                                    )
+                                );
+
+                            var y =
+                                188 -
+                                (
+                                    156 *
+                                    Number(value) /
+                                    maxValue
+                                );
+
+                            return {
+                                x: x,
+                                y: y,
+                                value: Number(value)
+                            };
+                        }
+                    );
+
+                    var polyline = svgElement(
+                        "polyline",
+                        {
+                            points: points
+                                .map(function (point) {
+                                    return (
+                                        point.x +
+                                        "," +
+                                        point.y
+                                    );
+                                })
+                                .join(" "),
+                            class:
+                                "topics-compare-line series-" +
+                                seriesIndex
+                        }
+                    );
+
+                    compareSvg.appendChild(polyline);
+
+                    points.forEach(function (point, index) {
+                        if (!point.value) return;
+
+                        var circle = svgElement(
+                            "circle",
+                            {
+                                cx: point.x,
+                                cy: point.y,
+                                r: 3.3,
+                                class:
+                                    "topics-compare-point series-" +
+                                    seriesIndex
+                            }
+                        );
+
+                        var title = svgElement(
+                            "title",
+                            {}
+                        );
+
+                        title.textContent =
+                            item.row.label +
+                            " · " +
+                            days[index] +
+                            " · " +
+                            point.value +
+                            " публ.";
+
+                        circle.appendChild(title);
+                        compareSvg.appendChild(circle);
+                    });
+
+
+                    var legendItem =
+                        document.createElement("span");
+
+                    legendItem.className =
+                        "series-" + seriesIndex;
+
+                    legendItem.textContent =
+                        item.row.label;
+
+                    legend.appendChild(legendItem);
+                });
+            }
+
+
+            function renderRanking() {
+                ranking.replaceChildren();
+
+                eligible
+                    .slice(0, 20)
+                    .forEach(function (row, index) {
+                        var item =
+                            document.createElement("div");
+
+                        item.className =
+                            "topics-compare-choice";
+
+                        if (
+                            row.marker_id ===
+                            selectedTopicId
+                        ) {
+                            item.classList.add(
+                                "is-selected"
+                            );
+                        }
+
+                        /*
+                         * Клік по вільній частині строки —
+                         * вибір теми для drill-down/filter.
+                         */
+                        item.addEventListener(
+                            "click",
+                            function () {
+                                selectTopic(
+                                    row.marker_id
+                                );
+                            }
+                        );
+
+
+                        var checked =
+                            selected.indexOf(
+                                row.marker_id
+                            ) !== -1;
+
+
+                        var number =
+                            document.createElement(
+                                "span"
+                            );
+
+                        number.className =
+                            "topics-compare-rank";
+
+                        number.textContent =
+                            index + 1;
+
+
+                        var checkbox =
+                            document.createElement(
+                                "input"
+                            );
+
+                        checkbox.type = "checkbox";
+                        checkbox.className =
+                            "topics-compare-checkbox";
+                        checkbox.checked = checked;
+
+                        checkbox.disabled = (
+                            !checked &&
+                            selected.length >= 5
+                        );
+
+                        checkbox.setAttribute(
+                            "aria-label",
+                            "Порівнювати тему " +
+                            row.label
+                        );
+
+                        /*
+                         * КРИТИЧНО:
+                         * checkbox не повинен запускати
+                         * row-selection.
+                         */
+                        checkbox.addEventListener(
+                            "click",
+                            function (event) {
+                                event.stopPropagation();
+                            }
+                        );
+
+                        checkbox.addEventListener(
+                            "change",
+                            function () {
+                                toggle(
+                                    row.marker_id
+                                );
+                            }
+                        );
+
+
+                        var markerButton =
+                            document.createElement(
+                                "button"
+                            );
+
+                        markerButton.type = "button";
+                        markerButton.className =
+                            "topics-compare-marker";
+
+
+                        var label =
+                            document.createElement(
+                                "span"
+                            );
+
+                        label.className =
+                            "topics-compare-marker-label";
+
+                        label.textContent =
+                            row.label;
+
+
+                        var sourceMeta =
+                            document.createElement(
+                                "small"
+                            );
+
+                        sourceMeta.textContent =
+                            row.sources +
+                            " джер.";
+
+
+                        markerButton.append(
+                            label,
+                            sourceMeta
+                        );
+
+                        markerButton.addEventListener(
+                            "click",
+                            function (event) {
+                                /*
+                                 * Не допускаємо подвійного
+                                 * bubbling у row-handler.
+                                 */
+                                event.stopPropagation();
+
+                                selectTopic(
+                                    row.marker_id
+                                );
+                            }
+                        );
+
+
+                        var value =
+                            document.createElement(
+                                "span"
+                            );
+
+                        value.className =
+                            "topics-compare-value";
+
+
+                        var strong =
+                            document.createElement(
+                                "strong"
+                            );
+
+                        strong.textContent =
+                            row.materials;
+
+
+                        var small =
+                            document.createElement(
+                                "small"
+                            );
+
+                        small.textContent =
+                            "мат.";
+
+
+                        value.append(
+                            strong,
+                            small
+                        );
+
+
+                        item.append(
+                            number,
+                            checkbox,
+                            markerButton,
+                            value
+                        );
+
+                        ranking.appendChild(
+                            item
+                        );
+                    });
+            }
+
+
+            function renderCloud() {
+                cloud.replaceChildren();
+
+                cloudItems.forEach(function (item, index) {
+                    if (!phraseMap[item.marker_id]) {
+                        return;
+                    }
+
+                    var text =
+                        svgElement(
+                            "text",
+                            {
+                                x: item.x,
+                                y: item.y,
+                                "font-size":
+                                    item.font_size,
+                                "dominant-baseline":
+                                    "hanging",
+                                tabindex: "0",
+                                role: "button",
+                                class:
+                                    "topics-cloud-word tone-" +
+                                    (index % 4)
+                            }
+                        );
+
+                    if (
+                        item.marker_id ===
+                        selectedTopicId
+                    ) {
+                        text.classList.add(
+                            "is-selected"
+                        );
+                    }
+
+                    text.textContent = item.label;
+
+                    var title =
+                        svgElement(
+                            "title",
+                            {}
+                        );
+
+                    var row =
+                        phraseMap[item.marker_id];
+
+                    title.textContent =
+                        row.label +
+                        " · " +
+                        row.materials +
+                        " матеріалів · " +
+                        row.sources +
+                        " джерел";
+
+                    text.appendChild(title);
+
+                    text.addEventListener(
+                        "click",
+                        function () {
+                            selectTopic(item.marker_id);
+                        }
+                    );
+
+                    text.addEventListener(
+                        "keydown",
+                        function (event) {
+                            if (
+                                event.key === "Enter" ||
+                                event.key === " "
+                            ) {
+                                event.preventDefault();
+                                selectTopic(item.marker_id);
+                            }
+                        }
+                    );
+
+                    cloud.appendChild(text);
+                });
+            }
+
+
+            function renderAll() {
+                renderCompare();
+                renderRanking();
+                renderCloud();
+            }
+
+
+            reset.addEventListener(
+                "click",
+                function () {
+                    selected = [];
+                    renderAll();
+                }
+            );
+
+            renderAll();
+        }());
+        </script>
+
+        {% endif %}
 
         {% if selected or selected_day %}
         <div class="contour-active-filters" aria-label="Активні фільтри">
@@ -211,7 +1459,7 @@
 
             {% if selected %}
                 <span class="contour-filter-chip">
-                    Об'єкт · {{ selected.canonical_name }}
+                    Об'єкт · {{ selected.display_name }}
                 </span>
             {% endif %}
 
@@ -236,95 +1484,117 @@
             <header class="contour-object-head">
                 <div>
                     <span class="contour-eyebrow">Вибраний об'єкт</span>
-                    <h2>{{ selected.canonical_name }}</h2>
+                    <h2>{{ selected.display_name }}</h2>
                 </div>
 
                 <div class="contour-object-summary">
-                    <strong>{{ selected.contents_24h }}</strong>
-                    <span>матеріалів · 24 год</span>
+                    <strong>
+                        {{ selected_activity.materials if selected_activity else 0 }}
+                    </strong>
+                    <span>матеріалів</span>
 
-                    <strong>{{ selected.sources_24h }}</strong>
-                    <span>джерел · 24 год</span>
+                    <strong>
+                        {{ selected_activity.sources if selected_activity else 0 }}
+                    </strong>
+                    <span>джерел</span>
+
+                    <span>
+                        {% if selected_day %}
+                            {{ selected_day.strftime("%d.%m.%Y") }}
+                        {% else %}
+                            30 днів
+                        {% endif %}
+                    </span>
+
+                    {% if selected_activity and selected_activity.last_seen %}
+                        <span>
+                            остання · {{ fmt_kyiv_zoned(selected_activity.last_seen) }}
+                        </span>
+                    {% endif %}
                 </div>
             </header>
 
-            <div class="contour-object-grid">
+            {% if selected_breakdown %}
+            <div class="contour-insights-grid">
 
-                <article class="contour-panel">
-                    <h3>Де з'являється</h3>
-
-                    <div class="contour-breakdown-group">
-                        <h4>Інформаційний простір</h4>
-
-                        {% for item in space_breakdown %}
-                            <div class="contour-breakdown-row">
-                                <span>{{ item.label }}</span>
-                                <div class="contour-breakdown-track">
-                                    <div
-                                        class="contour-breakdown-fill"
-                                        style="width: {{ item.bar_pct }}%;"
-                                    ></div>
-                                </div>
-                                <strong>{{ item.value }}</strong>
-                            </div>
-                        {% endfor %}
+                <article class="contour-panel contour-insight-panel">
+                    <div class="contour-insight-head">
+                        <h3>Інфопростір</h3>
+                        <span>публікації</span>
                     </div>
 
                     <div class="contour-breakdown-group">
-                        <h4>Тип джерела</h4>
+                        {% for item in selected_breakdown.spaces %}
+                        <div class="contour-breakdown-row">
+                            <span>{{ item.label }}</span>
 
-                        {% for item in channel_breakdown %}
-                            <div class="contour-breakdown-row">
-                                <span>{{ item.label }}</span>
-                                <div class="contour-breakdown-track">
-                                    <div
-                                        class="contour-breakdown-fill"
-                                        style="width: {{ item.bar_pct }}%;"
-                                    ></div>
-                                </div>
-                                <strong>{{ item.value }}</strong>
+                            <div class="contour-breakdown-track">
+                                <div
+                                    class="contour-breakdown-fill"
+                                    style="width: {{ item.bar_pct }}%;"
+                                ></div>
                             </div>
+
+                            <strong>{{ item.publications }}</strong>
+                        </div>
                         {% endfor %}
                     </div>
-
-                    <p class="contour-method-note">
-                        Показники рахуються окремо:
-                        той самий матеріал може бути зафіксований
-                        у кількох джерелах.
-                    </p>
                 </article>
 
-                <article class="contour-panel">
-                    <h3>Активність об'єкта</h3>
-
-                    <div class="contour-object-numbers">
-                        <div>
-                            <strong>{{ selected.contents_24h }}</strong>
-                            <span>матеріалів · 24 год</span>
-                        </div>
-                        <div>
-                            <strong>{{ selected.contents_30d }}</strong>
-                            <span>матеріалів · 30 днів</span>
-                        </div>
-                        <div>
-                            <strong>{{ selected.sources_24h }}</strong>
-                            <span>джерел · 24 год</span>
-                        </div>
+                <article class="contour-panel contour-insight-panel">
+                    <div class="contour-insight-head">
+                        <h3>Тип джерел</h3>
+                        <span>публікації</span>
                     </div>
 
-                    <div class="contour-last-seen">
-                        <span>Остання згадка</span>
-                        <strong>
-                            {% if selected.last_seen %}
-                                {{ fmt_kyiv_zoned(selected.last_seen) }}
-                            {% else %}
-                                Не зафіксовано
-                            {% endif %}
-                        </strong>
+                    <div class="contour-breakdown-group">
+                        {% for item in selected_breakdown.types %}
+                        <div class="contour-breakdown-row">
+                            <span>{{ item.label }}</span>
+
+                            <div class="contour-breakdown-track">
+                                <div
+                                    class="contour-breakdown-fill"
+                                    style="width: {{ item.bar_pct }}%;"
+                                ></div>
+                            </div>
+
+                            <strong>{{ item.publications }}</strong>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </article>
+
+                <article class="contour-panel contour-insight-panel">
+                    <div class="contour-insight-head">
+                        <h3>Основні джерела</h3>
+                        <span>топ-5</span>
+                    </div>
+
+                    <div class="contour-breakdown-group">
+                        {% for item in selected_breakdown.sources %}
+                        <div class="contour-breakdown-row">
+                            <span title="{{ item.label }}">
+                                {{ item.label }}
+                            </span>
+
+                            <div class="contour-breakdown-track">
+                                <div
+                                    class="contour-breakdown-fill"
+                                    style="width: {{ item.bar_pct }}%;"
+                                ></div>
+                            </div>
+
+                            <strong>{{ item.publications }}</strong>
+                        </div>
+                        {% endfor %}
                     </div>
                 </article>
 
             </div>
+            {% endif %}
+
+
         </section>
 
         {% endif %}
@@ -344,8 +1614,8 @@
                             Одна строка — одна публікація, не окрема подія.
                         </p>
                     {% else %}
-                        <h2>Матеріали контуру</h2>
-                        <p>
+                        <h2 id="c1-evidence-title">Матеріали контуру</h2>
+                        <p id="c1-evidence-note">
                             {% if selected_day %}
                                 Публікації про об'єкти ДШВ за
                                 {{ selected_day.strftime("%d.%m.%Y") }}.
@@ -356,19 +1626,49 @@
                         </p>
                     {% endif %}
                 </div>
+
+                <button
+                    id="c1-topic-filter-reset"
+                    class="topics-evidence-more"
+                    type="button"
+                    hidden
+                >
+                    Скинути тему
+                </button>
             </div>
 
+            <div id="c1-evidence-body">
             {% if evidence %}
                 <div class="contour-evidence-list">
                     {% for row in evidence %}
-                        <article class="contour-evidence-item">
+                        <article
+                            class="contour-evidence-item"
+                            data-space="{{ row.source_group }}"
+                        >
 
                             <div class="contour-evidence-meta">
-                                <time>
-                                    {{ fmt_kyiv_zoned(row.observed_at) }}
-                                </time>
-                                <span>{{ row.source_name }}</span>
-                                <span>
+                                <span
+                                    class="contour-space-label
+                                        {% if row.source_group == 'ua_space' %}
+                                            is-ua
+                                        {% elif row.source_group == 'ru_space' %}
+                                            is-ru
+                                        {% endif %}"
+                                >
+                                    {% if row.source_group == "ua_space" %}
+                                        Український
+                                    {% elif row.source_group == "ru_space" %}
+                                        Російський
+                                    {% else %}
+                                        Інший
+                                    {% endif %}
+                                </span>
+
+                                <strong class="contour-evidence-source">
+                                    {{ row.source_name }}
+                                </strong>
+
+                                <span class="contour-evidence-type">
                                     {% if row.source_type == "telegram" %}
                                         Telegram
                                     {% elif row.source_type == "rss" %}
@@ -377,6 +1677,15 @@
                                         {{ row.source_type }}
                                     {% endif %}
                                 </span>
+
+                                {% if row.published_at %}
+                                    <time
+                                        class="contour-evidence-time"
+                                        datetime="{{ row.published_at.isoformat() }}"
+                                    >
+                                        {{ fmt_kyiv_zoned(row.published_at) }}
+                                    </time>
+                                {% endif %}
 
                                 {% if row.multi_object %}
                                     <span class="badge badge-maybe">
@@ -406,11 +1715,25 @@
                                 <p>{{ row.preview_text }}</p>
                             {% endif %}
 
-                            <div class="contour-evidence-match">
-                                Знайдено як:
-                                <strong>
-                                    {{ row.matched_alias or "—" }}
-                                </strong>
+                            <div class="contour-evidence-footer">
+                                <div class="contour-evidence-match">
+                                    Знайдено як:
+                                    <strong>{{ row.matched_alias or "—" }}</strong>
+                                </div>
+
+                                {% if
+                                    row.external_ref
+                                    and row.external_ref.startswith("http")
+                                %}
+                                    <a
+                                        class="contour-evidence-open"
+                                        href="{{ row.external_ref }}"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        Відкрити джерело ↗
+                                    </a>
+                                {% endif %}
                             </div>
 
                         </article>
@@ -433,6 +1756,7 @@
                     {% endif %}
                 </div>
             {% endif %}
+            </div>
         </section>
 
         <details class="contour-quiet">
@@ -446,7 +1770,7 @@
                     <a
                         href="/contours?contour=dshv_objects&object_id={{ row.object_id }}{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}"
                     >
-                        <span>{{ row.canonical_name }}</span>
+                        <span>{{ row.display_name }}</span>
                         <small>
                             {% if row.contents_30d %}
                                 {{ row.contents_30d }}

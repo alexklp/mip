@@ -37,12 +37,12 @@ from web.contours import (
     fetch_c1_summary,
     fetch_c1_daily_trend,
     fetch_c1_active_objects,
-    fetch_c1_changes,
 )
 from web.objects import (
     fetch_c1_evidence,
     fetch_object_evidence,
     fetch_objects_overview,
+    fetch_object_breakdown,
 )
 from web.sources import fetch_sources_overview
 from web.theses import EXPORT_PER_CONTOUR_LIMIT, fetch_theses_by_contour
@@ -260,6 +260,26 @@ CONTOUR_SHORT_NAMES = {
 }
 
 
+def _c1_display_name(canonical_name: str) -> str:
+    """Коротке робоче ім'я об'єкта для аналітичного інтерфейсу."""
+    name = canonical_name.strip()
+
+    if name == "Десантно-штурмові війська ЗСУ":
+        return "ДШВ"
+
+    parts = name.split()
+    if parts and parts[0].isdigit():
+        number = parts[0]
+
+        if "корпус" in parts:
+            return f"{number} корпус"
+
+        if "бригада" in parts:
+            return f"{number} бригада"
+
+    return name
+
+
 @app.get("/contours", response_class=HTMLResponse)
 def contours_page(
     request: Request,
@@ -310,13 +330,56 @@ def contours_page(
                     conn,
                     object_id=object_id,
                 )
-                active_objects = fetch_c1_active_objects(
-                    conn,
-                    day=day,
-                )
-                changes = fetch_c1_changes(conn)
-                context["changes"] = changes
-                all_objects = fetch_objects_overview(conn)
+                active_objects = [
+                    {
+                        **row,
+                        "display_name": _c1_display_name(
+                            row["canonical_name"]
+                        ),
+                    }
+                    for row in fetch_c1_active_objects(
+                        conn,
+                        day=day,
+                    )
+                ]
+
+                all_objects = [
+                    {
+                        **row,
+                        "display_name": _c1_display_name(
+                            row["canonical_name"]
+                        ),
+                    }
+                    for row in fetch_objects_overview(conn)
+                ]
+
+                dashboard_objects_raw = [
+                    row
+                    for row in all_objects
+                    if int(row["contents_24h"]) > 0
+                    and row["canonical_name"]
+                    != "Десантно-штурмові війська ЗСУ"
+                ]
+
+                dashboard_max = max(
+                    (
+                        int(row["contents_24h"])
+                        for row in dashboard_objects_raw
+                    ),
+                    default=0,
+                ) or 1
+
+                dashboard_objects = [
+                    {
+                        **row,
+                        "bar_pct": round(
+                            100
+                            * int(row["contents_24h"])
+                            / dashboard_max
+                        ),
+                    }
+                    for row in dashboard_objects_raw
+                ]
 
                 trend_days = {
                     row["day"]
@@ -383,6 +446,52 @@ def contours_page(
                         detail="Об'єкт моніторингу не знайдено.",
                     )
 
+                selected_activity = (
+                    next(
+                        (
+                            row
+                            for row in active_view
+                            if row["object_id"] == selected_id
+                        ),
+                        None,
+                    )
+                    if selected
+                    else None
+                )
+
+                selected_breakdown = (
+                    fetch_object_breakdown(
+                        conn,
+                        object_id=selected["object_id"],
+                        day=day,
+                    )
+                    if selected
+                    else None
+                )
+
+                if selected_breakdown:
+                    for key in ("spaces", "types", "sources"):
+                        rows = selected_breakdown[key]
+                        maximum = max(
+                            (
+                                int(row["publications"])
+                                for row in rows
+                            ),
+                            default=0,
+                        ) or 1
+
+                        selected_breakdown[key] = [
+                            {
+                                **row,
+                                "bar_pct": round(
+                                    100
+                                    * int(row["publications"])
+                                    / maximum
+                                ),
+                            }
+                            for row in rows
+                        ]
+
                 evidence = (
                     fetch_object_evidence(
                         conn,
@@ -396,68 +505,34 @@ def contours_page(
                     )
                 )
 
+                from web.contour_topics import (
+                    load_c1_contour_topics,
+                )
+
+                contour_topics = load_c1_contour_topics(
+                    limit=10,
+                )
+
                 quiet_objects = [
                     row
                     for row in all_objects
                     if int(row["contents_24h"]) == 0
                 ]
 
-                if selected:
-                    space_values = [
-                        ("UA", int(selected["ua_24h"])),
-                        ("RU", int(selected["ru_24h"])),
-                    ]
-                    channel_values = [
-                        ("Telegram", int(selected["tg_24h"])),
-                        ("RSS", int(selected["rss_24h"])),
-                    ]
-
-                    space_max = max(
-                        (value for _, value in space_values),
-                        default=0,
-                    ) or 1
-                    channel_max = max(
-                        (value for _, value in channel_values),
-                        default=0,
-                    ) or 1
-
-                    space_breakdown = [
-                        {
-                            "label": label,
-                            "value": value,
-                            "bar_pct": round(
-                                100 * value / space_max
-                            ),
-                        }
-                        for label, value in space_values
-                    ]
-
-                    channel_breakdown = [
-                        {
-                            "label": label,
-                            "value": value,
-                            "bar_pct": round(
-                                100 * value / channel_max
-                            ),
-                        }
-                        for label, value in channel_values
-                    ]
-                else:
-                    space_breakdown = []
-                    channel_breakdown = []
-
                 context.update(
                     {
                         "summary": summary,
                         "trend": trend_view,
                         "active_objects": active_view,
+                        "dashboard_objects": dashboard_objects,
                         "all_objects": all_objects,
                         "quiet_objects": quiet_objects,
                         "selected": selected,
+                        "selected_activity": selected_activity,
+                        "selected_breakdown": selected_breakdown,
                         "selected_day": day,
                         "evidence": evidence,
-                        "space_breakdown": space_breakdown,
-                        "channel_breakdown": channel_breakdown,
+                        "contour_topics": contour_topics,
                     }
                 )
 
@@ -478,6 +553,39 @@ def contours_page(
         "contours.html",
         context,
     )
+
+
+@app.get("/contours/topic/{marker_id}")
+def contour_topic_detail(
+    marker_id: str,
+) -> dict:
+    """Detail/evidence for one C1 topic marker."""
+    from web.contour_topics import (
+        load_c1_contour_topic,
+    )
+
+    try:
+        return load_c1_contour_topic(
+            marker_id=marker_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Тему контуру не знайдено.",
+        ) from exc
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Тематичний зріз контуру "
+                "тимчасово недоступний."
+            ),
+        ) from exc
 
 
 @app.get("/objects", response_class=HTMLResponse)

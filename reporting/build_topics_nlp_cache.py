@@ -20,6 +20,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import psycopg
 
 import topics_snapshot as ts
+from web.c1_scope import c1_analytical_gate_sql
 
 
 CACHE_VERSION = "topics-nlp-cache/1"
@@ -149,8 +150,39 @@ def process_one(
 
 def fetch_documents(
     since_hours: int,
+    *,
+    c1_only: bool = False,
 ) -> list[tuple[str, str, list[str], str]]:
     sql = ts.SQL
+    params_extra: list[Any] = []
+
+    if c1_only:
+        order_marker = """
+ORDER BY
+"""
+
+        c1_filter = f"""
+  AND EXISTS (
+      SELECT 1
+      FROM content_contour_assignments a
+      WHERE a.content_id = io.content_id
+        AND a.monitoring_contour_id = 1
+        AND a.object_id IS NOT NULL
+        AND a.evidence_type = 'exact_reference'
+        {c1_analytical_gate_sql("a")}
+  )
+"""
+
+        if sql.count(order_marker) != 1:
+            raise RuntimeError(
+                "topics SQL ORDER BY marker is not unique"
+            )
+
+        sql = sql.replace(
+            order_marker,
+            c1_filter + order_marker,
+            1,
+        )
 
     with psycopg.connect(ts.DB_DSN) as conn:
         conn.execute(
@@ -179,6 +211,7 @@ def fetch_documents(
                 start_at,
                 as_of,
                 as_of,
+                *params_extra,
             ),
         ).fetchall()
 
@@ -236,6 +269,14 @@ def main() -> int:
         type=int,
         default=25,
     )
+    parser.add_argument(
+        "--c1-only",
+        action="store_true",
+        help=(
+            "Limit input to the C1 analytical population "
+            "before NLP processing."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -247,7 +288,8 @@ def main() -> int:
     done = load_done()
 
     rows = fetch_documents(
-        args.since_hours
+        args.since_hours,
+        c1_only=args.c1_only,
     )
 
     todo = [
