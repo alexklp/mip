@@ -20,34 +20,82 @@ from test_signals_postgres import FakeConnection
 
 class Phase4Tests(unittest.TestCase):
     def test_pair_budget_operational_ceiling(self):
-        RecallConfig(max_pairs=20000).validate()
-        pg.PostgresLimits(pairs=20000).validate()
+        RecallConfig(max_pairs=200000).validate()
+        pg.PostgresLimits(pairs=200000).validate()
 
         with self.assertRaises(ValueError):
-            RecallConfig(max_pairs=20001).validate()
+            RecallConfig(max_pairs=200001).validate()
 
         with self.assertRaises(ValueError):
-            pg.PostgresLimits(pairs=20001).validate()
+            pg.PostgresLimits(pairs=200001).validate()
 
     def data(self):
         data = multi_source(fixture(*(occurrence(c, c) for c in 'abc'),
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abc')))
         return replace(data, pairs=(('a', 'b', .18), ('b', 'c', .2), ('a', 'c', .36)))
 
-    def test_latest_routing_is_before_eligible_predicate(self):
+    def test_latest_routing_is_inside_sparse_eligible_predicate(self):
         latest = pg.LATEST_ROUTING_SQL
-        self.assertIn('ORDER BY r.routing_version DESC, r.created_at DESC, r.routing_id DESC\nLIMIT 1', latest)
+
+        self.assertIn(
+            'ORDER BY r.routing_version DESC, r.created_at DESC, r.routing_id DESC\nLIMIT 1',
+            latest,
+        )
         self.assertNotIn("decision = 'analyze'", latest)
         self.assertNotIn('routing_version =', latest)
         self.assertNotIn('embedding_model_id =', latest)
-        for query in (pg.ANCHOR_SQL, pg.NEIGHBOUR_SQL, pg.ROWS_SQL):
-            self.assertIn("LIMIT 1\n) IN ('analyze', 'maybe')", query)
-            self.assertNotIn('content_contour_assignments', query)
+
+        for query in (
+            pg.ANCHOR_SQL,
+            pg.NEIGHBOUR_SQL,
+            pg.ROWS_SQL,
+        ):
+            self.assertIn(
+                "LIMIT 1\n) IN ('analyze', 'maybe')",
+                query,
+            )
+            self.assertNotIn(
+                'content_contour_assignments',
+                query,
+            )
             self.assertNotIn("COALESCE", query)
-        probe, filtered = pg.NEIGHBOUR_SQL.split('SELECT ann.content_id, ann.distance')
-        self.assertNotIn('content_routing_decisions', probe)
-        self.assertIn('r.content_id = ann.content_id', filtered)
-        self.assertIn("COALESCE(decision, 'missing')", pg.ROUTING_COVERAGE_SQL)
+
+        self.assertIn(
+            'WITH anchor_embeddings AS MATERIALIZED',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'r.content_id = e2.content_id',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'io.collected_at >= %(start)s',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'src.source_group = ANY(%(groups)s)',
+            pg.NEIGHBOUR_SQL,
+        )
+
+        # Routing/time/source eligibility має бути всередині самого
+        # KNN LATERAL scan, до ORDER BY distance.
+        self.assertLess(
+            pg.NEIGHBOUR_SQL.index(
+                'r.content_id = e2.content_id'
+            ),
+            pg.NEIGHBOUR_SQL.index(
+                'ORDER BY e2.embedding::vector(1024)'
+            ),
+        )
+
+        self.assertNotIn(
+            'WITH ann AS MATERIALIZED',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            "COALESCE(decision, 'missing')",
+            pg.ROUTING_COVERAGE_SQL,
+        )
 
     def test_latest_decision_executes_readonly_select_on_versions_and_ties(self):
         # Виконуємо той самий scalar SQL над CTE VALUES; без DDL/DML та live БД.
@@ -206,7 +254,7 @@ class Phase4Tests(unittest.TestCase):
         self.assertEqual(groups['empty'], dict(selected=0, available=0, limit_reached=False))
         self.assertTrue(groups['z_group']['limit_reached'])
 
-    def test_rank_prioritizes_recency_then_signal_strength(self):
+    def test_rank_prioritizes_propagation_breadth_before_recency(self):
         data = multi_source(fixture(occurrence('a'), occurrence('b', 'b'), occurrence('c', 'c', hours=25),
             occurrence('d', 'd', hours=25), occurrence('e', 'e', hours=26), occurrence('e3', 'e', source='third', hours=26),
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abcde'),
@@ -215,7 +263,12 @@ class Phase4Tests(unittest.TestCase):
         data = replace(data, occurrences=(*data.occurrences, occurrence('e2', 'e', source='ru2', hours=26)),
                        pairs=(('c', 'd', .1),))
         result = snapshot(data, RecallConfig())
-        self.assertEqual([c['candidate_id'] for c in result['candidates']], ['a', 'b', 'c', 'e'])
+
+        # e старіший, але поширений трьома distinct sources.
+        # Він має бути вище свіжіших двохджерельних кандидатів.
+        self.assertEqual(result['candidates'][0]['candidate_id'], 'e')
+        self.assertEqual(result['candidates'][0]['source_count'], 3)
+
         validate_snapshot(result)
 
     def test_missing_and_skip_do_not_make_false_critical(self):
@@ -274,7 +327,11 @@ class Phase4Tests(unittest.TestCase):
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abc')))
         data = replace(data, pairs=())
         result = snapshot(data, RecallConfig(display_limit=2))
-        self.assertEqual([r['candidate_id'] for r in result['candidates']], ['a', 'b'])
+        # За однакової ширини cross-space має пріоритет над freshness.
+        self.assertEqual(
+            [r['candidate_id'] for r in result['candidates']],
+            ['c', 'a'],
+        )
         self.assertTrue(result['presentation']['display_limit_reached'])
         self.assertEqual(result['presentation']['eligible_candidate_count'], 3)
         self.assertEqual(result, snapshot(replace(data, occurrences=tuple(reversed(data.occurrences))), RecallConfig(display_limit=2)))
@@ -317,16 +374,46 @@ class Phase4Tests(unittest.TestCase):
 
     def test_postgres_metadata_validation(self):
         conn = FakeConnection()
-        data = pg.PostgresSignalAdapter(conn, model_id=1).read(as_of=AS_OF, embedding_model='synthetic@1', dimension=1024)
+
+        data = pg.PostgresSignalAdapter(
+            conn,
+            model_id=1,
+        ).read(
+            as_of=AS_OF,
+            embedding_model='synthetic@1',
+            dimension=1024,
+        )
+
         original = snapshot(data, RecallConfig())
         validate_snapshot(original)
-        for mutate in (lambda s: s['ann'].update(probe_limit=1001),
-                       lambda s: s['anchor_groups']['ru_space'].update(selected=100),
-                       lambda s: s.update(routing_policy='maybe'),
-                       lambda s: s['limits'].update(ann_probe_limit=10)):
+
+        mutations = (
+            lambda selection: selection['ann'].update(
+                probe_limit=1001,
+            ),
+            lambda selection: selection.update(
+                searched_anchor_count=(
+                    selection['anchor_count'] + 1
+                ),
+            ),
+            lambda selection: selection.update(
+                routing_policy='maybe',
+            ),
+            lambda selection: selection['limits'].update(
+                ann_probe_limit=10,
+            ),
+            lambda selection: selection['ann'].update(
+                filter_stage='after_probe',
+            ),
+        )
+
+        for mutate in mutations:
             damaged = deepcopy(original)
             mutate(damaged['selection'])
-            with self.assertRaises(ValueError):
+
+            with self.subTest(mutate=mutate), self.assertRaises(
+                ValueError
+            ):
                 validate_snapshot(damaged)
 
     def test_cli_merge_contract_is_opt_in(self):
@@ -370,22 +457,90 @@ class Phase4Tests(unittest.TestCase):
 
     def test_cli_ann_probe_and_no_snapshot(self):
         helper = postgres_tests.RunnerTests()
+
         for limit in ('100', '123'):
             conn = FakeConnection()
+
+            # Fake DB emulates SELECT set_config(... ann_probe_limit ...).
+            conn.responses[pg.ANN_SETTINGS_SQL][0][
+                'max_scan_tuples'
+            ] = limit
+
             out = io.StringIO()
-            with patch.dict('sys.modules', helper.driver(conn)), patch('sys.stdout', out), patch('reporting.signals_snapshot.write_snapshot') as write:
-                self.assertEqual(main(helper.args() + ['--ann-probe-limit', limit]), 0)
+
+            with (
+                patch.dict(
+                    'sys.modules',
+                    helper.driver(conn),
+                ),
+                patch('sys.stdout', out),
+                patch(
+                    'reporting.signals_snapshot.write_snapshot'
+                ) as write,
+            ):
+                self.assertEqual(
+                    main(
+                        helper.args()
+                        + ['--ann-probe-limit', limit]
+                    ),
+                    0,
+                )
                 write.assert_not_called()
+
             result = json.loads(out.getvalue())
-            self.assertEqual(result['selection']['ann']['probe_limit'], int(limit))
-            self.assertEqual(result['selection']['limits']['ann_probe_limit'], int(limit))
-            self.assertIn('routing_coverage', result)
-            self.assertIn('presentation', result)
-        for limit in ('0', '10', '1001'):
+
+            self.assertEqual(
+                result['selection']['ann']['probe_limit'],
+                int(limit),
+            )
+            self.assertEqual(
+                result['selection']['ann']['max_scan_tuples'],
+                int(limit),
+            )
+            self.assertEqual(
+                result['selection']['limits'][
+                    'ann_probe_limit'
+                ],
+                int(limit),
+            )
+            self.assertEqual(
+                result['selection']['ann'][
+                    'iterative_scan'
+                ],
+                'relaxed_order',
+            )
+            self.assertEqual(
+                result['selection']['ann'][
+                    'filter_stage'
+                ],
+                'inside_knn',
+            )
+            self.assertIn(
+                'routing_coverage',
+                result,
+            )
+            self.assertIn(
+                'presentation',
+                result,
+            )
+
+        for limit in ('0', '10', '50001'):
             modules = helper.driver(FakeConnection())
-            with patch.dict('sys.modules', modules), patch('sys.stderr'):
-                self.assertEqual(main(helper.args() + ['--ann-probe-limit', limit]), 1)
-                modules['psycopg'].connect.assert_not_called()
+
+            with (
+                patch.dict('sys.modules', modules),
+                patch('sys.stderr'),
+            ):
+                self.assertEqual(
+                    main(
+                        helper.args()
+                        + ['--ann-probe-limit', limit]
+                    ),
+                    1,
+                )
+                modules[
+                    'psycopg'
+                ].connect.assert_not_called()
 
     def test_common_watermark_and_explicit_readonly_transaction(self):
         helper = postgres_tests.RunnerTests()

@@ -39,21 +39,21 @@ if env \
         --model BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181 \
         --dimension 1024 \
         --source-groups ru_space ua_space \
-        --strategy exact_current_24h \
-        --anchors 40 \
-        --neighbours 10 \
-        --pairs 20000 \
-        --rows 5000 \
+        --strategy bounded_ann \
+        --anchors 20000 \
+        --neighbours 16 \
+        --pairs 200000 \
+        --rows 100000 \
         --core-distance 0.18 \
         --merge-distance 0.19 \
         --merge-min-cross-links 2 \
         --related-distance 0.36 \
-        --ann-probe-limit 100 \
+        --ann-probe-limit 20000 \
         --display-limit 200 \
         --max-related-links 100 \
         --evidence-chars 600 \
         --max-evidence 12 \
-        --statement-timeout-ms 15000 \
+        --statement-timeout-ms 90000 \
         --output "$OUTPUT"
 then
     elapsed=$(( $(date +%s) - started_at ))

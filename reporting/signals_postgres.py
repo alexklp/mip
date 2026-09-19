@@ -19,16 +19,20 @@ class PostgresLimits:
     ann_probe_limit: int = 100
 
     def validate(self):
-        for name, ceiling in (("anchors", 200), ("neighbours", 50), ("pairs", 20000),
-                              ("rows", 20000), ("evidence_chars", 2000), ("ann_probe_limit", 1000),
-                              ("statement_timeout_ms", 60000)):
+        for name, ceiling in (
+            ("anchors", 20000),
+            ("neighbours", 50),
+            ("pairs", 200000),
+            ("rows", 100000),
+            ("evidence_chars", 2000),
+            ("ann_probe_limit", 50000),
+            ("statement_timeout_ms", 120000),
+        ):
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= ceiling:
                 raise ValueError("Некоректний ліміт " + name)
         if self.ann_probe_limit < self.neighbours + 1:
-            raise ValueError("ANN probe має вміщувати сусідів та anchor")
-        if self.anchors * (self.neighbours + 1) > 2000:
-            raise ValueError("Забагато потенційних матеріалів")
+            raise ValueError("ANN scan budget має бути не меншим за k сусідів")
 
 
 GUARD_SQL = """
@@ -37,8 +41,14 @@ SELECT current_setting('transaction_read_only') AS read_only,
        current_setting('statement_timeout') AS timeout
 """
 ANN_SETTINGS_SQL = """
-SELECT current_setting('hnsw.ef_search') AS ef_search,
-       current_setting('hnsw.iterative_scan') AS iterative_scan
+SELECT
+    set_config('hnsw.iterative_scan', 'relaxed_order', true) AS iterative_scan,
+    set_config('hnsw.ef_search', '64', true) AS ef_search,
+    set_config(
+        'hnsw.max_scan_tuples',
+        %(ann_probe_limit)s::text,
+        true
+    ) AS max_scan_tuples
 """
 MODEL_SQL = """
 SELECT model_name, model_revision, dimension, metric
@@ -82,48 +92,92 @@ FROM (
 GROUP BY 1, 2, 3
 """
 ANCHOR_SQL = """
-SELECT io.content_id, max(io.collected_at) AS last_observed,
-       count(DISTINCT io.source_id) AS observed_sources,
-       min(ci.content_hash) AS content_hash, count(*) OVER () AS available
-FROM item_occurrences io JOIN sources s USING (source_id)
-JOIN content_items ci USING (content_id)
-JOIN embeddings e ON e.content_id = io.content_id AND e.embedding_model_id = %(model_id)s
-WHERE io.collected_at >= %(start)s AND io.collected_at < %(as_of)s
-  AND s.source_group = %(anchor_group)s
-  AND (""" + LATEST_ROUTING_SQL + """) IN ('analyze', 'maybe')
+SELECT
+    e.content_id,
+    ci.content_hash,
+    count(*) OVER () AS available
+FROM embeddings e
+JOIN content_items ci
+  ON ci.content_id = e.content_id
+WHERE e.embedding_model_id = 1
+  AND e.embedding_model_id = %(model_id)s
   AND vector_dims(e.embedding) = %(dimension)s
-GROUP BY io.content_id
-ORDER BY last_observed DESC, observed_sources DESC, content_hash
+  AND (""" + LATEST_ROUTING_SQL.replace(
+      "io.content_id", "e.content_id"
+  ) + """) IN ('analyze', 'maybe')
+  AND EXISTS (
+      SELECT 1
+      FROM item_occurrences io
+      JOIN sources src USING (source_id)
+      WHERE io.content_id = e.content_id
+        AND io.collected_at >= %(middle)s
+        AND io.collected_at < %(as_of)s
+        AND src.source_group = ANY(%(groups)s)
+  )
+ORDER BY ci.content_hash, e.content_id
 LIMIT %(anchor_probe)s
 """
-# Сталі 1/1024 відповідають sql/006_add_embeddings.sql; read звіряє реєстр.
-# Літеральний predicate доступний також generic plan. Жодної SQL-інтерполяції.
-# MATERIALIZED відділяє ANN ORDER BY від фільтрів та детермінованого сортування.
+
+# Усі current-24h anchors обробляються одним batch query.
+# Eligibility сусідів знаходиться ВСЕРЕДИНІ KNN scan, тому iterative HNSW
+# може продовжувати пошук після routing/time/source filters.
 NEIGHBOUR_SQL = """
-WITH ann AS MATERIALIZED (
-    SELECT e.content_id, e.embedding::vector(1024) <=> (
-        SELECT a.embedding::vector(1024) FROM embeddings a
-        WHERE a.content_id = %(anchor)s AND a.embedding_model_id = %(model_id)s
-    ) AS distance
+WITH anchor_embeddings AS MATERIALIZED (
+    SELECT
+        e.content_id,
+        e.embedding::vector(1024) AS embedding
     FROM embeddings e
-    WHERE e.embedding_model_id = 1 AND e.embedding_model_id = %(model_id)s
-    ORDER BY e.embedding::vector(1024) <=> (
-        SELECT a.embedding::vector(1024) FROM embeddings a
-        WHERE a.content_id = %(anchor)s AND a.embedding_model_id = %(model_id)s
-    )
-    LIMIT %(ann_probe_limit)s
+    WHERE e.embedding_model_id = 1
+      AND e.embedding_model_id = %(model_id)s
+      AND e.content_id = ANY(%(anchor_ids)s::uuid[])
+),
+knn AS MATERIALIZED (
+    SELECT
+        a.content_id AS anchor_id,
+        n.content_id AS neighbour_id,
+        n.distance
+    FROM anchor_embeddings a
+    CROSS JOIN LATERAL (
+        SELECT
+            e2.content_id,
+            e2.embedding::vector(1024) <=> a.embedding AS distance
+        FROM embeddings e2
+        WHERE e2.embedding_model_id = 1
+          AND e2.embedding_model_id = %(model_id)s
+          AND e2.content_id <> a.content_id
+          AND (""" + LATEST_ROUTING_SQL.replace(
+              "io.content_id", "e2.content_id"
+          ) + """) IN ('analyze', 'maybe')
+          AND EXISTS (
+              SELECT 1
+              FROM item_occurrences io
+              JOIN sources src USING (source_id)
+              WHERE io.content_id = e2.content_id
+                AND io.collected_at >= %(start)s
+                AND io.collected_at < %(as_of)s
+                AND src.source_group = ANY(%(groups)s)
+          )
+        ORDER BY e2.embedding::vector(1024) <=> a.embedding
+        LIMIT %(neighbour_limit)s
+    ) n
+),
+dedup AS (
+    SELECT
+        LEAST(anchor_id, neighbour_id) AS left_content_id,
+        GREATEST(anchor_id, neighbour_id) AS right_content_id,
+        min(distance) AS distance
+    FROM knn
+    WHERE distance <= %(max_distance)s
+    GROUP BY 1, 2
 )
-SELECT ann.content_id, ann.distance
-FROM ann JOIN content_items ci ON ci.content_id = ann.content_id
-WHERE ann.content_id <> %(anchor)s
-  AND (""" + LATEST_ROUTING_SQL.replace("io.content_id", "ann.content_id") + """) IN ('analyze', 'maybe')
-  AND EXISTS (
-      SELECT 1 FROM item_occurrences io JOIN sources s USING (source_id)
-      WHERE io.content_id = ann.content_id AND io.collected_at >= %(start)s
-        AND io.collected_at < %(as_of)s AND s.source_group = ANY(%(groups)s)
-  )
-ORDER BY ann.distance, ci.content_hash, ann.content_id
-LIMIT %(neighbour_limit)s
+SELECT
+    left_content_id,
+    right_content_id,
+    distance,
+    count(*) OVER () AS available
+FROM dedup
+ORDER BY distance, left_content_id, right_content_id
+LIMIT %(pair_probe)s
 """
 ROWS_SQL = """
 SELECT io.occurrence_id, io.content_id, io.source_id, io.collected_at, io.published_at,
@@ -233,8 +287,13 @@ class PostgresSignalAdapter:
         self.timings = []
         p = dict(start=bounds['previous'][0], middle=bounds['current'][0], as_of=as_of,
                  groups=list(self.groups), model_id=self.model_id, dimension=dimension,
-                 anchor_probe=self.limits.anchors + 1, row_probe=self.limits.rows + 1,
-                 text_probe=self.limits.evidence_chars + 1, invalid_limit=1,
+                 anchor_probe=self.limits.anchors + 1,
+                 pair_probe=self.limits.pairs + 1,
+                 row_probe=self.limits.rows + 1,
+                 text_probe=self.limits.evidence_chars + 1,
+                 invalid_limit=1,
+                 neighbour_limit=self.limits.neighbours,
+                 max_distance=self.max_distance,
                  ann_probe_limit=self.limits.ann_probe_limit)
         guard = self._query("guard", GUARD_SQL, {})[0]
         timeout = timeout_ms(guard['timeout'])
@@ -247,12 +306,19 @@ class PostgresSignalAdapter:
             raise ValueError("Наявний HNSW підтримує лише model_id=1 та dimension=1024")
         if self._query("dimension", DIMENSION_SQL, p):
             raise ValueError("Некоректна розмірність embedding у спостережуваному потоці")
-        ann_settings = self._query("ann_settings", ANN_SETTINGS_SQL, {})[0]
-        if ann_settings['iterative_scan'] != 'off':
-            raise ValueError("Потрібен hnsw.iterative_scan=off для перевіреного bounded ANN")
+        ann_settings = self._query(
+            "ann_settings",
+            ANN_SETTINGS_SQL,
+            p,
+        )[0]
+        if ann_settings['iterative_scan'] != 'relaxed_order':
+            raise ValueError("Потрібен hnsw.iterative_scan=relaxed_order")
         ef_search = int(ann_settings['ef_search'])
+        max_scan_tuples = int(ann_settings['max_scan_tuples'])
         if not 1 <= ef_search <= 1000:
             raise ValueError("Некоректний hnsw.ef_search")
+        if max_scan_tuples != self.limits.ann_probe_limit:
+            raise ValueError("Некоректний hnsw.max_scan_tuples")
         keys = ('occurrence_count', 'content_count', 'source_count', 'missing_published_at', 'missing_embedding_content_count')
         coverage = {w: {g: dict.fromkeys(keys, 0) for g in (*SPACES, 'excluded')} for w in bounds}
         for row in self._query("coverage", COVERAGE_SQL, p):
@@ -264,36 +330,58 @@ class PostgresSignalAdapter:
             for g in SPACES:
                 if sum(routing_coverage[w][g].values()) != coverage[w][g]['content_count']:
                     raise ValueError("Routing coverage не відповідає observed content")
-        group_rows = {g: self._query("anchors", ANCHOR_SQL, {**p, 'anchor_group': g}) for g in self.groups}
-        if any(len(rows) > self.limits.anchors + 1 for rows in group_rows.values()):
-            raise ValueError("Перевищено SQL-ліміт anchors")
-        anchors, anchor_groups = round_robin_anchors(group_rows, self.limits.anchors)
-        anchor_limited = any(row['limit_reached'] for row in anchor_groups.values())
-        ids = {str(row['content_id']) for row in anchors}
+        anchors = self._query("anchors", ANCHOR_SQL, p)
+        anchor_available = (
+            int(anchors[0].get('available', len(anchors)))
+            if anchors else 0
+        )
+        anchor_limited = anchor_available > self.limits.anchors
+        anchors = anchors[:self.limits.anchors]
+
+        ids = {
+            str(row['content_id'])
+            for row in anchors
+        }
+
+        pair_rows = self._query(
+            "neighbours",
+            NEIGHBOUR_SQL,
+            {
+                **p,
+                'anchor_ids': sorted(ids),
+            },
+        ) if ids else []
+
+        pair_available = (
+            int(pair_rows[0].get('available', len(pair_rows)))
+            if pair_rows else 0
+        )
+        pair_limited = pair_available > self.limits.pairs
+        pair_rows = pair_rows[:self.limits.pairs]
+
         pairs = {}
-        searched = 0
-        saturated = 0
-        inspected = 0
-        for anchor in anchors:
-            remaining = self.limits.pairs - inspected
-            if remaining <= 0:
-                break
-            limit = min(self.limits.neighbours, remaining)
-            aid = str(anchor['content_id'])
-            neighbours = self._query("neighbours", NEIGHBOUR_SQL, {**p, 'anchor': aid, 'neighbour_limit': limit})
-            if len(neighbours) > limit:
-                raise ValueError("Перевищено SQL-ліміт сусідів")
-            inspected += len(neighbours)
-            searched += 1
-            saturated += len(neighbours) == limit
-            for row in neighbours:
-                cid, distance = str(row['content_id']), float(row['distance'])
-                if not math.isfinite(distance) or not 0 <= distance <= 2:
-                    raise ValueError("Некоректна SQL-відстань")
-                if distance <= self.max_distance:
-                    ids.add(cid)
-                    key = tuple(sorted((aid, cid)))
-                    pairs[key] = max(pairs.get(key, distance), distance)
+        for row in pair_rows:
+            left = str(row['left_content_id'])
+            right = str(row['right_content_id'])
+            distance = float(row['distance'])
+
+            if (
+                not math.isfinite(distance)
+                or not 0 <= distance <= 2
+            ):
+                raise ValueError("Некоректна SQL-відстань")
+
+            if distance > self.max_distance:
+                continue
+
+            ids.add(left)
+            ids.add(right)
+            key = tuple(sorted((left, right)))
+            pairs[key] = min(
+                pairs.get(key, distance),
+                distance,
+            )
+
         rows = self._query("rows", ROWS_SQL, {**p, 'ids': sorted(ids)}) if ids else []
         row_limited = len(rows) > self.limits.rows
         rows = rows[:self.limits.rows]
@@ -308,26 +396,73 @@ class PostgresSignalAdapter:
             occurrences.append(Occurrence(str(row['occurrence_id']), cid, sid,
                 row['collected_at'].astimezone(timezone.utc),
                 row['published_at'].astimezone(timezone.utc) if row['published_at'] else None, row['external_ref']))
-        critical = row_limited or bool(ids - contents.keys()) or (not contents and any(
-                routing_coverage[w][g]["analyze"]
-                + routing_coverage[w][g]["maybe"]
-                for w in bounds
-                for g in self.groups
-            ))
-        result = SignalData(tuple(sources.values()), tuple(contents.values()), tuple(occurrences),
-            embedding_model, dimension, truncated=bool(searched) or anchor_limited or bool(saturated) or searched < len(anchors) or critical,
-            pairs=tuple((a, b, d) for (a, b), d in sorted(pairs.items()) if a in contents and b in contents),
-            coverage=coverage, critical_incomplete=critical, routing_coverage=routing_coverage,
-            selection={"limits": asdict(self.limits), "source_groups": list(self.groups),
-                "anchor_groups": anchor_groups, "routing_policy": "latest_analyze_or_maybe",
-                "model_id": self.model_id, "anchor_count": len(anchors), "searched_anchor_count": searched,
-                "pair_count": len(pairs), "inspected_pair_count": inspected, "selected_content_count": len(contents),
-                "selected_occurrence_count": len(rows), "anchor_limit_reached": anchor_limited,
-                "neighbour_limits_reached": saturated, "row_limit_reached": row_limited,
-                "ann": {"method": "hnsw", "index": "idx_embeddings_hnsw_bge_m3",
-                    "probe_limit": self.limits.ann_probe_limit, "filter_stage": "after_probe",
-                    "ef_search": ef_search, "iterative_scan": ann_settings["iterative_scan"],
-                    "recall_status": "UNVERIFIED", "prepared": False},
-                "coverage_scope": "observed_source_groups_48h", "query_plan_status": "UNVERIFIED"})
+        critical = (
+            anchor_limited
+            or pair_limited
+            or row_limited
+            or bool(ids - contents.keys())
+            or (
+                not contents
+                and any(
+                    routing_coverage[w][g]["analyze"]
+                    + routing_coverage[w][g]["maybe"]
+                    for w in bounds
+                    for g in self.groups
+                )
+            )
+        )
+
+        result = SignalData(
+            tuple(sources.values()),
+            tuple(contents.values()),
+            tuple(occurrences),
+            embedding_model,
+            dimension,
+            truncated=(
+                anchor_limited
+                or pair_limited
+                or row_limited
+                or critical
+            ),
+            pairs=tuple(
+                (a, b, d)
+                for (a, b), d in sorted(pairs.items())
+                if a in contents and b in contents
+            ),
+            coverage=coverage,
+            critical_incomplete=critical,
+            routing_coverage=routing_coverage,
+            selection={
+                "strategy": "sparse_hnsw_current_24h",
+                "limits": asdict(self.limits),
+                "source_groups": list(self.groups),
+                "routing_policy": "latest_analyze_or_maybe",
+                "model_id": self.model_id,
+                "current_content_count": anchor_available,
+                "anchor_count": len(anchors),
+                "searched_anchor_count": len(anchors),
+                "pair_count": len(pairs),
+                "inspected_pair_count": pair_available,
+                "selected_content_count": len(contents),
+                "selected_occurrence_count": len(rows),
+                "anchor_limit_reached": anchor_limited,
+                "pair_limit_reached": pair_limited,
+                "row_limit_reached": row_limited,
+                "ann": {
+                    "method": "hnsw",
+                    "index": "idx_embeddings_hnsw_bge_m3",
+                    "probe_limit": self.limits.ann_probe_limit,
+                    "max_scan_tuples": max_scan_tuples,
+                    "k": self.limits.neighbours,
+                    "filter_stage": "inside_knn",
+                    "ef_search": ef_search,
+                    "iterative_scan": ann_settings["iterative_scan"],
+                    "recall_status": "UNVERIFIED",
+                    "prepared": False,
+                },
+                "coverage_scope": "observed_source_groups_48h",
+                "query_plan_status": "UNVERIFIED",
+            },
+        )
         result.validate()
         return result

@@ -227,34 +227,89 @@ def validate_snapshot(value: dict) -> None:
             selection = None
 
         if selection is not None:
-            for key in ('selected_content_count', 'selected_occurrence_count'):
+            if selection.get('strategy') != 'sparse_hnsw_current_24h':
+                raise ValueError("Некоректна ANN strategy")
+
+            for key in (
+                'current_content_count',
+                'anchor_count',
+                'searched_anchor_count',
+                'pair_count',
+                'inspected_pair_count',
+                'selected_content_count',
+                'selected_occurrence_count',
+            ):
                 nonnegative(selection[key])
+
             string(selection['query_plan_status'])
-            if not isinstance(selection['source_groups'], list) or not selection['source_groups'] or set(selection['source_groups']) - {'ru_space', 'ua_space'}:
+
+            if (
+                not isinstance(selection['source_groups'], list)
+                or not selection['source_groups']
+                or set(selection['source_groups'])
+                - {'ru_space', 'ua_space'}
+            ):
                 raise ValueError("Некоректний scope джерел")
+
+            if (
+                selection['source_groups']
+                != sorted(set(selection['source_groups']))
+            ):
+                raise ValueError("Недетермінований scope груп")
+
             from reporting.signals_postgres import PostgresLimits
+
             limits = PostgresLimits(**selection['limits'])
             limits.validate()
+
+            if selection['routing_policy'] != 'latest_analyze_or_maybe':
+                raise ValueError("Некоректна routing policy")
+
+            if (
+                selection['coverage_scope']
+                != 'observed_source_groups_48h'
+            ):
+                raise ValueError("Некоректний coverage scope")
+
+            if selection['current_content_count'] < selection['anchor_count']:
+                raise ValueError("Некоректний anchor count")
+
+            if selection['anchor_count'] > limits.anchors:
+                raise ValueError("Перевищено sparse anchor budget")
+
+            if (
+                selection['searched_anchor_count']
+                != selection['anchor_count']
+            ):
+                raise ValueError("Не всі sparse anchors оброблено")
+
+            if selection['pair_count'] > limits.pairs:
+                raise ValueError("Перевищено sparse pair budget")
+
+            for flag in (
+                'anchor_limit_reached',
+                'pair_limit_reached',
+                'row_limit_reached',
+            ):
+                if type(selection[flag]) is not bool:
+                    raise ValueError("Некоректний sparse limit flag")
+
             ann = selection['ann']
-            if (ann['probe_limit'] != limits.ann_probe_limit or ann['recall_status'] != 'UNVERIFIED'
-                    or ann['prepared'] is not False or ann['iterative_scan'] != 'off'
-                    or ann['method'] != 'hnsw' or ann['index'] != 'idx_embeddings_hnsw_bge_m3'
-                    or ann['filter_stage'] != 'after_probe' or type(ann['ef_search']) is not int
-                    or not 1 <= ann['ef_search'] <= 1000 or selection['routing_policy'] != 'latest_analyze_or_maybe'):
-                raise ValueError("Некоректні ANN/routing metadata")
-            if selection['source_groups'] != sorted(set(selection['source_groups'])):
-                raise ValueError("Недетермінований scope груп")
-            if set(selection['anchor_groups']) != set(selection['source_groups']):
-                raise ValueError("Неузгоджені anchor groups")
-            for row in selection['anchor_groups'].values():
-                nonnegative(row['selected'])
-                nonnegative(row['available'])
-                if row['selected'] > row['available'] or type(row['limit_reached']) is not bool:
-                    raise ValueError("Некоректні anchor counts")
-            nonnegative(selection['anchor_count'])
-            if (sum(r['selected'] for r in selection['anchor_groups'].values()) != selection['anchor_count']
-                    or selection['anchor_count'] > limits.anchors):
-                raise ValueError("Неузгоджений бюджет anchors")
+            if (
+                ann['method'] != 'hnsw'
+                or ann['index'] != 'idx_embeddings_hnsw_bge_m3'
+                or ann['iterative_scan'] != 'relaxed_order'
+                or ann['filter_stage'] != 'inside_knn'
+                or ann['recall_status'] != 'UNVERIFIED'
+                or ann['prepared'] is not False
+                or ann['probe_limit'] != limits.ann_probe_limit
+                or ann['max_scan_tuples'] != limits.ann_probe_limit
+                or ann['k'] != limits.neighbours
+                or type(ann['ef_search']) is not int
+                or not 1 <= ann['ef_search'] <= 1000
+            ):
+                raise ValueError("Некоректні sparse ANN metadata")
+
         presentation = value['presentation']
         selected_ids = presentation['selected_content_ids']
         if (not isinstance(selected_ids, list) or len(selected_ids) > config.max_contents
@@ -431,9 +486,10 @@ def validate_snapshot(value: dict) -> None:
                     raise ValueError("Некоректний прапорець evidence")
 
         ranked = sorted(value['candidates'], key=lambda c: (
-            -timestamp(c['last_observed']).timestamp(),
-            -c['cross_space'],
             -c['source_count'],
+            -c['cross_space'],
+            -len(c['exact_republication_content_ids']),
+            -timestamp(c['last_observed']).timestamp(),
             -c['content_count'],
             c['candidate_id'],
         ))
@@ -550,11 +606,7 @@ def main(argv=None) -> int:
             raise ValueError("Некоректний object-id")
         limits = PostgresLimits(args.anchors, args.neighbours, args.pairs, args.rows, args.evidence_chars, args.statement_timeout_ms, args.ann_probe_limit)
         limits.validate()
-        max_contents = (
-            min(args.rows, 2000)
-            if args.strategy == 'exact_current_24h'
-            else args.anchors * (args.neighbours + 1)
-        )
+        max_contents = min(args.rows, 50000)
         config = RecallConfig(args.max_distance, tuple(args.distance_bands),
             max_contents=max_contents, max_pairs=args.pairs,
             max_evidence=args.max_evidence, evidence_chars=args.evidence_chars,

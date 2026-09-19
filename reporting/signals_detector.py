@@ -45,7 +45,7 @@ class RecallConfig:
                 raise ValueError("Некоректна кількість cross-links для merge")
         if tuple(sorted(set(self.distance_bands))) != self.distance_bands:
             raise ValueError("Межі distance bands мають строго зростати")
-        for name, ceiling in (("display_limit", 200), ("max_related_links", 1000), ("max_pairs", 20000), ("max_evidence", 200), ("evidence_chars", 2000), ("max_contents", 2000)):
+        for name, ceiling in (("display_limit", 200), ("max_related_links", 1000), ("max_pairs", 200000), ("max_evidence", 200), ("evidence_chars", 2000), ("max_contents", 50000)):
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= ceiling:
                 raise ValueError("Некоректний ліміт " + name)
@@ -501,13 +501,15 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
         for cid in group:
             value = distance(cid, representative)
             distances.append({"content_id": cid, "distance": value, "distance_band": config.band(value) if value is not None else "unavailable"})
+        # Поле використовується лише для пошуку в UI; не дублюємо
+        # весь великий кластер у presentation snapshot.
         search_text = " ".join(
             dict.fromkeys(
                 contents[cid].title.strip()
                 for cid in group
                 if contents[cid].title.strip()
             )
-        )[:12000]
+        )[:2000]
 
         candidates.append({
             "candidate_id": representative,
@@ -535,10 +537,15 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             "evidence_omitted_count": max(0, len(candidate_rows) - config.max_evidence),
             "evidence_references": [{"content_id": cid, "text": contents[cid].text[:config.evidence_chars], "text_truncated": len(contents[cid].text) > config.evidence_chars} for cid in group[:config.max_evidence]],
         })
+    # Signals — це насамперед поширення між джерелами.
+    # Свіжість уже обмежена часовим вікном, тому вона не повинна
+    # витісняти широку ампліфікацію лише через різницю в секунди.
+    # Обсяг content/occurrences сам по собі не є пріоритетом.
     candidates.sort(key=lambda c: (
-        -datetime.fromisoformat(c['last_observed']).timestamp(),
-        -c['cross_space'],
         -c['source_count'],
+        -c['cross_space'],
+        -len(c['exact_republication_content_ids']),
+        -datetime.fromisoformat(c['last_observed']).timestamp(),
         -c['content_count'],
         c['candidate_id'],
     ))

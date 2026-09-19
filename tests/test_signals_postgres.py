@@ -30,14 +30,14 @@ class FakeConnection:
         self.prepares = []
         self.responses = {
             pg.GUARD_SQL: [dict(read_only='on', isolation='repeatable read', timeout='15s')],
-            pg.ANN_SETTINGS_SQL: [dict(ef_search='40', iterative_scan='off')],
+            pg.ANN_SETTINGS_SQL: [dict(ef_search='64', iterative_scan='relaxed_order', max_scan_tuples='100')],
             pg.ROUTING_COVERAGE_SQL: None,
             pg.MODEL_SQL: [dict(model_name='synthetic', model_revision='1', dimension=1024, metric='cosine')],
             pg.DIMENSION_SQL: [],
             pg.COVERAGE_SQL: [dict(window='current', source_group='ru_space', occurrence_count=10,
                 content_count=5, source_count=1, missing_published_at=2, missing_embedding_content_count=0)],
             pg.ANCHOR_SQL: [dict(content_id='a')],
-            pg.NEIGHBOUR_SQL: [dict(content_id='b', distance=0.05)],
+            pg.NEIGHBOUR_SQL: [dict(left_content_id='a', right_content_id='b', distance=0.05)],
             pg.ROWS_SQL: [database_row(), database_row('b', 'o2')],
         }
         self.closed = False
@@ -85,7 +85,7 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(data.pairs, (('a', 'b', 0.05),))
         self.assertTrue(all(c.embedding is None and c.has_embedding for c in data.contents))
         for sql, params in self.conn.calls:
-            self.assertTrue(sql.strip().startswith(('SELECT', 'WITH ann AS MATERIALIZED')))
+            self.assertTrue(sql.strip().startswith(('SELECT', 'WITH ')))
             self.assertIsInstance(params, dict)
             self.assertNotIn(AS_OF.isoformat(), sql)
         parameters = dict(self.conn.calls)[pg.ROWS_SQL]
@@ -129,18 +129,18 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(queries[0]['neighbour_limit'], 1)
         self.assertTrue(data.truncated)
         self.assertEqual(data.selection['inspected_pair_count'], 1)
-        self.assertEqual(data.selection['searched_anchor_count'], 1)
+        self.assertEqual(data.selection['searched_anchor_count'], 2)
 
     def test_rejected_distances_also_consume_budget(self):
         self.conn.responses[pg.ANCHOR_SQL] = [dict(content_id='a'), dict(content_id='b')]
-        self.conn.responses[pg.NEIGHBOUR_SQL] = [dict(content_id='b', distance=1.5)]
+        self.conn.responses[pg.NEIGHBOUR_SQL] = [dict(left_content_id='a', right_content_id='b', distance=1.5)]
         data = self.read(limits=pg.PostgresLimits(pairs=1))
         self.assertEqual(data.pairs, ())
-        self.assertEqual(data.selection['searched_anchor_count'], 1)
+        self.assertEqual(data.selection['searched_anchor_count'], 2)
 
     def test_bad_distances_and_row_dimension_rejected(self):
         for distance in (float('nan'), -0.2, 3):
-            self.conn.responses[pg.NEIGHBOUR_SQL] = [dict(content_id='b', distance=distance)]
+            self.conn.responses[pg.NEIGHBOUR_SQL] = [dict(left_content_id='a', right_content_id='b', distance=distance)]
             with self.assertRaises(ValueError):
                 self.read()
         self.conn = FakeConnection()
@@ -167,64 +167,256 @@ class PostgresTests(unittest.TestCase):
         self.assertFalse(self.read().critical_incomplete)
 
     def test_sql_order_and_bounds(self):
-        self.assertIn('ORDER BY last_observed DESC, observed_sources DESC, content_hash', pg.ANCHOR_SQL)
-        self.assertNotIn('ORDER BY io.content_id', pg.ANCHOR_SQL)
-        self.assertIn('ORDER BY ann.distance, ci.content_hash, ann.content_id', pg.NEIGHBOUR_SQL)
-        self.assertIn('LIMIT %(neighbour_limit)s', pg.NEIGHBOUR_SQL)
-        self.assertIn('EXISTS', pg.NEIGHBOUR_SQL)
-        self.assertIn('left(ci.text_content, %(text_probe)s)', pg.ROWS_SQL)
-        self.assertNotIn('COALESCE(io.published_at', pg.ROWS_SQL)
+        self.assertIn(
+            'ORDER BY ci.content_hash, e.content_id',
+            pg.ANCHOR_SQL,
+        )
+        self.assertIn(
+            'io.collected_at >= %(middle)s',
+            pg.ANCHOR_SQL,
+        )
+        self.assertIn(
+            'src.source_group = ANY(%(groups)s)',
+            pg.ANCHOR_SQL,
+        )
+
+        self.assertIn(
+            'WITH anchor_embeddings AS MATERIALIZED',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'CROSS JOIN LATERAL',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'ORDER BY e2.embedding::vector(1024) <=> a.embedding',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'LIMIT %(neighbour_limit)s',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'WHERE distance <= %(max_distance)s',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'LIMIT %(pair_probe)s',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'io.collected_at >= %(start)s',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'io.collected_at < %(as_of)s',
+            pg.NEIGHBOUR_SQL,
+        )
+        self.assertIn(
+            'src.source_group = ANY(%(groups)s)',
+            pg.NEIGHBOUR_SQL,
+        )
+
+        self.assertIn(
+            'left(ci.text_content, %(text_probe)s)',
+            pg.ROWS_SQL,
+        )
+        self.assertNotIn(
+            'COALESCE(io.published_at',
+            pg.ROWS_SQL,
+        )
 
     def test_invalid_limits_before_queries(self):
-        for limits in (pg.PostgresLimits(anchors=0), pg.PostgresLimits(neighbours=51), pg.PostgresLimits(rows=20001), pg.PostgresLimits(anchors=200, neighbours=50)):
-            with self.assertRaises(ValueError):
+        invalid = (
+            pg.PostgresLimits(anchors=0),
+            pg.PostgresLimits(anchors=20001),
+            pg.PostgresLimits(neighbours=51),
+            pg.PostgresLimits(pairs=200001),
+            pg.PostgresLimits(rows=100001),
+            pg.PostgresLimits(ann_probe_limit=10),
+            pg.PostgresLimits(ann_probe_limit=50001),
+        )
+
+        for limits in invalid:
+            with self.subTest(
+                limits=limits
+            ), self.assertRaises(ValueError):
                 self.read(limits=limits)
+
         self.assertEqual(self.conn.calls, [])
 
     def test_ann_shape_metadata_and_repeated_execution(self):
         sql = pg.NEIGHBOUR_SQL
-        probe, output = sql.split('SELECT ann.content_id, ann.distance')
-        self.assertIn('WITH ann AS MATERIALIZED', probe)
-        self.assertIn('ORDER BY e.embedding::vector(1024) <=> (', probe)
-        self.assertIn('e.embedding_model_id = 1 AND e.embedding_model_id = %(model_id)s', probe)
-        self.assertIn('LIMIT %(ann_probe_limit)s', probe)
-        self.assertNotIn('JOIN content_items', probe)
-        self.assertNotIn('content_hash', probe)
-        self.assertIn('ann.content_id <> %(anchor)s', output)
-        self.assertIn('io.collected_at >= %(start)s', output)
-        self.assertIn('io.collected_at < %(as_of)s', output)
-        self.assertIn('s.source_group = ANY(%(groups)s)', output)
+
+        self.assertIn(
+            'WITH anchor_embeddings AS MATERIALIZED',
+            sql,
+        )
+        self.assertIn(
+            'CROSS JOIN LATERAL',
+            sql,
+        )
+        self.assertIn(
+            'e2.embedding_model_id = 1',
+            sql,
+        )
+        self.assertIn(
+            'e2.embedding_model_id = %(model_id)s',
+            sql,
+        )
+        self.assertIn(
+            'r.content_id = e2.content_id',
+            sql,
+        )
+        self.assertIn(
+            'io.collected_at >= %(start)s',
+            sql,
+        )
+        self.assertIn(
+            'io.collected_at < %(as_of)s',
+            sql,
+        )
+        self.assertIn(
+            'src.source_group = ANY(%(groups)s)',
+            sql,
+        )
+        self.assertIn(
+            'ORDER BY e2.embedding::vector(1024) <=> a.embedding',
+            sql,
+        )
+        self.assertIn(
+            'LIMIT %(neighbour_limit)s',
+            sql,
+        )
+        self.assertIn(
+            'WHERE distance <= %(max_distance)s',
+            sql,
+        )
+
+        # Fake DB має відтворювати результат transaction-local
+        # set_config для конкретного scan budget.
+        self.conn.responses[
+            pg.ANN_SETTINGS_SQL
+        ][0]['max_scan_tuples'] = '123'
+
         for _ in range(7):
-            data = self.read(limits=pg.PostgresLimits(ann_probe_limit=123))
-        for (query, params), kwargs in zip(self.conn.calls, self.conn.prepares):
+            data = self.read(
+                limits=pg.PostgresLimits(
+                    ann_probe_limit=123,
+                )
+            )
+
+        for (query, params), kwargs in zip(
+            self.conn.calls,
+            self.conn.prepares,
+        ):
             if query == sql:
-                self.assertEqual(kwargs, {'prepare': False})
-                self.assertEqual(params['ann_probe_limit'], 123)
-        self.assertEqual(data.selection['ann']['recall_status'], 'UNVERIFIED')
-        self.assertEqual(data.selection['ann']['probe_limit'], 123)
-        self.assertEqual(snapshot(data)['selection']['ann'], data.selection['ann'])
-        self.assertEqual(data.selection['ann']['ef_search'], 40)
-        self.assertEqual(data.selection['ann']['iterative_scan'], 'off')
-        self.assertTrue(data.truncated)
+                self.assertEqual(
+                    kwargs,
+                    {'prepare': False},
+                )
+                self.assertEqual(
+                    params['ann_probe_limit'],
+                    123,
+                )
+
+        ann = data.selection['ann']
+
+        self.assertEqual(
+            ann['recall_status'],
+            'UNVERIFIED',
+        )
+        self.assertEqual(
+            ann['probe_limit'],
+            123,
+        )
+        self.assertEqual(
+            ann['max_scan_tuples'],
+            123,
+        )
+        self.assertEqual(
+            ann['ef_search'],
+            64,
+        )
+        self.assertEqual(
+            ann['iterative_scan'],
+            'relaxed_order',
+        )
+        self.assertEqual(
+            ann['filter_stage'],
+            'inside_knn',
+        )
+        self.assertEqual(
+            ann['k'],
+            10,
+        )
+        self.assertEqual(
+            snapshot(data)['selection']['ann'],
+            ann,
+        )
+        self.assertFalse(data.truncated)
 
     def test_ann_settings_fail_closed(self):
-        for change in ({'iterative_scan': 'relaxed_order'}, {'iterative_scan': 'strict_order'},
-                       {'ef_search': '0'}, {'ef_search': '1001'}):
+        changes = (
+            {'iterative_scan': 'off'},
+            {'iterative_scan': 'strict_order'},
+            {'ef_search': '0'},
+            {'ef_search': '1001'},
+            {'max_scan_tuples': '99'},
+        )
+
+        for change in changes:
             self.conn = FakeConnection()
-            self.conn.responses[pg.ANN_SETTINGS_SQL][0].update(change)
-            with self.assertRaises(ValueError):
+            self.conn.responses[
+                pg.ANN_SETTINGS_SQL
+            ][0].update(change)
+
+            with self.subTest(
+                change=change
+            ), self.assertRaises(ValueError):
                 self.read()
-            self.assertNotIn(pg.NEIGHBOUR_SQL, dict(self.conn.calls))
+
+            self.assertNotIn(
+                pg.NEIGHBOUR_SQL,
+                dict(self.conn.calls),
+            )
 
     def test_ann_limits_and_unsupported_index_contract(self):
-        for value in (True, 0, 10, 1001, 1.5):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                self.read(limits=pg.PostgresLimits(ann_probe_limit=value))
-        self.assertEqual(self.conn.calls, [])
+        for value in (
+            True,
+            0,
+            10,
+            50001,
+            1.5,
+        ):
+            with self.subTest(
+                value=value
+            ), self.assertRaises(ValueError):
+                self.read(
+                    limits=pg.PostgresLimits(
+                        ann_probe_limit=value,
+                    )
+                )
+
+        self.assertEqual(
+            self.conn.calls,
+            [],
+        )
+
         with self.assertRaises(ValueError):
-            pg.PostgresSignalAdapter(self.conn, model_id=2).read(
-                as_of=AS_OF, embedding_model=MODEL, dimension=1024)
-        self.assertNotIn(pg.NEIGHBOUR_SQL, dict(self.conn.calls))
+            pg.PostgresSignalAdapter(
+                self.conn,
+                model_id=2,
+            ).read(
+                as_of=AS_OF,
+                embedding_model=MODEL,
+                dimension=1024,
+            )
+
+        self.assertNotIn(
+            pg.NEIGHBOUR_SQL,
+            dict(self.conn.calls),
+        )
 
     def test_timeout_units(self):
         self.assertEqual(pg.timeout_ms('15000ms'), 15000)
