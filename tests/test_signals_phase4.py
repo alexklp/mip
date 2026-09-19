@@ -34,14 +34,14 @@ class Phase4Tests(unittest.TestCase):
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abc')))
         return replace(data, pairs=(('a', 'b', .18), ('b', 'c', .2), ('a', 'c', .36)))
 
-    def test_latest_routing_is_before_analyze_predicate(self):
+    def test_latest_routing_is_before_eligible_predicate(self):
         latest = pg.LATEST_ROUTING_SQL
         self.assertIn('ORDER BY r.routing_version DESC, r.created_at DESC, r.routing_id DESC\nLIMIT 1', latest)
         self.assertNotIn("decision = 'analyze'", latest)
         self.assertNotIn('routing_version =', latest)
         self.assertNotIn('embedding_model_id =', latest)
         for query in (pg.ANCHOR_SQL, pg.NEIGHBOUR_SQL, pg.ROWS_SQL):
-            self.assertIn("LIMIT 1\n) = 'analyze'", query)
+            self.assertIn("LIMIT 1\n) IN ('analyze', 'maybe')", query)
             self.assertNotIn('content_contour_assignments', query)
             self.assertNotIn("COALESCE", query)
         probe, filtered = pg.NEIGHBOUR_SQL.split('SELECT ann.content_id, ann.distance')
@@ -65,16 +65,91 @@ class Phase4Tests(unittest.TestCase):
                 params = tuple(value for row in rows for value in row)
                 self.assertEqual(conn.execute(query, params).fetchone()[0], expected)
 
-    def test_missing_maybe_skip_fail_closed_with_coverage(self):
-        for decision in (None, 'maybe', 'skip'):
+    def test_maybe_is_eligible_but_missing_and_skip_are_excluded(self):
+        data = multi_source(fixture(occurrence('a')))
+        data = replace(
+            data,
+            contents=(
+                replace(data.contents[0], routing_decision='maybe'),
+            ),
+        )
+        result = snapshot(data, RecallConfig())
+        self.assertEqual(len(result['candidates']), 1)
+        self.assertEqual(result['candidates'][0]['candidate_id'], 'a')
+        self.assertEqual(
+            result['routing_coverage']['current']['ru_space']['maybe'],
+            1,
+        )
+        self.assertFalse(result['incomplete'])
+        validate_snapshot(result)
+
+        for decision in (None, 'skip'):
             data = multi_source(fixture(occurrence('a')))
-            data = replace(data, contents=(replace(data.contents[0], routing_decision=decision),))
+            data = replace(
+                data,
+                contents=(
+                    replace(
+                        data.contents[0],
+                        routing_decision=decision,
+                    ),
+                ),
+            )
             result = snapshot(data, RecallConfig())
             self.assertEqual(result['candidates'], [])
             self.assertEqual(result['related_links'], [])
-            self.assertEqual(result['routing_coverage']['current']['ru_space'][decision or 'missing'], 1)
+            self.assertEqual(
+                result['routing_coverage']['current']['ru_space'][
+                    decision or 'missing'
+                ],
+                1,
+            )
             self.assertEqual(result['incomplete'], decision is None)
             validate_snapshot(result)
+
+    def test_exact_current_signal_keeps_previous_window_propagation(self):
+        data = fixture(
+            occurrence('now', 'a', source='ru', hours=1),
+            occurrence('prev-1', 'a', source='ru2', hours=25),
+            occurrence('prev-2', 'a', source='third', hours=30),
+            contents=(Content('a', 'Матеріал', has_embedding=True),),
+            sources=(
+                Source('ru', 'ru_space'),
+                Source('ru2', 'ru_space'),
+                Source('third', 'ru_space'),
+            ),
+        )
+        data = replace(
+            data,
+            contents=(
+                replace(data.contents[0], routing_decision='maybe'),
+            ),
+            selection={'strategy': 'exact_current_24h'},
+        )
+
+        result = snapshot(data, RecallConfig())
+
+        self.assertEqual(len(result['candidates']), 1)
+        candidate = result['candidates'][0]
+
+        self.assertEqual(candidate['candidate_id'], 'a')
+        self.assertEqual(candidate['source_count'], 3)
+        self.assertEqual(candidate['occurrence_count'], 3)
+        self.assertEqual(
+            candidate['exact_republication_content_ids'],
+            ['a'],
+        )
+        self.assertEqual(
+            candidate['dynamics']['ru_space']['current']['occurrence_count'],
+            1,
+        )
+        self.assertEqual(
+            candidate['dynamics']['ru_space']['previous']['occurrence_count'],
+            2,
+        )
+        self.assertEqual(
+            candidate['last_observed'],
+            (AS_OF - timedelta(hours=1)).isoformat(),
+        )
 
     def test_core_related_boundaries_do_not_inflate_aggregates(self):
         data = self.data()
@@ -143,14 +218,56 @@ class Phase4Tests(unittest.TestCase):
         self.assertEqual([c['candidate_id'] for c in result['candidates']], ['a', 'b', 'c', 'e'])
         validate_snapshot(result)
 
-    def test_missing_and_excluded_routing_do_not_make_false_critical(self):
-        for decision in ('missing', 'maybe', 'skip'):
+    def test_missing_and_skip_do_not_make_false_critical(self):
+        for decision in ('missing', 'skip'):
             conn = FakeConnection()
-            conn.responses[pg.ROUTING_COVERAGE_SQL] = [dict(window='current', source_group='ru_space', decision=decision, content_count=5)]
+            conn.responses[pg.ROUTING_COVERAGE_SQL] = [
+                dict(
+                    window='current',
+                    source_group='ru_space',
+                    decision=decision,
+                    content_count=5,
+                )
+            ]
             conn.responses[pg.ANCHOR_SQL] = []
-            data = pg.PostgresSignalAdapter(conn, model_id=1).read(as_of=AS_OF, embedding_model='synthetic@1', dimension=1024)
+            data = pg.PostgresSignalAdapter(
+                conn,
+                model_id=1,
+            ).read(
+                as_of=AS_OF,
+                embedding_model='synthetic@1',
+                dimension=1024,
+            )
             self.assertFalse(data.critical_incomplete)
-            self.assertEqual(snapshot(data, RecallConfig())['candidates'], [])
+            self.assertEqual(
+                snapshot(data, RecallConfig())['candidates'],
+                [],
+            )
+
+    def test_missing_maybe_evidence_is_critical(self):
+        conn = FakeConnection()
+        conn.responses[pg.ROUTING_COVERAGE_SQL] = [
+            dict(
+                window='current',
+                source_group='ru_space',
+                decision='maybe',
+                content_count=5,
+            )
+        ]
+        conn.responses[pg.ANCHOR_SQL] = []
+        data = pg.PostgresSignalAdapter(
+            conn,
+            model_id=1,
+        ).read(
+            as_of=AS_OF,
+            embedding_model='synthetic@1',
+            dimension=1024,
+        )
+        self.assertTrue(data.critical_incomplete)
+        self.assertEqual(
+            snapshot(data, RecallConfig())['candidates'],
+            [],
+        )
 
     def test_rank_and_display_cap(self):
         data = multi_source(fixture(occurrence('a'), occurrence('b', 'b'), occurrence('c', 'c', source='ua', hours=25),

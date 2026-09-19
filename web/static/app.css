@@ -6153,3 +6153,77 @@ a {
     min-width: 0;
     overflow: hidden;
 }
+
+
+/* C1 compact active scope v1 */
+.contour-active-filters {
+    gap: 0.35rem;
+    margin: 0.45rem 0 0.7rem;
+    min-height: 1.7rem;
+}
+
+.contour-active-filters-label {
+    margin-right: 0.1rem;
+    font-size: 0.68rem;
+}
+
+.contour-active-filters .contour-filter-chip {
+    padding: 0.22rem 0.5rem;
+    line-height: 1;
+}
+
+.contour-active-filters a,
+.contour-active-filters button {
+    min-height: auto;
+    padding: 0.22rem 0.5rem;
+    line-height: 1;
+    font-size: 0.68rem;
+}
+
+
+/* C1 evidence space filter v1 */
+.contour-space-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: -0.15rem 0 0.7rem;
+}
+
+.contour-space-filter button {
+    min-height: auto;
+    padding: 0.3rem 0.6rem;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.7rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.contour-space-filter button:hover {
+    color: var(--text);
+    border-color: var(--border-interactive);
+}
+
+.contour-space-filter button.is-active {
+    color: var(--teal-tint);
+    background: var(--teal-chip-bg);
+    border-color: var(--teal-mid);
+}
+
+
+.contour-evidence-item.is-c1-space-hidden {
+    display: none;
+}
+
+.contour-space-filter[hidden] {
+    display: none;
+}
+
+
+/* C1 Signals empty compact */
+.contour-analysis-workspace .materials-empty {
+    padding: 1rem 1.15rem;
+    min-height: 0;
+}

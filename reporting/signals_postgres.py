@@ -90,7 +90,7 @@ JOIN content_items ci USING (content_id)
 JOIN embeddings e ON e.content_id = io.content_id AND e.embedding_model_id = %(model_id)s
 WHERE io.collected_at >= %(start)s AND io.collected_at < %(as_of)s
   AND s.source_group = %(anchor_group)s
-  AND (""" + LATEST_ROUTING_SQL + """) = 'analyze'
+  AND (""" + LATEST_ROUTING_SQL + """) IN ('analyze', 'maybe')
   AND vector_dims(e.embedding) = %(dimension)s
 GROUP BY io.content_id
 ORDER BY last_observed DESC, observed_sources DESC, content_hash
@@ -116,7 +116,7 @@ WITH ann AS MATERIALIZED (
 SELECT ann.content_id, ann.distance
 FROM ann JOIN content_items ci ON ci.content_id = ann.content_id
 WHERE ann.content_id <> %(anchor)s
-  AND (""" + LATEST_ROUTING_SQL.replace("io.content_id", "ann.content_id") + """) = 'analyze'
+  AND (""" + LATEST_ROUTING_SQL.replace("io.content_id", "ann.content_id") + """) IN ('analyze', 'maybe')
   AND EXISTS (
       SELECT 1 FROM item_occurrences io JOIN sources s USING (source_id)
       WHERE io.content_id = ann.content_id AND io.collected_at >= %(start)s
@@ -129,7 +129,9 @@ ROWS_SQL = """
 SELECT io.occurrence_id, io.content_id, io.source_id, io.collected_at, io.published_at,
        left(io.external_ref, 2048) AS external_ref,
        left(s.name, 240) AS source_name, s.source_type, s.source_group,
-       ci.content_hash, left(ci.title, 240) AS title, left(ci.text_content, %(text_probe)s) AS text,
+       ci.content_hash,
+       (""" + LATEST_ROUTING_SQL + """) AS routing_decision,
+       left(ci.title, 240) AS title, left(ci.text_content, %(text_probe)s) AS text,
        vector_dims(e.embedding) AS dimension, e.embedding <=> e.embedding AS self_distance
 FROM item_occurrences io JOIN sources s USING (source_id)
 JOIN content_items ci USING (content_id)
@@ -137,7 +139,7 @@ JOIN embeddings e ON e.content_id = io.content_id AND e.embedding_model_id = %(m
 WHERE io.content_id = ANY(%(ids)s::uuid[])
   AND io.collected_at >= %(start)s AND io.collected_at < %(as_of)s
   AND s.source_group = ANY(%(groups)s)
-  AND (""" + LATEST_ROUTING_SQL + """) = 'analyze'
+  AND (""" + LATEST_ROUTING_SQL + """) IN ('analyze', 'maybe')
 ORDER BY io.collected_at DESC, ci.content_hash, s.name, io.external_ref, io.occurrence_id
 LIMIT %(row_probe)s
 """
@@ -302,17 +304,22 @@ class PostgresSignalAdapter:
                 raise ValueError("Некоректна розмірність або норма embedding evidence")
             sid, cid = str(row['source_id']), str(row['content_id'])
             sources[sid] = Source(sid, row['source_group'], row['source_name'], row['source_type'])
-            contents[cid] = Content(cid, row['text'], title=row['title'] or '', has_embedding=True, selection_key=row['content_hash'], routing_decision='analyze')
+            contents[cid] = Content(cid, row['text'], title=row['title'] or '', has_embedding=True, selection_key=row['content_hash'], routing_decision=row['routing_decision'])
             occurrences.append(Occurrence(str(row['occurrence_id']), cid, sid,
                 row['collected_at'].astimezone(timezone.utc),
                 row['published_at'].astimezone(timezone.utc) if row['published_at'] else None, row['external_ref']))
-        critical = row_limited or bool(ids - contents.keys()) or (not contents and any(routing_coverage[w][g]["analyze"] for w in bounds for g in self.groups))
+        critical = row_limited or bool(ids - contents.keys()) or (not contents and any(
+                routing_coverage[w][g]["analyze"]
+                + routing_coverage[w][g]["maybe"]
+                for w in bounds
+                for g in self.groups
+            ))
         result = SignalData(tuple(sources.values()), tuple(contents.values()), tuple(occurrences),
             embedding_model, dimension, truncated=bool(searched) or anchor_limited or bool(saturated) or searched < len(anchors) or critical,
             pairs=tuple((a, b, d) for (a, b), d in sorted(pairs.items()) if a in contents and b in contents),
             coverage=coverage, critical_incomplete=critical, routing_coverage=routing_coverage,
             selection={"limits": asdict(self.limits), "source_groups": list(self.groups),
-                "anchor_groups": anchor_groups, "routing_policy": "latest_analyze_only",
+                "anchor_groups": anchor_groups, "routing_policy": "latest_analyze_or_maybe",
                 "model_id": self.model_id, "anchor_count": len(anchors), "searched_anchor_count": searched,
                 "pair_count": len(pairs), "inspected_pair_count": inspected, "selected_content_count": len(contents),
                 "selected_occurrence_count": len(rows), "anchor_limit_reached": anchor_limited,

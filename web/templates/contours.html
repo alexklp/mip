@@ -153,7 +153,7 @@
                                 {% if selected and row.object_id == selected.object_id %}
                                     is-selected
                                 {% endif %}"
-                            href="/contours?contour=dshv_objects&object_id={{ row.object_id }}"
+                            href="{% if selected and row.object_id == selected.object_id %}/contours?contour=dshv_objects&analysis={{ analysis_layer }}{% else %}/contours?contour=dshv_objects&object_id={{ row.object_id }}&analysis={{ analysis_layer }}{% endif %}"
                         >
                             <div class="contour-rank-head">
                                 <span>{{ row.display_name }}</span>
@@ -185,7 +185,8 @@
 
         </section>
 
-        {% if not selected and not selected_day
+        {% if analysis_layer == "topics"
+              and not selected_day
               and contour_topics
               and contour_topics.state == "ready"
               and contour_topics["phrases"] %}
@@ -202,15 +203,15 @@
                     </button>
                     <button
                         type="button"
-                        disabled
-                        title="Scoped detection сигналів буде додано окремим аналітичним зрізом"
+                        aria-pressed="false"
+                        onclick="window.location.href='/contours?contour=dshv_objects{% if selected %}&object_id={{ selected.object_id }}{% endif %}&analysis=signals'"
                     >
                         Сигнали
                     </button>
                 </div>
 
                 <span class="contour-analysis-scope">
-                    C1 · 30 днів ·
+                    C1{% if selected %} · {{ selected.display_name }}{% endif %} · 30 днів ·
                     {{ contour_topics.summary.materials }} матеріалів ·
                     {{ contour_topics.summary.sources }} джерел
                 </span>
@@ -909,12 +910,20 @@
                 var requestId =
                     topicRequest;
 
-                fetch(
+                var detailUrl =
                     "/contours/topic/" +
-                    encodeURIComponent(
-                        markerId
-                    )
-                )
+                    encodeURIComponent(markerId);
+
+                if (
+                    data.object_id !== null &&
+                    data.object_id !== undefined
+                ) {
+                    detailUrl +=
+                        "?object_id=" +
+                        encodeURIComponent(data.object_id);
+                }
+
+                fetch(detailUrl)
                     .then(function (response) {
                         if (!response.ok) {
                             throw new Error(
@@ -1453,6 +1462,145 @@
 
         {% endif %}
 
+        {% if analysis_layer == "signals" and not selected_day %}
+        <section class="contour-analysis-workspace">
+
+            <div class="contour-analysis-toolbar">
+                <div
+                    class="topics-segment"
+                    aria-label="Аналітичний шар контуру"
+                >
+                    <button
+                        type="button"
+                        aria-pressed="false"
+                        onclick="window.location.href='/contours?contour=dshv_objects{% if selected %}&object_id={{ selected.object_id }}{% endif %}&analysis=topics'"
+                    >
+                        Теми
+                    </button>
+
+                    <button
+                        type="button"
+                        aria-pressed="true"
+                    >
+                        Сигнали
+                    </button>
+                </div>
+
+                <span class="contour-analysis-scope">
+                    C1{% if selected %} · {{ selected.display_name }}{% endif %}
+                    · 24 год
+                    {% if contour_signals.snapshot %}
+                        ·
+                        {{ contour_signals.snapshot.selection.selected_content_count }}
+                        матеріалів у вибірці
+                    {% endif %}
+                </span>
+            </div>
+
+            <section class="topics-panel">
+                <div class="topics-panel-head">
+                    <div>
+                        <h2>Сигнали контуру</h2>
+                        <p>
+                            Кандидати, виявлені в межах поточного контуру · 24 години.
+                        </p>
+                    </div>
+                </div>
+
+                {% if contour_signals.state == "ready" %}
+                    <div class="contour-evidence-list">
+                    {% for candidate in contour_signals.snapshot.candidates %}
+                        {% set first = candidate.chronology[0] if candidate.chronology else none %}
+
+                        <article class="contour-evidence-item">
+                            <div class="contour-evidence-meta">
+                                <span
+                                    class="contour-space-label
+                                    {% if candidate.cross_space %}
+                                        is-cross
+                                    {% elif candidate.source_groups[0] == 'ua_space' %}
+                                        is-ua
+                                    {% elif candidate.source_groups[0] == 'ru_space' %}
+                                        is-ru
+                                    {% endif %}"
+                                >
+                                    {% if candidate.cross_space %}
+                                        Між просторами
+                                    {% elif candidate.source_groups[0] == "ua_space" %}
+                                        Український
+                                    {% else %}
+                                        Російський
+                                    {% endif %}
+                                </span>
+
+                                <strong class="contour-evidence-source">
+                                    {{ candidate.source_count }} джерел
+                                    · {{ candidate.occurrence_count }} публікацій
+                                    · {{ candidate.content_count }} матеріалів
+                                </strong>
+                            </div>
+
+                            <h3>
+                                {{ first.title if first and first.title else "Пов’язані публікації" }}
+                            </h3>
+
+                            <p>
+                                Кандидат сигналу ·
+                                без семантичного вердикту.
+                            </p>
+
+                            {% for row in candidate.chronology[:6] %}
+                            <div class="contour-evidence-match">
+                                <strong>{{ row.source_name }}</strong>
+                                {% if row.published_at %}
+                                    · {{ fmt_kyiv_zoned(row.published_at) }}
+                                {% endif %}
+
+                                {% if row.safe_link %}
+                                    ·
+                                    <a
+                                        href="{{ row.safe_link }}"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        Відкрити джерело ↗
+                                    </a>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </article>
+                    {% endfor %}
+                    </div>
+
+                {% elif contour_signals.state == "empty" %}
+                    <div class="materials-empty">
+                        <strong>Кандидатів сигналів не виявлено.</strong>
+
+                        {% if contour_signals.snapshot %}
+
+                        {% endif %}
+                    </div>
+
+                {% elif contour_signals.state == "stale" %}
+                    <div class="materials-empty">
+                        Scoped Signals snapshot застарів.
+                    </div>
+
+                {% elif contour_signals.state == "missing" %}
+                    <div class="materials-empty">
+                        Для цього scope Signals snapshot ще не сформовано.
+                    </div>
+
+                {% else %}
+                    <div class="materials-empty">
+                        Scoped Signals snapshot недоступний або не пройшов валідацію.
+                    </div>
+                {% endif %}
+            </section>
+
+        </section>
+        {% endif %}
+
         {% if selected or selected_day %}
         <div class="contour-active-filters" aria-label="Активні фільтри">
             <span class="contour-active-filters-label">Показано:</span>
@@ -1602,29 +1750,26 @@
         <section class="contour-evidence">
             <div class="contour-section-head">
                 <div>
-                    {% if selected %}
-                        <h2>Що саме опубліковано</h2>
-                        <p>
+                    <h2 id="c1-evidence-title">
+                        {% if selected %}
+                            Що саме опубліковано
+                        {% else %}
+                            Матеріали контуру
+                        {% endif %}
+                    </h2>
+                    <p id="c1-evidence-note">
+                        {% if selected %}
                             Публікації про вибраний об'єкт
-                            {% if selected_day %}
-                                за {{ selected_day.strftime("%d.%m.%Y") }}.
-                            {% else %}
-                                за останні 30 днів.
-                            {% endif %}
+                            за останні 30 днів.
                             Одна строка — одна публікація, не окрема подія.
-                        </p>
-                    {% else %}
-                        <h2 id="c1-evidence-title">Матеріали контуру</h2>
-                        <p id="c1-evidence-note">
-                            {% if selected_day %}
-                                Публікації про об'єкти ДШВ за
-                                {{ selected_day.strftime("%d.%m.%Y") }}.
-                            {% else %}
-                                Останні публікації про об'єкти ДШВ за 30 днів.
-                                Виберіть об'єкт вище, щоб звузити перелік.
-                            {% endif %}
-                        </p>
-                    {% endif %}
+                        {% elif selected_day %}
+                            Публікації про об'єкти ДШВ за
+                            {{ selected_day.strftime("%d.%m.%Y") }}.
+                        {% else %}
+                            Останні публікації про об'єкти ДШВ за 30 днів.
+                            Виберіть об'єкт вище, щоб звузити перелік.
+                        {% endif %}
+                    </p>
                 </div>
 
                 <button
@@ -1636,6 +1781,200 @@
                     Скинути тему
                 </button>
             </div>
+
+            <div
+                class="contour-space-filter"
+                aria-label="Фільтр за інфопростором"
+                hidden
+            >
+                <button
+                    type="button"
+                    class="is-active"
+                    data-c1-space-filter="all"
+                    aria-pressed="true"
+                >Усі</button>
+
+                <button
+                    type="button"
+                    data-c1-space-filter="ua_space"
+                    aria-pressed="false"
+                >Український</button>
+
+                <button
+                    type="button"
+                    data-c1-space-filter="ru_space"
+                    aria-pressed="false"
+                >Російський</button>
+            </div>
+
+            <div
+                id="c1-space-filter-empty"
+                class="materials-empty"
+                hidden
+            >
+                Для цього інфопростору матеріалів немає.
+            </div>
+
+            <script>
+            document.addEventListener(
+                "DOMContentLoaded",
+                function () {
+                    var body = document.getElementById(
+                        "c1-evidence-body"
+                    );
+
+                    var filter = document.querySelector(
+                        ".contour-space-filter"
+                    );
+
+                    var empty = document.getElementById(
+                        "c1-space-filter-empty"
+                    );
+
+                    var buttons = Array.from(
+                        document.querySelectorAll(
+                            "[data-c1-space-filter]"
+                        )
+                    );
+
+                    if (!body || !filter || !buttons.length) {
+                        return;
+                    }
+
+                    var activeSpace = "all";
+                    var supported = [
+                        "ua_space",
+                        "ru_space"
+                    ];
+
+                    function applySpaceFilter() {
+                        var cards = Array.from(
+                            body.querySelectorAll(
+                                ".contour-evidence-item"
+                            )
+                        );
+
+                        /*
+                         * Наш UA/RU-фільтр не використовує hidden:
+                         * hidden може належати іншому cross-filter.
+                         */
+                        var baseCards = cards.filter(
+                            function (card) {
+                                return !card.hidden;
+                            }
+                        );
+
+                        var available = supported.filter(
+                            function (space) {
+                                return baseCards.some(
+                                    function (card) {
+                                        return (
+                                            card.dataset.space ===
+                                            space
+                                        );
+                                    }
+                                );
+                            }
+                        );
+
+                        if (available.length <= 1) {
+                            activeSpace = "all";
+                            filter.hidden = true;
+
+                            cards.forEach(function (card) {
+                                card.classList.remove(
+                                    "is-c1-space-hidden"
+                                );
+                            });
+
+                            if (empty) {
+                                empty.hidden = true;
+                            }
+
+                            return;
+                        }
+
+                        filter.hidden = false;
+
+                        if (
+                            activeSpace !== "all" &&
+                            available.indexOf(activeSpace) === -1
+                        ) {
+                            activeSpace = "all";
+                        }
+
+                        var visible = 0;
+
+                        buttons.forEach(function (button) {
+                            var space =
+                                button.dataset.c1SpaceFilter;
+
+                            button.hidden = (
+                                space !== "all" &&
+                                available.indexOf(space) === -1
+                            );
+
+                            var active =
+                                space === activeSpace;
+
+                            button.classList.toggle(
+                                "is-active",
+                                active
+                            );
+
+                            button.setAttribute(
+                                "aria-pressed",
+                                active ? "true" : "false"
+                            );
+                        });
+
+                        cards.forEach(function (card) {
+                            var show = (
+                                activeSpace === "all" ||
+                                card.dataset.space === activeSpace
+                            );
+
+                            card.classList.toggle(
+                                "is-c1-space-hidden",
+                                !show
+                            );
+
+                            if (show && !card.hidden) {
+                                visible += 1;
+                            }
+                        });
+
+                        if (empty) {
+                            empty.hidden = visible !== 0;
+                        }
+                    }
+
+                    buttons.forEach(function (button) {
+                        button.addEventListener(
+                            "click",
+                            function () {
+                                activeSpace =
+                                    button.dataset.c1SpaceFilter;
+
+                                applySpaceFilter();
+                            }
+                        );
+                    });
+
+                    new MutationObserver(
+                        applySpaceFilter
+                    ).observe(
+                        body,
+                        {
+                            childList: true,
+                            subtree: true
+                        }
+                    );
+
+                    applySpaceFilter();
+                }
+            );
+            </script>
 
             <div id="c1-evidence-body">
             {% if evidence %}

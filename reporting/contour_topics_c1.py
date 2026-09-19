@@ -17,6 +17,46 @@ DEFAULT_OUTPUT = (
     / "contour_topics_c1.latest.json"
 )
 
+
+def scoped_output_path(
+    base: Path,
+    object_id: int,
+) -> Path:
+    """Return deterministic snapshot path for one C1 object."""
+    suffix = ".latest.json"
+
+    if base.name.endswith(suffix):
+        prefix = base.name[:-len(suffix)]
+        name = f"{prefix}.object_{object_id}{suffix}"
+    else:
+        name = (
+            f"{base.stem}.object_{object_id}"
+            f"{base.suffix}"
+        )
+
+    return base.with_name(name)
+
+
+def fetch_object_ids() -> list[int]:
+    """Return C1 analytical objects eligible for scoped Topics."""
+    gate = c1_analytical_gate_sql("a")
+
+    with psycopg.connect(ts.DB_DSN) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT a.object_id
+            FROM content_contour_assignments a
+            WHERE a.monitoring_contour_id = 1
+              AND a.object_id IS NOT NULL
+              AND a.object_id <> 1
+              AND a.evidence_type = 'exact_reference'
+              {gate}
+            ORDER BY a.object_id
+            """
+        ).fetchall()
+
+    return [int(row[0]) for row in rows]
+
 SCHEMA_VERSION = "contour-topics-c1/1"
 
 KYIV = ZoneInfo("Europe/Kyiv")
@@ -94,12 +134,26 @@ def build_daily_comparison(
 
 def fetch_rows(
     days: int,
+    *,
+    object_id: int | None = None,
 ) -> tuple[object, object, list[dict]]:
     sql = ts.SQL
 
     marker = """
 ORDER BY
 """
+
+    object_filter = (
+        "        AND a.object_id = %s\n"
+        if object_id is not None
+        else ""
+    )
+
+    object_filter = (
+        "        AND a.object_id = %s\n"
+        if object_id is not None
+        else ""
+    )
 
     c1_filter = f"""
   AND EXISTS (
@@ -109,7 +163,7 @@ ORDER BY
         AND a.monitoring_contour_id = 1
         AND a.object_id IS NOT NULL
         AND a.evidence_type = 'exact_reference'
-        {c1_analytical_gate_sql("a")}
+{object_filter}        {c1_analytical_gate_sql("a")}
   )
 """
 
@@ -142,14 +196,19 @@ ORDER BY
 
         start_at = as_of - timedelta(days=days)
 
+        params = (
+            as_of,
+            start_at,
+            as_of,
+            as_of,
+        )
+
+        if object_id is not None:
+            params = (*params, object_id)
+
         raw = conn.execute(
             sql,
-            (
-                as_of,
-                start_at,
-                as_of,
-                as_of,
-            ),
+            params,
         ).fetchall()
 
     rows = []
@@ -361,8 +420,12 @@ def build_phrase_details(
 def build_snapshot(
     *,
     days: int,
+    object_id: int | None = None,
 ) -> dict:
-    as_of, start_at, rows = fetch_rows(days)
+    as_of, start_at, rows = fetch_rows(
+        days,
+        object_id=object_id,
+    )
 
     (
         terms_by_content,
@@ -503,6 +566,7 @@ def build_snapshot(
         "contour": {
             "monitoring_contour_id": 1,
             "code": "dshv_objects",
+            "object_id": object_id,
         },
         "window": {
             "days": days,
@@ -569,63 +633,75 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUTPUT,
+        default=None,
+    )
+    parser.add_argument(
+        "--object-id",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--all-objects",
+        action="store_true",
     )
 
     args = parser.parse_args()
 
-    snapshot = build_snapshot(
-        days=args.days,
-    )
-
-    ts.atomic_write_json(
-        args.output,
-        snapshot,
-    )
-
-    all_view = snapshot["views"]["all"]["themes"]
-
-    print(
-        "C1 topics:",
-        f"days={args.days}",
-        f"publications="
-        f"{snapshot['summary']['all']['current']['publications']}",
-        f"materials="
-        f"{snapshot['summary']['all']['current']['materials']}",
-        f"sources="
-        f"{snapshot['summary']['all']['current']['sources']}",
-    )
-
-    print("\nPHRASES")
-    for index, row in enumerate(
-        all_view["phrases"][:20],
-        1,
-    ):
-        print(
-            f"{index:2}. "
-            f"{row['label']:<38} "
-            f"pub={row['publications']:3} "
-            f"mat={row['materials']:3} "
-            f"src={row['sources']:3}"
+    if args.all_objects and args.object_id is not None:
+        parser.error(
+            "--all-objects and --object-id are mutually exclusive"
         )
 
-    print("\nWORDS")
-    for index, row in enumerate(
-        all_view["words"][:20],
-        1,
-    ):
-        print(
-            f"{index:2}. "
-            f"{row['label']:<38} "
-            f"pub={row['publications']:3} "
-            f"mat={row['materials']:3} "
-            f"src={row['sources']:3}"
+    base_output = args.output or DEFAULT_OUTPUT
+
+    if args.all_objects:
+        jobs = [(None, base_output)]
+        jobs.extend(
+            (
+                object_id,
+                scoped_output_path(
+                    base_output,
+                    object_id,
+                ),
+            )
+            for object_id in fetch_object_ids()
+        )
+    else:
+        output = (
+            base_output
+            if args.object_id is None
+            else (
+                args.output
+                or scoped_output_path(
+                    DEFAULT_OUTPUT,
+                    args.object_id,
+                )
+            )
+        )
+        jobs = [(args.object_id, output)]
+
+    for object_id, output in jobs:
+        snapshot = build_snapshot(
+            days=args.days,
+            object_id=object_id,
         )
 
-    print(
-        "\noutput =",
-        args.output,
-    )
+        ts.atomic_write_json(
+            output,
+            snapshot,
+        )
+
+        current = snapshot["summary"]["all"]["current"]
+
+        print(
+            "C1 topics:",
+            f"object_id={object_id}",
+            f"days={args.days}",
+            f"publications={current['publications']}",
+            f"materials={current['materials']}",
+            f"sources={current['sources']}",
+            f"output={output}",
+        )
 
     return 0
 

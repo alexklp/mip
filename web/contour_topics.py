@@ -18,11 +18,28 @@ DEFAULT_SNAPSHOT = (
 EXPECTED_SCHEMA = "contour-topics-c1/1"
 
 
+def c1_topics_snapshot_path(
+    object_id: int | None = None,
+) -> Path:
+    if object_id is None:
+        return DEFAULT_SNAPSHOT
+
+    return DEFAULT_SNAPSHOT.with_name(
+        f"contour_topics_c1.object_{object_id}.latest.json"
+    )
+
+
 def load_c1_contour_topics(
-    path: Path = DEFAULT_SNAPSHOT,
+    path: Path | None = None,
     *,
+    object_id: int | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
+    path = (
+        Path(path)
+        if path is not None
+        else c1_topics_snapshot_path(object_id)
+    )
     try:
         payload = json.loads(
             path.read_text(encoding="utf-8")
@@ -46,7 +63,10 @@ def load_c1_contour_topics(
 
     contour = payload.get("contour", {})
 
-    if contour.get("monitoring_contour_id") != 1:
+    if (
+        contour.get("monitoring_contour_id") != 1
+        or contour.get("object_id") != object_id
+    ):
         return {
             "state": "invalid",
             "items": [],
@@ -121,6 +141,7 @@ def load_c1_contour_topics(
         "summary": summary,
         "window": payload.get("window", {}),
         "generated_at": payload.get("generated_at"),
+        "object_id": contour.get("object_id"),
         "comparison": comparison,
         "cloud": (
             payload.get("clouds", {})
@@ -131,12 +152,17 @@ def load_c1_contour_topics(
 
 
 def load_c1_contour_topic(
-    path: Path = DEFAULT_SNAPSHOT,
+    path: Path | None = None,
     *,
     marker_id: str,
+    object_id: int | None = None,
 ) -> dict[str, Any]:
     """Return one C1 topic with its real publication evidence."""
-    path = Path(path)
+    path = (
+        Path(path)
+        if path is not None
+        else c1_topics_snapshot_path(object_id)
+    )
 
     payload = json.loads(
         path.read_text(encoding="utf-8")
@@ -148,6 +174,16 @@ def load_c1_contour_topic(
     ):
         raise ValueError(
             "unsupported C1 contour topics schema"
+        )
+
+    contour = payload.get("contour", {})
+
+    if (
+        contour.get("monitoring_contour_id") != 1
+        or contour.get("object_id") != object_id
+    ):
+        raise ValueError(
+            "C1 contour topics scope mismatch"
         )
 
     marker = (

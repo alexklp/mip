@@ -175,14 +175,39 @@ def validate_snapshot(value: dict) -> None:
                 raise ValueError("Недетермінований scope груп")
             if set(selection['source_groups']) - {'ru_space', 'ua_space'}:
                 raise ValueError("Некоректний scope груп")
-            if selection['routing_policy'] != 'latest_analyze_only':
+            if selection['routing_policy'] != 'latest_analyze_or_maybe':
                 raise ValueError("Некоректна routing policy")
             if selection['distance_method'] != 'exact_pgvector_cosine':
                 raise ValueError("Некоректний exact distance contract")
-            if selection['coverage_scope'] != 'observed_source_groups_48h':
+            if selection['coverage_scope'] not in {
+                'observed_source_groups_48h',
+                'analytical_contour_source_groups_48h',
+            }:
                 raise ValueError("Некоректний coverage scope")
             if selection['query_plan_status'] != 'UNVERIFIED':
                 raise ValueError("Некоректний query plan status")
+
+            contour_id = selection.get('monitoring_contour_id')
+            object_id = selection.get('object_id')
+
+            if contour_id not in (None, 1):
+                raise ValueError("Некоректний contour scope")
+
+            if object_id is not None and (
+                contour_id != 1
+                or type(object_id) is not int
+                or object_id <= 0
+            ):
+                raise ValueError("Некоректний object scope")
+
+            expected_coverage_scope = (
+                'observed_source_groups_48h'
+                if contour_id is None
+                else 'analytical_contour_source_groups_48h'
+            )
+
+            if selection['coverage_scope'] != expected_coverage_scope:
+                raise ValueError("Coverage scope не відповідає analytical scope")
 
             for key in (
                 'current_content_count',
@@ -215,7 +240,7 @@ def validate_snapshot(value: dict) -> None:
                     or ann['prepared'] is not False or ann['iterative_scan'] != 'off'
                     or ann['method'] != 'hnsw' or ann['index'] != 'idx_embeddings_hnsw_bge_m3'
                     or ann['filter_stage'] != 'after_probe' or type(ann['ef_search']) is not int
-                    or not 1 <= ann['ef_search'] <= 1000 or selection['routing_policy'] != 'latest_analyze_only'):
+                    or not 1 <= ann['ef_search'] <= 1000 or selection['routing_policy'] != 'latest_analyze_or_maybe'):
                 raise ValueError("Некоректні ANN/routing metadata")
             if selection['source_groups'] != sorted(set(selection['source_groups'])):
                 raise ValueError("Недетермінований scope груп")
@@ -349,30 +374,19 @@ def validate_snapshot(value: dict) -> None:
                         raise ValueError("Неузгоджена частка")
                 if type(dynamics['delta']) is not int or dynamics['delta'] != dynamics['current']['occurrence_count'] - dynamics['previous']['occurrence_count']:
                     raise ValueError("Некоректна динаміка")
-            if exact_strategy:
-                total = sum(
-                    candidate['dynamics'][group]['current']['occurrence_count']
-                    for group in ('ru_space', 'ua_space')
-                )
-                groups = sorted(
-                    group
-                    for group in ('ru_space', 'ua_space')
-                    if candidate['dynamics'][group]['current']['occurrence_count']
-                )
-            else:
-                total = sum(
+            total = sum(
+                candidate['dynamics'][group][name]['occurrence_count']
+                for group in ('ru_space', 'ua_space')
+                for name in ('current', 'previous')
+            )
+            groups = sorted(
+                group
+                for group in ('ru_space', 'ua_space')
+                if any(
                     candidate['dynamics'][group][name]['occurrence_count']
-                    for group in ('ru_space', 'ua_space')
                     for name in ('current', 'previous')
                 )
-                groups = sorted(
-                    group
-                    for group in ('ru_space', 'ua_space')
-                    if any(
-                        candidate['dynamics'][group][name]['occurrence_count']
-                        for name in ('current', 'previous')
-                    )
-                )
+            )
             if total != candidate['occurrence_count']:
                 raise ValueError("Динаміка не відповідає розміру пакета")
             if candidate['source_groups'] != groups or type(candidate['cross_space']) is not bool or candidate['cross_space'] != (len(groups) == 2):
@@ -389,11 +403,8 @@ def validate_snapshot(value: dict) -> None:
                     raise ValueError("Evidence не відповідає пакету")
                 seen_occurrences.add(row['occurrence_id'])
                 collected = timestamp(row['collected_at'])
-                if exact_strategy:
-                    evidence_start, evidence_end = windows(as_of)['current']
-                else:
-                    evidence_start = windows(as_of)['previous'][0]
-                    evidence_end = as_of
+                evidence_start = windows(as_of)['previous'][0]
+                evidence_end = as_of
                 if not evidence_start <= collected < evidence_end:
                     raise ValueError("Evidence поза дозволеним вікном")
                 if row['published_at'] is not None:
@@ -461,6 +472,18 @@ def main(argv=None) -> int:
     parser.add_argument('--dimension', required=True, type=int)
     parser.add_argument('--source-groups', nargs='+', required=True, choices=('ru_space', 'ua_space'))
     parser.add_argument(
+        '--contour-id',
+        type=int,
+        default=None,
+        help='Аналітичний scope контуру; наразі підтримується лише C1',
+    )
+    parser.add_argument(
+        '--object-id',
+        type=int,
+        default=None,
+        help='Обмежити C1 Signals одним об\'єктом',
+    )
+    parser.add_argument(
         '--strategy',
         choices=('bounded_ann', 'exact_current_24h'),
         default='bounded_ann',
@@ -509,6 +532,22 @@ def main(argv=None) -> int:
             raise ValueError("Некоректний контракт моделі")
         if len(set(args.source_groups)) != len(args.source_groups):
             raise ValueError("Повторені групи джерел")
+
+        if args.object_id is not None and args.contour_id is None:
+            raise ValueError("object-id потребує contour-id")
+
+        if args.contour_id is not None:
+            if args.contour_id != 1:
+                raise ValueError(
+                    "Scoped Signals наразі підтримує лише C1"
+                )
+            if args.strategy != 'exact_current_24h':
+                raise ValueError(
+                    "Scoped Signals потребує exact_current_24h"
+                )
+
+        if args.object_id is not None and args.object_id <= 0:
+            raise ValueError("Некоректний object-id")
         limits = PostgresLimits(args.anchors, args.neighbours, args.pairs, args.rows, args.evidence_chars, args.statement_timeout_ms, args.ann_probe_limit)
         limits.validate()
         max_contents = (
@@ -555,6 +594,8 @@ def main(argv=None) -> int:
                 limits=limits,
                 max_distance=args.related_distance,
                 critical_distance=critical_distance,
+                contour_id=args.contour_id,
+                object_id=args.object_id,
             )
         else:
             adapter = PostgresSignalAdapter(

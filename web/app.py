@@ -286,8 +286,15 @@ def contours_page(
     contour: str = "dshv_objects",
     object_id: int | None = None,
     day: datetime.date | None = None,
+    analysis: str = "topics",
 ) -> HTMLResponse:
     """Аналітичний простір чотирьох контурів моніторингу."""
+    analysis_layer = (
+        analysis
+        if analysis in {"topics", "signals"}
+        else "topics"
+    )
+
     try:
         with read_connection() as conn:
             contour_rows = fetch_contours(conn)
@@ -510,7 +517,24 @@ def contours_page(
                 )
 
                 contour_topics = load_c1_contour_topics(
+                    object_id=(
+                        selected["object_id"]
+                        if selected
+                        else None
+                    ),
                     limit=10,
+                )
+
+                from web.contour_signals import (
+                    load_c1_contour_signals,
+                )
+
+                contour_signals = load_c1_contour_signals(
+                    object_id=(
+                        selected["object_id"]
+                        if selected
+                        else None
+                    ),
                 )
 
                 quiet_objects = [
@@ -533,6 +557,8 @@ def contours_page(
                         "selected_day": day,
                         "evidence": evidence,
                         "contour_topics": contour_topics,
+                        "contour_signals": contour_signals,
+                        "analysis_layer": analysis_layer,
                     }
                 )
 
@@ -558,6 +584,7 @@ def contours_page(
 @app.get("/contours/topic/{marker_id}")
 def contour_topic_detail(
     marker_id: str,
+    object_id: int | None = None,
 ) -> dict:
     """Detail/evidence for one C1 topic marker."""
     from web.contour_topics import (
@@ -567,6 +594,7 @@ def contour_topic_detail(
     try:
         return load_c1_contour_topic(
             marker_id=marker_id,
+            object_id=object_id,
         )
     except KeyError as exc:
         raise HTTPException(

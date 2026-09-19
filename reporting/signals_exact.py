@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 import math
 import time
 
+from web.c1_scope import c1_analytical_gate_sql
+
 from reporting.signals_data import (
     Content,
     Occurrence,
@@ -39,7 +41,7 @@ WITH current_content AS MATERIALIZED (
     WHERE io.collected_at >= %(middle)s
       AND io.collected_at < %(as_of)s
       AND s.source_group = ANY(%(groups)s)
-      AND (""" + LATEST_ROUTING_SQL + """) = 'analyze'
+      AND (""" + LATEST_ROUTING_SQL + """) IN ('analyze', 'maybe')
       AND vector_dims(e.embedding) = %(dimension)s
 ),
 distances AS MATERIALIZED (
@@ -59,6 +61,58 @@ LIMIT %(pair_probe)s
 """
 
 
+
+def _scope_sql(
+    content_expr: str,
+    *,
+    contour_id: int | None,
+    object_id: int | None,
+) -> str:
+    """Return exact-reference analytical scope for one content expression."""
+    if contour_id is None:
+        return ""
+
+    object_filter = (
+        "          AND a.object_id = %(object_id)s\n"
+        if object_id is not None
+        else ""
+    )
+
+    gate = c1_analytical_gate_sql("a")
+
+    return f"""
+  AND EXISTS (
+      SELECT 1
+      FROM content_contour_assignments a
+      WHERE a.content_id = {content_expr}
+        AND a.monitoring_contour_id = %(contour_id)s
+        AND a.object_id IS NOT NULL
+        AND a.evidence_type = 'exact_reference'
+{object_filter}{gate}
+  )
+"""
+
+
+def _inject_before(
+    sql: str,
+    marker: str,
+    addition: str,
+) -> str:
+    if not addition:
+        return sql
+
+    if sql.count(marker) != 1:
+        raise RuntimeError(
+            f"Signals SQL scope marker is not unique: {marker!r}"
+        )
+
+    return sql.replace(
+        marker,
+        addition + marker,
+        1,
+    )
+
+
 EXACT_ROWS_SQL = """
 SELECT io.occurrence_id, io.content_id, io.source_id,
        io.collected_at, io.published_at,
@@ -66,6 +120,7 @@ SELECT io.occurrence_id, io.content_id, io.source_id,
        left(s.name, 240) AS source_name,
        s.source_type, s.source_group,
        ci.content_hash,
+       (""" + LATEST_ROUTING_SQL + """) AS routing_decision,
        left(ci.title, 240) AS title,
        left(ci.text_content, %(text_probe)s) AS text,
        vector_dims(e.embedding) AS dimension,
@@ -79,7 +134,7 @@ JOIN embeddings e
 WHERE io.collected_at >= %(start)s
   AND io.collected_at < %(as_of)s
   AND s.source_group = ANY(%(groups)s)
-  AND (""" + LATEST_ROUTING_SQL + """) = 'analyze'
+  AND (""" + LATEST_ROUTING_SQL + """) IN ('analyze', 'maybe')
 ORDER BY io.collected_at DESC,
          ci.content_hash,
          s.name,
@@ -105,6 +160,8 @@ class ExactPostgresSignalAdapter:
         limits=PostgresLimits(),
         max_distance=0.36,
         critical_distance=0.18,
+        contour_id: int | None = None,
+        object_id: int | None = None,
     ):
         limits.validate()
         if type(model_id) is not int or model_id <= 0:
@@ -123,10 +180,29 @@ class ExactPostgresSignalAdapter:
         ):
             raise ValueError("Некоректний критичний поріг відстані")
 
+        if contour_id is not None and (
+            type(contour_id) is not int
+            or contour_id <= 0
+        ):
+            raise ValueError("Некоректний contour_id")
+
+        if object_id is not None and (
+            type(object_id) is not int
+            or object_id <= 0
+        ):
+            raise ValueError("Некоректний object_id")
+
+        if object_id is not None and contour_id is None:
+            raise ValueError(
+                "object_id потребує contour_id"
+            )
+
         self.connection = connection
         self.model_id = model_id
         self.groups = tuple(sorted(source_groups))
         self.limits = limits
+        self.contour_id = contour_id
+        self.object_id = object_id
         self.max_distance = max_distance
         self.critical_distance = critical_distance
         self.timings = []
@@ -171,6 +247,8 @@ class ExactPostgresSignalAdapter:
             invalid_limit=1,
             max_distance=self.max_distance,
             pair_probe=self.limits.pairs + 1,
+            contour_id=self.contour_id,
+            object_id=self.object_id,
         )
 
         guard = self._query("guard", GUARD_SQL, {})[0]
@@ -199,7 +277,48 @@ class ExactPostgresSignalAdapter:
                 "Exact path зараз підтримує model_id=1 та dimension=1024"
             )
 
-        if self._query("dimension", DIMENSION_SQL, p):
+        scope_io = _scope_sql(
+            "io.content_id",
+            contour_id=self.contour_id,
+            object_id=self.object_id,
+        )
+        scope_e = _scope_sql(
+            "e.content_id",
+            contour_id=self.contour_id,
+            object_id=self.object_id,
+        )
+
+        coverage_sql = _inject_before(
+            COVERAGE_SQL,
+            "GROUP BY 1, 2",
+            scope_io,
+        )
+
+        routing_coverage_sql = _inject_before(
+            ROUTING_COVERAGE_SQL,
+            ") observed",
+            scope_io,
+        )
+
+        dimension_sql = _inject_before(
+            DIMENSION_SQL,
+            "LIMIT %(invalid_limit)s",
+            scope_e,
+        )
+
+        exact_pair_sql = _inject_before(
+            EXACT_PAIR_SQL,
+            "      AND vector_dims(e.embedding) = %(dimension)s",
+            scope_io,
+        )
+
+        exact_rows_sql = _inject_before(
+            EXACT_ROWS_SQL,
+            "ORDER BY io.collected_at DESC,",
+            scope_io,
+        )
+
+        if self._query("dimension", dimension_sql, p):
             raise ValueError(
                 "Некоректна розмірність embedding у спостережуваному потоці"
             )
@@ -220,7 +339,7 @@ class ExactPostgresSignalAdapter:
             for w in bounds
         }
 
-        for row in self._query("coverage", COVERAGE_SQL, p):
+        for row in self._query("coverage", coverage_sql, p):
             coverage[row["window"]][row["source_group"]] = {
                 k: int(row[k]) for k in keys
             }
@@ -235,7 +354,7 @@ class ExactPostgresSignalAdapter:
 
         for row in self._query(
             "routing_coverage",
-            ROUTING_COVERAGE_SQL,
+            routing_coverage_sql,
             p,
         ):
             routing_coverage[row["window"]][row["source_group"]][
@@ -244,7 +363,7 @@ class ExactPostgresSignalAdapter:
 
         raw_pairs = self._query(
             "exact_pairs",
-            EXACT_PAIR_SQL,
+            exact_pair_sql,
             p,
         )
         pair_limited = len(raw_pairs) > self.limits.pairs
@@ -279,7 +398,7 @@ class ExactPostgresSignalAdapter:
 
         raw_rows = self._query(
             "rows",
-            EXACT_ROWS_SQL,
+            exact_rows_sql,
             p,
         )
         row_limited = len(raw_rows) > self.limits.rows
@@ -315,7 +434,7 @@ class ExactPostgresSignalAdapter:
                 title=row["title"] or "",
                 has_embedding=True,
                 selection_key=row["content_hash"],
-                routing_decision="analyze",
+                routing_decision=row["routing_decision"],
             )
             occurrences.append(
                 Occurrence(
@@ -337,15 +456,16 @@ class ExactPostgresSignalAdapter:
             if current_start <= row.collected_at < current_end
         }
 
-        current_analyze = sum(
+        current_eligible = sum(
             routing_coverage["current"][group]["analyze"]
+            + routing_coverage["current"][group]["maybe"]
             for group in self.groups
         )
 
         critical = (
             critical_pair_limited
             or row_limited
-            or (not current_ids and current_analyze > 0)
+            or (not current_ids and current_eligible > 0)
         )
 
         result = SignalData(
@@ -364,7 +484,7 @@ class ExactPostgresSignalAdapter:
                 "distance_method": "exact_pgvector_cosine",
                 "limits": asdict(self.limits),
                 "source_groups": list(self.groups),
-                "routing_policy": "latest_analyze_only",
+                "routing_policy": "latest_analyze_or_maybe",
                 "model_id": self.model_id,
                 "current_content_count": len(current_ids),
                 "selected_content_count": len(contents),
@@ -372,8 +492,14 @@ class ExactPostgresSignalAdapter:
                 "pair_count": len(pairs),
                 "pair_limit_reached": pair_limited,
                 "row_limit_reached": row_limited,
-                "coverage_scope": "observed_source_groups_48h",
+                "coverage_scope": (
+                    "observed_source_groups_48h"
+                    if self.contour_id is None
+                    else "analytical_contour_source_groups_48h"
+                ),
                 "query_plan_status": "UNVERIFIED",
+                "monitoring_contour_id": self.contour_id,
+                "object_id": self.object_id,
             },
         )
 

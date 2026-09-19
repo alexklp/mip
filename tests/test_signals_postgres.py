@@ -16,11 +16,12 @@ from test_signals import AS_OF, fixture, occurrence, snapshot
 MODEL = 'synthetic@1'
 
 
-def database_row(cid='a', oid='o'):
+def database_row(cid='a', oid='o', routing_decision='analyze'):
     return dict(content_id=cid, occurrence_id=oid, source_id='ru' if cid == 'a' else 'ru2',
         collected_at=AS_OF - timedelta(hours=1), published_at=None,
         external_ref='https://example.test/item', source_name='Джерело', source_type='rss',
-        source_group='ru_space', title='Заголовок', text='Текст', dimension=1024, content_hash=cid, self_distance=0.0)
+        source_group='ru_space', routing_decision=routing_decision,
+        title='Заголовок', text='Текст', dimension=1024, content_hash=cid, self_distance=0.0)
 
 
 class FakeConnection:

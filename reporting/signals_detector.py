@@ -45,7 +45,7 @@ class RecallConfig:
                 raise ValueError("Некоректна кількість cross-links для merge")
         if tuple(sorted(set(self.distance_bands))) != self.distance_bands:
             raise ValueError("Межі distance bands мають строго зростати")
-        for name, ceiling in (("display_limit", 200), ("max_related_links", 1000), ("max_pairs", 20000), ("max_evidence", 100), ("evidence_chars", 2000), ("max_contents", 2000)):
+        for name, ceiling in (("display_limit", 200), ("max_related_links", 1000), ("max_pairs", 20000), ("max_evidence", 200), ("evidence_chars", 2000), ("max_contents", 2000)):
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= ceiling:
                 raise ValueError("Некоректний ліміт " + name)
@@ -219,7 +219,12 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             if space in SPACES:
                 for cid in {r.content_id for r in subset}:
                     routing_coverage[name][space][contents[cid].routing_decision or "missing"] += 1
-                included.extend(r for r in subset if contents[r.content_id].routing_decision == "analyze")
+                included.extend(
+                    r
+                    for r in subset
+                    if contents[r.content_id].routing_decision
+                    in {"analyze", "maybe"}
+                )
     if data.coverage is not None:
         coverage = data.coverage
     if data.routing_coverage is not None:
@@ -351,7 +356,17 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             for r in rows
             if current_start <= r.collected_at < current_end
         ]
-        candidate_rows = current_rows if exact_current else rows
+        candidate_rows = rows
+        publication_rows = (
+            current_rows
+            if exact_current
+            else candidate_rows
+        )
+        last_observed_rows = (
+            current_rows
+            if exact_current
+            else candidate_rows
+        )
 
         chronology_rows = sorted(
             candidate_rows,
@@ -376,6 +391,96 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             sources[r.source_id].source_group
             for r in candidate_rows
         })
+        publication_hourly = {
+            space: [0] * 24
+            for space in SPACES
+        }
+        publication_sources = {}
+        published_count = 0
+        missing_published_at_count = 0
+        outside_window_count = 0
+
+        for row in publication_rows:
+            published_at = row.published_at
+
+            if published_at is None:
+                missing_published_at_count += 1
+                continue
+
+            if not (
+                current_start
+                <= published_at
+                < current_end
+            ):
+                outside_window_count += 1
+                continue
+
+            source = sources[row.source_id]
+            space = source.source_group
+
+            bucket = int(
+                (
+                    published_at - current_start
+                ).total_seconds()
+                // 3600
+            )
+
+            publication_hourly[space][bucket] += 1
+            published_count += 1
+
+            source_row = publication_sources.setdefault(
+                row.source_id,
+                {
+                    "source_id": row.source_id,
+                    "source_name": source.source_name[:240],
+                    "source_type": source.source_type[:40],
+                    "source_group": space,
+                    "publications": 0,
+                    "first_published_at": published_at,
+                    "last_published_at": published_at,
+                },
+            )
+
+            source_row["publications"] += 1
+            source_row["first_published_at"] = min(
+                source_row["first_published_at"],
+                published_at,
+            )
+            source_row["last_published_at"] = max(
+                source_row["last_published_at"],
+                published_at,
+            )
+
+        publication_source_ranking = sorted(
+            publication_sources.values(),
+            key=lambda row: (
+                -row["publications"],
+                row["first_published_at"],
+                row["source_name"].casefold(),
+                row["source_id"],
+            ),
+        )
+
+        for row in publication_source_ranking:
+            row["first_published_at"] = (
+                row["first_published_at"].isoformat()
+            )
+            row["last_published_at"] = (
+                row["last_published_at"].isoformat()
+            )
+
+        publication_spread = {
+            "window_start": current_start.isoformat(),
+            "window_end": current_end.isoformat(),
+            "published_count": published_count,
+            "missing_published_at_count": (
+                missing_published_at_count
+            ),
+            "outside_window_count": outside_window_count,
+            "hourly": publication_hourly,
+            "source_ranking": publication_source_ranking,
+        }
+
         dynamics = {}
         for space in SPACES:
             metrics = {}
@@ -407,7 +512,7 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
         candidates.append({
             "candidate_id": representative,
             "search_text": search_text,
-            "last_observed": candidate_rows[-1].collected_at.isoformat(),
+            "last_observed": last_observed_rows[-1].collected_at.isoformat(),
             "representative_content_id": representative,
             "content_ids": group,
             "interpretation_status": "unverified",
@@ -425,6 +530,7 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             **counts(candidate_rows),
             "distances_to_representative": distances,
             "dynamics": dynamics,
+            "publication_spread": publication_spread,
             "chronology": [{"occurrence_id": r.occurrence_id, "content_id": r.content_id, "source_id": r.source_id, "source_group": sources[r.source_id].source_group, "source_name": sources[r.source_id].source_name[:240], "source_type": sources[r.source_id].source_type[:40], "title": contents[r.content_id].title[:240], "external_ref": r.external_ref[:2048], "collected_at": r.collected_at.isoformat(), "published_at": r.published_at.isoformat() if r.published_at else None} for r in chronology_rows[:config.max_evidence]],
             "evidence_omitted_count": max(0, len(candidate_rows) - config.max_evidence),
             "evidence_references": [{"content_id": cid, "text": contents[cid].text[:config.evidence_chars], "text_truncated": len(contents[cid].text) > config.evidence_chars} for cid in group[:config.max_evidence]],
