@@ -358,14 +358,17 @@
                             data-total="{{ candidate.occurrence_count }}"
                         >
                             {% for evidence in candidate.chronology %}
-                                {% if evidence.published_at %}
                                 <div class="signals-propagation-row">
                                     <time
-                                        datetime="{{ evidence.published_at }}"
+                                        datetime="{{ evidence.published_at or evidence.collected_at }}"
                                     >
                                         {{ fmt_kyiv_zoned(
                                             evidence.published_at
+                                            or evidence.collected_at
                                         ) }}
+                                        {% if not evidence.published_at %}
+                                        · зафіксовано
+                                        {% endif %}
                                     </time>
 
                                     <span
@@ -385,7 +388,6 @@
                                     </strong>
 
                                 </div>
-                                {% endif %}
                             {% endfor %}
                         </div>
                     </div>
@@ -537,7 +539,10 @@
                             <blockquote>{{ excerpt.text }}{% if excerpt.text_truncated %}…{% endif %}</blockquote>
                             {% endfor %}
                             <dl class="signals-evidence-time">
-                                <div><dt>Опубліковано</dt><dd>{{ fmt_kyiv_zoned(evidence.published_at) }}</dd></div>
+                                <div>
+                                    <dt>{{ 'Опубліковано' if evidence.published_at else 'Зафіксовано' }}</dt>
+                                    <dd>{{ fmt_kyiv_zoned(evidence.published_at or evidence.collected_at) }}</dd>
+                                </div>
                             </dl>
                             {% if not evidence.safe_link %}<span class="signals-link-missing">Посилання на джерело відсутнє</span>{% endif %}
                         </article>
@@ -906,7 +911,10 @@
     }
 
     function appendSignalPropagationRow(panel, row) {
-        if (!row.published_at) return;
+        var observedAt =
+            row.published_at || row.collected_at;
+
+        if (!observedAt) return;
 
         var list = panel.querySelector(
             ".signals-propagation-list"
@@ -917,10 +925,14 @@
         item.className = "signals-propagation-row";
 
         var time = document.createElement("time");
-        time.dateTime = row.published_at;
-        time.textContent = signalPublishedTime(
-            row.published_at
-        );
+        time.dateTime = observedAt;
+        time.textContent =
+            signalPublishedTime(observedAt) +
+            (
+                row.published_at
+                    ? ""
+                    : " · зафіксовано"
+            );
 
         var space = document.createElement("span");
         space.className =
@@ -1174,8 +1186,16 @@
         dt.textContent = "Опубліковано";
 
         var dd = document.createElement("dd");
-        dd.textContent = signalPublishedTime(
+        var evidenceTime =
+            row.published_at || row.collected_at;
+
+        dt.textContent =
             row.published_at
+                ? "Опубліковано"
+                : "Зафіксовано";
+
+        dd.textContent = signalPublishedTime(
+            evidenceTime
         );
 
         timeRow.appendChild(dt);

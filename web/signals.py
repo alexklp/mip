@@ -71,6 +71,7 @@ def fetch_signal_chronology(
                     AS text_truncated,
                 left(io.external_ref, 2048) AS external_ref,
                 io.published_at,
+                io.collected_at,
                 count(*) OVER () AS available
             FROM item_occurrences io
             JOIN sources s USING (source_id)
@@ -102,7 +103,7 @@ def fetch_signal_chronology(
             raise ValueError(
                 "Snapshot chronology не відповідає поточним даним"
             )
-    elif offset == 0 and expected_total:
+    elif offset < expected_total:
         raise ValueError(
             "Snapshot chronology не відповідає поточним даним"
         )
@@ -128,6 +129,7 @@ def fetch_signal_chronology(
                     if published_at is not None
                     else None
                 ),
+                "collected_at": row["collected_at"].isoformat(),
                 "safe_link": safe_link(row["external_ref"] or ""),
             }
         )

@@ -329,7 +329,12 @@ def validate_snapshot(value: dict) -> None:
             raise ValueError("Неочікувана merge metadata")
 
         suppressed = presentation['suppressed']
-        if set(suppressed) != {'singleton_single_source', 'repeated_content_single_source', 'core_single_source'}:
+        if set(suppressed) != {
+            'singleton_single_source',
+            'repeated_content_single_source',
+            'core_single_source',
+            'previous_only',
+        }:
             raise ValueError("Некоректні причини suppression")
         for n in suppressed.values():
             nonnegative(n)

@@ -15,6 +15,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 DB_DSN = "dbname=mip_dev"
+WEB_STATEMENT_TIMEOUT_MS = 15000
 
 
 @contextmanager
@@ -26,7 +27,11 @@ def read_connection() -> Iterator[psycopg.Connection]:
     READ ONLY. З'єднання гарантовано закривається при виході з блоку,
     незалежно від того, чи сталася помилка.
     """
-    conn = psycopg.connect(DB_DSN, row_factory=dict_row)
+    conn = psycopg.connect(
+        DB_DSN,
+        row_factory=dict_row,
+        options=f"-c statement_timeout={WEB_STATEMENT_TIMEOUT_MS}",
+    )
     try:
         conn.read_only = True
         yield conn

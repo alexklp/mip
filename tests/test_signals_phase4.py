@@ -199,6 +199,53 @@ class Phase4Tests(unittest.TestCase):
             (AS_OF - timedelta(hours=1)).isoformat(),
         )
 
+    def test_previous_only_candidate_is_suppressed_from_current_signals(self):
+        data = fixture(
+            occurrence(
+                'old-1',
+                'a',
+                source='ru',
+                hours=25,
+            ),
+            occurrence(
+                'old-2',
+                'a',
+                source='ru2',
+                hours=26,
+            ),
+            contents=(
+                Content(
+                    'a',
+                    'Матеріал',
+                    has_embedding=True,
+                ),
+            ),
+            sources=(
+                Source('ru', 'ru_space'),
+                Source('ru2', 'ru_space'),
+            ),
+        )
+
+        result = snapshot(
+            data,
+            RecallConfig(),
+        )
+
+        self.assertEqual(
+            result['candidates'],
+            [],
+        )
+        self.assertEqual(
+            result['presentation']['suppressed']['previous_only'],
+            1,
+        )
+        self.assertEqual(
+            result['presentation']['eligible_candidate_count'],
+            0,
+        )
+
+        validate_snapshot(result)
+
     def test_core_related_boundaries_do_not_inflate_aggregates(self):
         data = self.data()
         result = snapshot(data, RecallConfig())
@@ -227,8 +274,15 @@ class Phase4Tests(unittest.TestCase):
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abcd'))
         result = snapshot(replace(data, pairs=(('c', 'd', .1),)), RecallConfig())
         self.assertEqual(result['candidates'], [])
-        self.assertEqual(result['presentation']['suppressed'], dict(singleton_single_source=1,
-            repeated_content_single_source=1, core_single_source=1))
+        self.assertEqual(
+            result['presentation']['suppressed'],
+            dict(
+                singleton_single_source=1,
+                repeated_content_single_source=1,
+                core_single_source=1,
+                previous_only=0,
+            ),
+        )
         validate_snapshot(result)
 
     def test_same_space_exact_republication_requires_distinct_sources(self):
@@ -256,7 +310,7 @@ class Phase4Tests(unittest.TestCase):
 
     def test_rank_prioritizes_propagation_breadth_before_recency(self):
         data = multi_source(fixture(occurrence('a'), occurrence('b', 'b'), occurrence('c', 'c', hours=25),
-            occurrence('d', 'd', hours=25), occurrence('e', 'e', hours=26), occurrence('e3', 'e', source='third', hours=26),
+            occurrence('d', 'd', hours=25), occurrence('e', 'e', hours=23), occurrence('e3', 'e', source='third', hours=26),
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abcde'),
             sources=(Source('ru', 'ru_space'), Source('ru2', 'ru_space'), Source('third', 'ru_space'))))
         # e вже має два джерела; третє додаємо явно, щоб перевірити пріоритет джерел.
@@ -323,7 +377,7 @@ class Phase4Tests(unittest.TestCase):
         )
 
     def test_rank_and_display_cap(self):
-        data = multi_source(fixture(occurrence('a'), occurrence('b', 'b'), occurrence('c', 'c', source='ua', hours=25),
+        data = multi_source(fixture(occurrence('a'), occurrence('b', 'b'), occurrence('c', 'c', source='ua'),
             contents=tuple(Content(c, c, has_embedding=True) for c in 'abc')))
         data = replace(data, pairs=())
         result = snapshot(data, RecallConfig(display_limit=2))

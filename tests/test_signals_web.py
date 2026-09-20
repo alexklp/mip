@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from reporting.signals_snapshot import validate_snapshot, write_snapshot, MAX_SNAPSHOT_BYTES
-from web.signals import load_signals, safe_link
+from web.signals import load_signals, safe_link, fetch_signal_chronology
 from test_signals import AS_OF, fixture, occurrence, snapshot, multi_source
 
 WEB_AVAILABLE = all(importlib.util.find_spec(name) is not None for name in ('fastapi', 'psycopg', 'jinja2', 'httpx'))
@@ -110,6 +110,123 @@ class FileStateTests(unittest.TestCase):
     def test_permission_error_is_invalid(self):
         with patch.object(Path, 'open', side_effect=PermissionError):
             self.assertEqual(self.load()['state'], 'invalid')
+
+
+
+class _ChronologyCursor:
+    def __init__(self, rows):
+        self.rows = rows
+        self.sql = None
+        self.params = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, sql, params):
+        self.sql = sql
+        self.params = params
+
+    def fetchall(self):
+        return self.rows
+
+
+class _ChronologyConnection:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def cursor(self):
+        return _ChronologyCursor(self.rows)
+
+
+class ChronologyQueryTests(unittest.TestCase):
+    def kwargs(self, **overrides):
+        values = dict(
+            content_ids=['00000000-0000-0000-0000-000000000001'],
+            source_groups=['ru_space'],
+            window_start=AS_OF - timedelta(hours=48),
+            window_end=AS_OF,
+            expected_total=1,
+            offset=0,
+            limit=30,
+        )
+        values.update(overrides)
+        return values
+
+    def test_empty_later_page_before_expected_total_is_mismatch(self):
+        conn = _ChronologyConnection([])
+
+        with self.assertRaisesRegex(
+            ValueError,
+            'Snapshot chronology',
+        ):
+            fetch_signal_chronology(
+                conn,
+                **self.kwargs(
+                    expected_total=10,
+                    offset=5,
+                    limit=5,
+                ),
+            )
+
+    def test_missing_publication_time_keeps_collected_time(self):
+        collected_at = AS_OF - timedelta(hours=2)
+        conn = _ChronologyConnection([
+            {
+                'occurrence_id': 'o1',
+                'content_id': '00000000-0000-0000-0000-000000000001',
+                'source_id': 's1',
+                'source_group': 'ru_space',
+                'source_name': 'Джерело',
+                'source_type': 'telegram',
+                'title': 'Матеріал',
+                'text': 'Текст',
+                'text_truncated': False,
+                'external_ref': 'https://example.test/post/1',
+                'published_at': None,
+                'collected_at': collected_at,
+                'available': 1,
+            }
+        ])
+
+        result = fetch_signal_chronology(
+            conn,
+            **self.kwargs(),
+        )
+
+        self.assertEqual(len(result), 1)
+        self.assertIsNone(result[0]['published_at'])
+        self.assertEqual(
+            result[0]['collected_at'],
+            collected_at.isoformat(),
+        )
+        self.assertEqual(
+            result[0]['safe_link'],
+            'https://example.test/post/1',
+        )
+
+    def test_pagination_bounds_are_rejected(self):
+        conn = _ChronologyConnection([])
+
+        for offset, limit in (
+            (-1, 30),
+            (0, 0),
+            (0, 51),
+        ):
+            with self.subTest(offset=offset, limit=limit):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    'Некоректна сторінка chronology',
+                ):
+                    fetch_signal_chronology(
+                        conn,
+                        **self.kwargs(
+                            offset=offset,
+                            limit=limit,
+                        ),
+                    )
 
 
 @unittest.skipUnless(WEB_AVAILABLE, 'BLOCKED: потрібен комплект FastAPI/psycopg/Jinja2/httpx; встановлення заборонено')
@@ -218,15 +335,61 @@ class TemplateTests(unittest.TestCase):
 
     def test_real_template_safe_link_and_publication_time(self):
         data = snapshot(multi_source(fixture(occurrence('o'))))
-        row = data['candidates'][0]['chronology'][0]
-        row.update(external_ref='https://example.test/?a=1&b=2', published_at=(AS_OF - timedelta(days=4)).isoformat())
+        chronology = data['candidates'][0]['chronology']
+
+        for index, row in enumerate(chronology):
+            row['published_at'] = (
+                AS_OF
+                - timedelta(days=4)
+                + timedelta(minutes=index)
+            ).isoformat()
+
+        row = chronology[0]
+        row['external_ref'] = 'https://example.test/?a=1&b=2'
+
         write_snapshot(data, self.path)
         html = self.render()
-        self.assertIn('href="https://example.test/?a=1&amp;b=2"', html)
+
+        self.assertIn(
+            'href="https://example.test/?a=1&amp;b=2"',
+            html,
+        )
         self.assertIn('rel="noopener noreferrer"', html)
+
         from web.timefmt import fmt_kyiv_zoned
-        self.assertIn(fmt_kyiv_zoned(row['published_at']), html)
-        self.assertNotIn(fmt_kyiv_zoned(row['collected_at']), html)
+
+        self.assertIn(
+            fmt_kyiv_zoned(row['published_at']),
+            html,
+        )
+        self.assertNotIn(
+            fmt_kyiv_zoned(row['collected_at']),
+            html,
+        )
+
+    def test_real_template_labels_collected_time_when_publication_missing(self):
+        data = snapshot(
+            multi_source(
+                fixture(
+                    occurrence('o')
+                )
+            )
+        )
+
+        row = data['candidates'][0]['chronology'][0]
+
+        self.assertIsNone(row['published_at'])
+
+        write_snapshot(data, self.path)
+        html = self.render()
+
+        from web.timefmt import fmt_kyiv_zoned
+
+        self.assertIn('Зафіксовано', html)
+        self.assertIn(
+            fmt_kyiv_zoned(row['collected_at']),
+            html,
+        )
 
     def test_unselected_group_not_presented_as_measured_absence(self):
         from test_signals_postgres import FakeConnection, MODEL

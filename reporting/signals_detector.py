@@ -344,7 +344,12 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
 
     truncated = truncated or exhausted
     candidates = []
-    suppressed = dict(singleton_single_source=0, repeated_content_single_source=0, core_single_source=0)
+    suppressed = dict(
+        singleton_single_source=0,
+        repeated_content_single_source=0,
+        core_single_source=0,
+        previous_only=0,
+    )
     for group in groups:
         representative = group[0]
         rows = sorted(
@@ -403,6 +408,14 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             )
             suppressed[reason] += 1
             continue
+
+        # Signals page має current-24h contract.
+        # Previous window залишається support/evidence для current signal,
+        # але previous-only group не є поточним сигналом.
+        if not current_rows:
+            suppressed["previous_only"] += 1
+            continue
+
         spaces = sorted({
             sources[r.source_id].source_group
             for r in candidate_rows
