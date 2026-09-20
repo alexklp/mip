@@ -28,41 +28,20 @@
 {%- endmacro %}
 
 {% macro signal_title(candidate, compact=false) -%}
-    {%- if candidate.cross_space -%}
-        {%- if compact -%}
-            {%- set titles = namespace(ua='', ru='') -%}
-            {%- for item in candidate.chronology -%}
-                {%- if not titles.ua and item.source_group == 'ua_space' and item.title -%}
-                    {%- set titles.ua = item.title -%}
-                {%- endif -%}
-                {%- if not titles.ru and item.source_group == 'ru_space' and item.title -%}
-                    {%- set titles.ru = item.title -%}
-                {%- endif -%}
-            {%- endfor -%}
-
-            {%- if titles.ua and titles.ru -%}
-                UA: {{ titles.ua|truncate(90, true, '…') }} · RU: {{ titles.ru|truncate(90, true, '…') }}
-            {%- else -%}
-                Пов’язані публікації у двох просторах
-            {%- endif -%}
-        {%- else -%}
-            Пов’язані публікації у двох просторах
-        {%- endif -%}
+    {%- set title = (
+        candidate.representative_title
+        if candidate.representative_title
+        else (
+            candidate.chronology[0].title
+            if candidate.chronology
+               and candidate.chronology[0].title
+            else 'Пов’язані публікації'
+        )
+    ) -%}
+    {%- if compact -%}
+        {{- title|truncate(110, true, '…') -}}
     {%- else -%}
-        {%- set title = namespace(
-            value=(
-                candidate.chronology[0].title
-                if candidate.chronology and candidate.chronology[0].title
-                else 'Пов’язані публікації'
-            )
-        ) -%}
-        {%- for item in candidate.chronology
-            if item.content_id == candidate.representative_content_id -%}
-            {%- if item.title -%}
-                {%- set title.value = item.title -%}
-            {%- endif -%}
-        {%- endfor -%}
-        {{ title.value }}
+        {{- title|truncate(180, true, '…') -}}
     {%- endif -%}
 {%- endmacro %}
 
@@ -157,8 +136,6 @@
             <div class="signals-queue-list" role="tablist" aria-orientation="vertical">
             {% for candidate in snapshot.candidates %}
                 {% set rendered_title = signal_title(candidate, compact=true) %}
-                {% set first = candidate.chronology[0] if candidate.chronology else none %}
-                {% set last = candidate.chronology[-1] if candidate.chronology else none %}
                 {% set flags = namespace(new=false, growing=false) %}
                 {% for group in ['ru_space', 'ua_space'] %}
                     {% set dynamic = candidate.dynamics.get(group) if candidate.dynamics else none %}
@@ -201,7 +178,9 @@
                     <span class="signals-queue-title">{{ rendered_title }}</span>
                     <span class="signals-queue-meta">
                         <span>{{ candidate.occurrence_count }} публ. · {{ candidate.content_count }} мат.</span>
-                        {% if first and last %}<span>{{ fmt_kyiv_zoned(first.published_at or first.collected_at) }} → {{ fmt_kyiv_zoned(last.published_at or last.collected_at) }}</span>{% endif %}
+                        {% if candidate.first_published_at and candidate.last_published_at %}
+                            <span>{{ fmt_kyiv_zoned(candidate.first_published_at) }} → {{ fmt_kyiv_zoned(candidate.last_published_at) }}</span>
+                        {% endif %}
                     </span>
                 </button>
             {% endfor %}
@@ -286,11 +265,13 @@
                     {% endfor %}
                     </div>
 
-                    {% if candidate.chronology %}
+                    {% set spread = candidate.publication_spread %}
+
+                    {% if spread.published_count %}
                     <div
                         class="signals-spread"
                         data-spread-timeline
-                        data-window-end="{{ snapshot.as_of }}"
+                        data-window-end="{{ spread.window_end }}"
                         aria-label="Поширення публікацій за останні 24 години"
                     >
                         <div
@@ -299,29 +280,21 @@
                             aria-hidden="true"
                         ></div>
 
-                        <div class="signals-spread-track">
-                            <div class="signals-spread-axis" aria-hidden="true"></div>
-
-                            {% for evidence in candidate.chronology %}
-                                {% set spread_time = evidence.published_at or evidence.collected_at %}
-                                <span
-                                    class="signals-spread-point signals-spread-point-{{ evidence.source_group }}"
-                                    tabindex="0"
-                                    role="img"
-                                    data-spread-point
-                                    data-time="{{ spread_time }}"
-                                    aria-label="{{ fmt_kyiv_zoned(spread_time) }}. {{ evidence.source_name or evidence.source_id }}{% if evidence.source_type %}. {{ source_type_name(evidence.source_type) }}{% endif %}"
-                                >
-                                    <span class="signals-spread-tooltip" role="tooltip">
-                                        <span>{{ fmt_kyiv_zoned(spread_time) }}</span>
-                                        <strong>{{ evidence.source_name or evidence.source_id }}</strong>
-                                        {% if evidence.source_type %}<span>{{ source_type_name(evidence.source_type) }}</span>{% endif %}
-                                    </span>
-                                </span>
-                            {% endfor %}
+                        <div
+                            class="signals-spread-track"
+                            data-hourly-ru="{{ spread.hourly.get('ru_space', [])|join(',') }}"
+                            data-hourly-ua="{{ spread.hourly.get('ua_space', [])|join(',') }}"
+                        >
+                            <div
+                                class="signals-spread-axis"
+                                aria-hidden="true"
+                            ></div>
                         </div>
 
-                        <div class="signals-spread-scale" aria-hidden="true">
+                        <div
+                            class="signals-spread-scale"
+                            aria-hidden="true"
+                        >
                             <span>−24 год</span>
                             <span>−18</span>
                             <span>−12</span>
@@ -329,24 +302,117 @@
                             <span>0</span>
                         </div>
 
-                        <div class="signals-spread-legend" aria-label="Простори джерел">
-                            {% if 'ru_space' in candidate.source_groups %}
-                            <span><i class="signals-spread-legend-dot is-ru" aria-hidden="true"></i>Російський</span>
-                            {% endif %}
-                            {% if 'ua_space' in candidate.source_groups %}
-                            <span><i class="signals-spread-legend-dot is-ua" aria-hidden="true"></i>Український</span>
-                            {% endif %}
+                        <div class="signals-spread-meta">
+                            <div
+                                class="signals-spread-legend"
+                                aria-label="Простори джерел"
+                            >
+                                {% if 'ru_space'
+                                    in candidate.source_groups %}
+                                <span>
+                                    <i
+                                        class="signals-spread-legend-dot is-ru"
+                                        aria-hidden="true"
+                                    ></i>
+                                    Російський
+                                </span>
+                                {% endif %}
+
+                                {% if 'ua_space'
+                                    in candidate.source_groups %}
+                                <span>
+                                    <i
+                                        class="signals-spread-legend-dot is-ua"
+                                        aria-hidden="true"
+                                    ></i>
+                                    Український
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            <span class="signals-spread-coverage">
+                                {{ spread.published_count }}
+                                з
+                                {{ candidate.occurrence_count }}
+                                публікацій на часовій шкалі
+                            </span>
                         </div>
                     </div>
 
-                    <ol class="signals-timeline">
-                        {% for evidence in candidate.chronology %}
-                        <li>
-                            <time datetime="{{ evidence.published_at or evidence.collected_at }}">{{ fmt_kyiv_zoned(evidence.published_at or evidence.collected_at) }}</time>
-                            <span>{{ evidence.source_name or evidence.source_id }}</span>
-                        </li>
-                        {% endfor %}
-                    </ol>
+                    <div class="signals-propagation">
+                        <div class="signals-propagation-head">
+                            <strong>Хронологія сигналу</strong>
+                            <span>
+                                {{ candidate.occurrence_count }}
+                                публікацій ·
+                                {{ candidate.source_count }}
+                                джерел
+                            </span>
+                        </div>
+
+                        <div
+                            class="signals-propagation-list"
+                            data-propagation-list
+                            data-candidate-id="{{ candidate.candidate_id }}"
+                            data-loaded="{{ candidate.chronology|length }}"
+                            data-total="{{ candidate.occurrence_count }}"
+                        >
+                            {% for evidence in candidate.chronology %}
+                                {% if evidence.published_at %}
+                                <div class="signals-propagation-row">
+                                    <time
+                                        datetime="{{ evidence.published_at }}"
+                                    >
+                                        {{ fmt_kyiv_zoned(
+                                            evidence.published_at
+                                        ) }}
+                                    </time>
+
+                                    <span
+                                        class="signals-propagation-space is-{{ evidence.source_group }}"
+                                    >
+                                        {{ space_name(
+                                            evidence.source_group
+                                        ) }}
+                                    </span>
+
+                                    <strong
+                                        title="{{ evidence.source_name
+                                                 or evidence.source_id }}"
+                                    >
+                                        {{ evidence.source_name
+                                           or evidence.source_id }}
+                                    </strong>
+
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    {% if
+                        spread.missing_published_at_count
+                        or spread.outside_window_count
+                    %}
+                    <div class="signals-spread-note">
+                        {% if spread.missing_published_at_count %}
+                            {{ spread.missing_published_at_count }}
+                            без часу публікації
+                        {% endif %}
+
+                        {% if
+                            spread.missing_published_at_count
+                            and spread.outside_window_count
+                        %}
+                            ·
+                        {% endif %}
+
+                        {% if spread.outside_window_count %}
+                            {{ spread.outside_window_count }}
+                            поза часовим вікном
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     {% endif %}
                 </section>
 
@@ -375,7 +441,7 @@
                                 {% set sample.title = evidence.title or '' %}
                                 {% set sample.source_name = evidence.source_name or evidence.source_id %}
                                 {% set sample.source_type = evidence.source_type or '' %}
-                                {% set sample.observed_at = evidence.published_at or evidence.collected_at %}
+                                {% set sample.observed_at = evidence.published_at %}
                             {% endif %}
                         {% endfor %}
 
@@ -432,14 +498,33 @@
                 {% endfor %}
                 {% endif %}
 
-                <section class="signals-section signals-section-evidence" aria-labelledby="evidence-title-{{ candidate.candidate_id }}">
+                <section
+                    class="signals-section signals-section-evidence"
+                    aria-labelledby="evidence-title-{{ candidate.candidate_id }}"
+                    data-evidence-section
+                    data-candidate-id="{{ candidate.candidate_id }}"
+                    data-loaded="{{ candidate.chronology|length }}"
+                    data-total="{{ candidate.occurrence_count }}"
+                >
                     <div class="signals-section-head">
                         <h3 id="evidence-title-{{ candidate.candidate_id }}">Публікації та джерела</h3>
-                        <span>{{ candidate.chronology|length }} показано{% if candidate.evidence_omitted_count %} · ще {{ candidate.evidence_omitted_count }} поза лімітом{% endif %}</span>
+                        <span
+                            data-evidence-status
+                            data-total="{{ candidate.occurrence_count }}"
+                        >
+                            {{ candidate.chronology|length }}
+                            з {{ candidate.occurrence_count }} показано
+                        </span>
                     </div>
-                    <div class="signals-evidence-list">
+                    <div
+                        class="signals-evidence-list"
+                        data-evidence-list
+                    >
                     {% for evidence in candidate.chronology %}
-                        <article class="signals-evidence">
+                        <article
+                            class="signals-evidence"
+                            data-evidence-item
+                        >
                             <header>
                                 <span class="signals-evidence-index">{{ '%02d'|format(loop.index) }}</span>
                                 <div>
@@ -453,12 +538,22 @@
                             {% endfor %}
                             <dl class="signals-evidence-time">
                                 <div><dt>Опубліковано</dt><dd>{{ fmt_kyiv_zoned(evidence.published_at) }}</dd></div>
-                                <div><dt>Виявлено</dt><dd>{{ fmt_kyiv_zoned(evidence.collected_at) }}</dd></div>
                             </dl>
                             {% if not evidence.safe_link %}<span class="signals-link-missing">Посилання на джерело відсутнє</span>{% endif %}
                         </article>
                     {% endfor %}
                     </div>
+
+                    {% if candidate.occurrence_count > candidate.chronology|length %}
+                    <button
+                        type="button"
+                        class="signals-evidence-more"
+                        data-evidence-more
+                        data-page-size="30"
+                    >
+                        Показати ще 30
+                    </button>
+                    {% endif %}
                 </section>
             </article>
         {% endfor %}
@@ -547,9 +642,23 @@
             candidate.setAttribute('aria-selected', active ? 'true' : 'false');
             candidate.tabIndex = active ? 0 : -1;
         });
+        var activePanel = null;
+
         panels.forEach(function (panel) {
-            panel.hidden = panel.id !== item.dataset.target;
+            var active =
+                panel.id === item.dataset.target;
+
+            panel.hidden = !active;
+
+            if (active) {
+                activePanel = panel;
+            }
         });
+
+        if (activePanel) {
+            ensureSignalChronology(activePanel);
+        }
+
         if (window.history && window.history.replaceState) {
             window.history.replaceState(null, '', '#' + item.dataset.target);
         }
@@ -765,32 +874,489 @@
     });
 
 
-    function spreadKyivClock(value) {
-        var result = new Intl.DateTimeFormat(
-            "uk-UA",
-            {
-                timeZone: "Europe/Kyiv",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false
-            }
-        ).format(new Date(value));
+    function signalSpaceName(value) {
+        if (value === "ua_space") return "Український";
+        if (value === "ru_space") return "Російський";
+        return value || "Невідомий";
+    }
 
-        return result === "24:00"
-            ? "00:00"
-            : result;
+    function signalSourceTypeName(value) {
+        if (value === "rss") return "RSS";
+        if (value === "telegram") return "Telegram";
+        if (value === "web") return "Сайт";
+        return value || "Тип не вказано";
+    }
+
+    function signalPublishedTime(value) {
+        if (!value) return "Час публікації невідомий";
+
+        var date = new Date(value);
+        if (!Number.isFinite(date.getTime())) {
+            return "Час публікації невідомий";
+        }
+
+        return new Intl.DateTimeFormat("uk-UA", {
+            timeZone: "Europe/Kyiv",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit"
+        }).format(date);
+    }
+
+    function appendSignalPropagationRow(panel, row) {
+        if (!row.published_at) return;
+
+        var list = panel.querySelector(
+            ".signals-propagation-list"
+        );
+        if (!list) return;
+
+        var item = document.createElement("div");
+        item.className = "signals-propagation-row";
+
+        var time = document.createElement("time");
+        time.dateTime = row.published_at;
+        time.textContent = signalPublishedTime(
+            row.published_at
+        );
+
+        var space = document.createElement("span");
+        space.className =
+            "signals-propagation-space is-" +
+            row.source_group;
+        space.textContent = signalSpaceName(
+            row.source_group
+        );
+
+        var source = document.createElement("span");
+        source.textContent =
+            row.source_name || row.source_id;
+
+        item.appendChild(time);
+        item.appendChild(space);
+        item.appendChild(source);
+
+        list.appendChild(item);
+    }
+
+    async function ensureSignalChronology(panel) {
+        if (!panel) return;
+
+        var list = panel.querySelector(
+            "[data-propagation-list]"
+        );
+
+        if (
+            !list ||
+            list.dataset.propagationComplete === "true" ||
+            list.dataset.propagationLoading === "true"
+        ) {
+            return;
+        }
+
+        var candidateId = list.dataset.candidateId;
+        var offset = Number.parseInt(
+            list.dataset.loaded || "0",
+            10
+        );
+        var total = Number.parseInt(
+            list.dataset.total || "0",
+            10
+        );
+
+        if (
+            !candidateId ||
+            !Number.isFinite(offset) ||
+            !Number.isFinite(total)
+        ) {
+            return;
+        }
+
+        if (offset >= total) {
+            list.dataset.propagationComplete = "true";
+            return;
+        }
+
+        list.dataset.propagationLoading = "true";
+
+        var status = panel.querySelector(
+            ".signals-propagation-head span"
+        );
+
+        try {
+            while (offset < total) {
+                var response = await fetch(
+                    "/signals/" +
+                    encodeURIComponent(candidateId) +
+                    "/chronology?offset=" +
+                    offset +
+                    "&limit=50",
+                    {
+                        credentials: "same-origin",
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    }
+                );
+
+                var responseText =
+                    await response.text();
+
+                var payload;
+
+                try {
+                    payload = JSON.parse(responseText);
+                } catch (parseError) {
+                    throw new Error(
+                        "Некоректна відповідь сервера"
+                    );
+                }
+
+                if (!response.ok) {
+                    throw new Error(
+                        payload.detail ||
+                        ("HTTP " + response.status)
+                    );
+                }
+
+                if (!Array.isArray(payload.items)) {
+                    throw new Error(
+                        "Некоректний формат chronology"
+                    );
+                }
+
+                payload.items.forEach(function (row) {
+                    appendSignalPropagationRow(
+                        panel,
+                        row
+                    );
+                });
+
+                var nextOffset =
+                    Number.parseInt(
+                        payload.loaded,
+                        10
+                    );
+
+                if (
+                    !Number.isFinite(nextOffset) ||
+                    nextOffset <= offset
+                ) {
+                    break;
+                }
+
+                offset = nextOffset;
+                total = Number.parseInt(
+                    payload.total,
+                    10
+                );
+
+                list.dataset.loaded =
+                    String(offset);
+                list.dataset.total =
+                    String(total);
+
+                if (!payload.has_more) {
+                    break;
+                }
+            }
+
+            if (offset >= total) {
+                list.dataset.propagationComplete =
+                    "true";
+            }
+
+            if (status) {
+                status.removeAttribute("title");
+            }
+        } catch (error) {
+            console.error(
+                "Signal chronology auto-load failed:",
+                error
+            );
+
+            if (status) {
+                status.title =
+                    "Не вдалося завантажити повну хронологію: " +
+                    (
+                        error && error.message
+                            ? error.message
+                            : String(error)
+                    );
+            }
+        } finally {
+            list.dataset.propagationLoading =
+                "false";
+        }
+    }
+
+
+    function appendSignalEvidenceRow(
+        section,
+        row,
+        number
+    ) {
+        var list = section.querySelector(
+            "[data-evidence-list]"
+        );
+        if (!list) return;
+
+        var article = document.createElement("article");
+        article.className = "signals-evidence";
+        article.dataset.evidenceItem = "";
+
+        var header = document.createElement("header");
+
+        var index = document.createElement("span");
+        index.className = "signals-evidence-index";
+        index.textContent = String(number).padStart(
+            2,
+            "0"
+        );
+
+        var sourceWrap = document.createElement("div");
+
+        var source = document.createElement("strong");
+        source.textContent =
+            row.source_name || row.source_id;
+
+        var sourceType = document.createElement("span");
+        sourceType.className = "signals-source-type";
+        sourceType.textContent =
+            " · " +
+            signalSourceTypeName(row.source_type);
+
+        sourceWrap.appendChild(source);
+        sourceWrap.appendChild(sourceType);
+
+        header.appendChild(index);
+        header.appendChild(sourceWrap);
+
+        if (row.safe_link) {
+            var link = document.createElement("a");
+            link.className = "signals-source-link";
+            link.href = row.safe_link;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.setAttribute(
+                "aria-label",
+                "Відкрити публікацію у джерелі"
+            );
+            link.textContent = "Відкрити джерело ↗";
+            header.appendChild(link);
+        }
+
+        article.appendChild(header);
+
+        if (row.title) {
+            var title = document.createElement("h4");
+            title.textContent = row.title;
+            article.appendChild(title);
+        }
+
+        if (row.text) {
+            var quote = document.createElement(
+                "blockquote"
+            );
+            quote.textContent =
+                row.text +
+                (row.text_truncated ? "…" : "");
+            article.appendChild(quote);
+        }
+
+        var times = document.createElement("dl");
+        times.className = "signals-evidence-time";
+
+        var timeRow = document.createElement("div");
+        var dt = document.createElement("dt");
+        dt.textContent = "Опубліковано";
+
+        var dd = document.createElement("dd");
+        dd.textContent = signalPublishedTime(
+            row.published_at
+        );
+
+        timeRow.appendChild(dt);
+        timeRow.appendChild(dd);
+        times.appendChild(timeRow);
+        article.appendChild(times);
+
+        if (!row.safe_link) {
+            var missing = document.createElement("span");
+            missing.className = "signals-link-missing";
+            missing.textContent =
+                "Посилання на джерело відсутнє";
+            article.appendChild(missing);
+        }
+
+        list.appendChild(article);
+    }
+
+    document.querySelectorAll(
+        "[data-evidence-more]"
+    ).forEach(function (button) {
+        button.addEventListener(
+            "click",
+            async function () {
+                var section = this.closest(
+                    "[data-evidence-section]"
+                );
+
+                if (!section || this.disabled) return;
+
+                var panel = section.closest(
+                    ".signals-panel"
+                );
+                var candidateId =
+                    section.dataset.candidateId;
+                var offset = Number.parseInt(
+                    section.dataset.loaded || "0",
+                    10
+                );
+                var pageSize = Number.parseInt(
+                    this.dataset.pageSize || "30",
+                    10
+                );
+
+                this.disabled = true;
+                this.textContent = "Завантаження…";
+
+                try {
+                    var response = await fetch(
+                        "/signals/" +
+                        encodeURIComponent(candidateId) +
+                        "/chronology?offset=" +
+                        offset +
+                        "&limit=" +
+                        pageSize,
+                        {
+                            credentials: "same-origin",
+                            headers: {
+                                "Accept": "application/json"
+                            }
+                        }
+                    );
+
+                    var responseText =
+                        await response.text();
+
+                    var payload;
+
+                    try {
+                        payload = JSON.parse(responseText);
+                    } catch (parseError) {
+                        throw new Error(
+                            "Некоректна відповідь сервера"
+                        );
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(
+                            payload.detail ||
+                            (
+                                "HTTP " +
+                                response.status
+                            )
+                        );
+                    }
+
+                    payload.items.forEach(
+                        function (row, index) {
+                            appendSignalEvidenceRow(
+                                section,
+                                row,
+                                offset + index + 1
+                            );
+
+                        }
+                    );
+
+                    var loaded =
+                        offset + payload.items.length;
+
+                    section.dataset.loaded =
+                        String(loaded);
+
+                    var status =
+                        section.querySelector(
+                            "[data-evidence-status]"
+                        );
+
+                    if (status) {
+                        status.textContent =
+                            loaded +
+                            " з " +
+                            payload.total +
+                            " показано";
+                    }
+
+                    if (
+                        !payload.has_more ||
+                        loaded >= payload.total
+                    ) {
+                        this.hidden = true;
+                    } else {
+                        var remaining =
+                            payload.total - loaded;
+                        this.textContent =
+                            "Показати ще " +
+                            Math.min(
+                                pageSize,
+                                remaining
+                            );
+                    }
+                } catch (error) {
+                    console.error(
+                        "Signal chronology load failed:",
+                        error
+                    );
+
+                    this.textContent =
+                        "Не вдалося завантажити · повторити";
+
+                    this.title =
+                        error && error.message
+                            ? error.message
+                            : String(error);
+                } finally {
+                    this.disabled = false;
+                }
+            }
+        );
+    });
+
+
+    function spreadKyivClock(value) {
+        var date = new Date(value);
+
+        if (!Number.isFinite(date.getTime())) {
+            return "";
+        }
+
+        return new Intl.DateTimeFormat("uk-UA", {
+            timeZone: "Europe/Kyiv",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+        }).format(date);
     }
 
     function spreadKyivDate(value) {
-        return new Intl.DateTimeFormat(
-            "uk-UA",
-            {
-                timeZone: "Europe/Kyiv",
-                day: "2-digit",
-                month: "2-digit"
-            }
-        ).format(new Date(value));
+        var date = new Date(value);
+
+        if (!Number.isFinite(date.getTime())) {
+            return "";
+        }
+
+        return new Intl.DateTimeFormat("uk-UA", {
+            timeZone: "Europe/Kyiv",
+            day: "2-digit",
+            month: "2-digit"
+        }).format(date);
     }
+
 
     function renderSpreadClock(
         timeline,
@@ -930,10 +1496,128 @@
         }
     }
 
+    function materializeHourlySpreadPoints(timeline, start) {
+        var HOUR_MS = 60 * 60 * 1000;
+        var track = timeline.querySelector(".signals-spread-track");
+        if (!track || track.dataset.spreadMaterialized === "true") return;
+
+        var formatter = new Intl.DateTimeFormat("uk-UA", {
+            timeZone: "Europe/Kyiv",
+            hour: "2-digit",
+            minute: "2-digit"
+        });
+
+        [
+            {
+                key: "ru",
+                group: "ru_space",
+                label: "Російський",
+                values: track.dataset.hourlyRu
+            },
+            {
+                key: "ua",
+                group: "ua_space",
+                label: "Український",
+                values: track.dataset.hourlyUa
+            }
+        ].forEach(function (series) {
+            var hourly = String(series.values || "")
+                .split(",")
+                .map(function (value) {
+                    var parsed = Number.parseInt(value, 10);
+                    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+                });
+
+            hourly.forEach(function (count, hourIndex) {
+                if (!count) return;
+
+                var bucketStart = start + hourIndex * HOUR_MS;
+                var bucketEnd = bucketStart + HOUR_MS;
+
+                for (var pointIndex = 0; pointIndex < count; pointIndex += 1) {
+                    /*
+                     * publication_spread зберігає часовий bucket, а не точну
+                     * хвилину кожної публікації. Рівномірний розподіл усередині
+                     * години — лише візуалізація щільності, не timestamp.
+                     */
+                    var fraction = (pointIndex + 0.5) / count;
+                    var visualTime = bucketStart + fraction * HOUR_MS;
+
+                    var point = document.createElement("span");
+                    point.className =
+                        "signals-spread-point signals-spread-point-" +
+                        series.group;
+                    point.dataset.spreadPoint = "";
+                    point.dataset.time =
+                        new Date(visualTime).toISOString();
+
+                    var bucketLabel =
+                        formatter.format(new Date(bucketStart)) +
+                        "–" +
+                        formatter.format(new Date(bucketEnd));
+
+                    var aria =
+                        bucketLabel +
+                        " · " +
+                        count +
+                        " публікацій · " +
+                        series.label +
+                        " простір";
+
+                    /*
+                     * Один keyboard target на bucket достатній.
+                     * Решта точок — декоративне відображення того самого count.
+                     */
+                    if (pointIndex === 0) {
+                        point.tabIndex = 0;
+                        point.setAttribute("role", "img");
+                        point.setAttribute("aria-label", aria);
+                    } else {
+                        point.setAttribute("aria-hidden", "true");
+                    }
+
+                    var tooltip = document.createElement("span");
+                    tooltip.className = "signals-spread-tooltip";
+                    tooltip.setAttribute("role", "tooltip");
+
+                    var timeLine = document.createElement("span");
+                    timeLine.textContent = bucketLabel;
+
+                    var countLine = document.createElement("strong");
+                    countLine.textContent =
+                        count +
+                        " " +
+                        (
+                            count === 1
+                                ? "публікація"
+                                : (
+                                    count % 10 >= 2 &&
+                                    count % 10 <= 4 &&
+                                    !(count % 100 >= 12 && count % 100 <= 14)
+                                )
+                                    ? "публікації"
+                                    : "публікацій"
+                        );
+
+                    var spaceLine = document.createElement("span");
+                    spaceLine.textContent = series.label + " простір";
+
+                    tooltip.appendChild(timeLine);
+                    tooltip.appendChild(countLine);
+                    tooltip.appendChild(spaceLine);
+                    point.appendChild(tooltip);
+                    track.appendChild(point);
+                }
+            });
+        });
+
+        track.dataset.spreadMaterialized = "true";
+    }
+
     function initSpreadTimelines() {
         var DAY_MS = 24 * 60 * 60 * 1000;
-        var MIN_SEPARATION_PERCENT = 2.4;
-        var MAX_LANES = 5;
+        var MIN_SEPARATION_PERCENT = 0.65;
+        var MAX_LANES = 7;
 
         Array.prototype.slice.call(
             document.querySelectorAll('[data-spread-timeline]')
@@ -947,6 +1631,11 @@
                 timeline,
                 start,
                 end
+            );
+
+            materializeHourlySpreadPoints(
+                timeline,
+                start
             );
 
             var points = Array.prototype.slice.call(
@@ -997,10 +1686,6 @@
                 item.element.style.setProperty('--spread-x', x.toFixed(3) + '%');
                 item.element.style.setProperty('--spread-lane', lane);
 
-                if (index === 0) {
-                    item.element.classList.add('is-first');
-                }
-
                 if (x < 11) {
                     item.element.classList.add('is-left-edge');
                 } else if (x > 89) {
@@ -1016,7 +1701,17 @@
     if (hashItem) activate(hashItem, false);
     applyFilters();
 
-    window.setTimeout(function () { window.location.reload(); }, 60000);
+    var initialPanel = panels.filter(
+        function (panel) {
+            return !panel.hidden;
+        }
+    )[0];
+
+    if (initialPanel) {
+        ensureSignalChronology(initialPanel);
+    }
+
+    window.setTimeout(function () { window.location.reload(); }, 600000);
 }());
 </script>
 {% endblock %}

@@ -1392,9 +1392,9 @@ a {
 
 .signals-workbench {
     display: flex;
-    min-height: 560px;
-    height: calc(100vh - 255px);
-    max-height: 820px;
+    min-height: 600px;
+    height: calc(100vh - 195px);
+    max-height: 880px;
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -2721,7 +2721,7 @@ a {
 
 .signals-spread-track {
     position: relative;
-    height: 52px;
+    height: 62px;
     margin: 0 4px;
 }
 
@@ -2729,7 +2729,7 @@ a {
     position: absolute;
     left: 0;
     right: 0;
-    top: 25px;
+    top: 35px;
     height: 1px;
     background: rgba(220, 214, 188, 0.28);
 }
@@ -2758,9 +2758,9 @@ a {
     position: absolute;
     z-index: 2;
     left: var(--spread-x);
-    top: calc(21px - (var(--spread-lane) * 7px));
-    width: 9px;
-    height: 9px;
+    top: calc(33px - (var(--spread-lane) * 5px));
+    width: 5px;
+    height: 5px;
     border: 1px solid rgba(8, 10, 9, 0.85);
     border-radius: 50%;
     transform: translateX(-50%);
@@ -2781,9 +2781,9 @@ a {
 }
 
 .signals-spread-point.is-first {
-    width: 11px;
-    height: 11px;
-    top: calc(20px - (var(--spread-lane) * 7px));
+    width: 7px;
+    height: 7px;
+    top: calc(32px - (var(--spread-lane) * 5px));
     box-shadow:
         0 0 0 2px rgba(15, 17, 14, 1),
         0 0 0 3px rgba(220, 214, 188, 0.72);
@@ -3530,6 +3530,9 @@ a {
 
 .topics-sources {
     padding: 0.55rem 0.65rem 0.7rem;
+    max-height: 240px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
 }
 
 .topics-source-row {
@@ -4230,6 +4233,11 @@ a {
 /* ---------- Контури v1 ---------- */
 
 .contours-page {
+    --contour-data-accent: color-mix(
+        in srgb,
+        var(--gold) 62%,
+        var(--text-muted)
+    );
     max-width: 1160px;
     overflow-wrap: anywhere;
 }
@@ -4418,7 +4426,7 @@ a {
 .contour-trend-bar {
     width: min(42px, 72%);
     min-height: 2px;
-    background: var(--gold);
+    background: var(--contour-data-accent);
     border-radius: 2px 2px 0 0;
 }
 
@@ -4483,7 +4491,7 @@ a {
 .contour-rank-fill,
 .contour-breakdown-fill {
     height: 100%;
-    background: var(--gold);
+    background: var(--contour-data-accent);
 }
 
 .contour-rank-row small {
@@ -5789,7 +5797,7 @@ a {
 }
 
 .signals-propagation-list {
-    max-height: 175px;
+    max-height: 250px;
     overflow-y: auto;
     scrollbar-gutter: stable;
     border-top: 1px solid var(--border);

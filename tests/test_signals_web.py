@@ -165,7 +165,11 @@ class HttpTests(unittest.TestCase):
 
     def test_existing_route_registration_and_health(self):
         paths = {route.path for route in self.app.routes}
-        self.assertTrue({'/', '/health', '/materials', '/sources', '/theses', '/theses/export.csv', '/signals'} <= paths)
+        self.assertTrue({
+            '/', '/health', '/materials', '/sources',
+            '/theses', '/theses/export.csv', '/signals',
+            '/signals/{candidate_id}/chronology',
+        } <= paths)
         self.assertEqual(self.client.get('/health').json(), {'status': 'ok', 'service': 'mip-web'})
 
     def test_safe_external_link(self):
@@ -212,7 +216,7 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(html.count('class="signals-dynamic-row"'), 1)
         self.assertIn('aria-current="page">Сигнали', html)
 
-    def test_real_template_safe_link_and_times(self):
+    def test_real_template_safe_link_and_publication_time(self):
         data = snapshot(multi_source(fixture(occurrence('o'))))
         row = data['candidates'][0]['chronology'][0]
         row.update(external_ref='https://example.test/?a=1&b=2', published_at=(AS_OF - timedelta(days=4)).isoformat())
@@ -222,7 +226,7 @@ class TemplateTests(unittest.TestCase):
         self.assertIn('rel="noopener noreferrer"', html)
         from web.timefmt import fmt_kyiv_zoned
         self.assertIn(fmt_kyiv_zoned(row['published_at']), html)
-        self.assertIn(fmt_kyiv_zoned(row['collected_at']), html)
+        self.assertNotIn(fmt_kyiv_zoned(row['collected_at']), html)
 
     def test_unselected_group_not_presented_as_measured_absence(self):
         from test_signals_postgres import FakeConnection, MODEL

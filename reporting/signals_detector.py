@@ -377,6 +377,22 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
             ),
         )
 
+        published_times = [
+            r.published_at
+            for r in candidate_rows
+            if r.published_at is not None
+        ]
+        first_published_at = (
+            min(published_times).isoformat()
+            if published_times
+            else None
+        )
+        last_published_at = (
+            max(published_times).isoformat()
+            if published_times
+            else None
+        )
+
         if len({r.source_id for r in candidate_rows}) < 2:
             reason = (
                 "singleton_single_source"
@@ -513,8 +529,11 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
 
         candidates.append({
             "candidate_id": representative,
+            "representative_title": contents[representative].title[:240],
             "search_text": search_text,
             "last_observed": last_observed_rows[-1].collected_at.isoformat(),
+            "first_published_at": first_published_at,
+            "last_published_at": last_published_at,
             "representative_content_id": representative,
             "content_ids": group,
             "interpretation_status": "unverified",

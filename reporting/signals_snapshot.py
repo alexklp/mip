@@ -227,6 +227,8 @@ def validate_snapshot(value: dict) -> None:
             selection = None
 
         if selection is not None:
+            if not isinstance(selection, dict):
+                raise ValueError("Некоректний selection")
             if selection.get('strategy') != 'sparse_hnsw_current_24h':
                 raise ValueError("Некоректна ANN strategy")
 
@@ -365,6 +367,36 @@ def validate_snapshot(value: dict) -> None:
             if forbidden.intersection(candidate):
                 raise ValueError("Snapshot містить заборонене semantic verdict поле")
             string(candidate['candidate_id'])
+            first_published_at = candidate["first_published_at"]
+            last_published_at = candidate["last_published_at"]
+
+            if (
+                (first_published_at is None)
+                != (last_published_at is None)
+            ):
+                raise ValueError(
+                    "Некоректний publication range"
+                )
+
+            if first_published_at is not None:
+                first_published = datetime.fromisoformat(
+                    first_published_at
+                )
+                last_published = datetime.fromisoformat(
+                    last_published_at
+                )
+
+                if first_published > last_published:
+                    raise ValueError(
+                        "Некоректний publication range"
+                    )
+
+            representative_title = candidate['representative_title']
+            if (
+                not isinstance(representative_title, str)
+                or len(representative_title) > 240
+            ):
+                raise ValueError("Некоректний representative title")
             if candidate['interpretation_status'] != 'unverified':
                 raise ValueError("Snapshot не може містити семантичний вердикт")
             metrics(candidate)

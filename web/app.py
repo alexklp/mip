@@ -894,6 +894,106 @@ def signals_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "signals.html", {"active_page": "signals", **view})
 
 
+@app.get("/signals/{candidate_id}/chronology")
+def signals_chronology(
+    request: Request,
+    candidate_id: UUID,
+    offset: int = 0,
+    limit: int = 30,
+) -> dict:
+    """Посторінкова evidence-хронологія для вже сформованого сигналу."""
+    from web.signals import (
+        DEFAULT_SNAPSHOT,
+        fetch_signal_chronology,
+        load_signals,
+    )
+
+    if offset < 0 or not 1 <= limit <= 50:
+        raise HTTPException(
+            status_code=400,
+            detail="Некоректні параметри сторінки.",
+        )
+
+    view = load_signals(
+        getattr(
+            request.app.state,
+            "signals_snapshot_path",
+            DEFAULT_SNAPSHOT,
+        ),
+        stale_seconds=getattr(
+            request.app.state,
+            "signals_stale_seconds",
+            7200,
+        ),
+    )
+
+    snapshot = view.get("snapshot")
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Знімок сигналів недоступний.",
+        )
+
+    candidate_key = str(candidate_id)
+    candidate = next(
+        (
+            row
+            for row in snapshot["candidates"]
+            if row["candidate_id"] == candidate_key
+        ),
+        None,
+    )
+
+    if candidate is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Сигнал не знайдено у поточному знімку.",
+        )
+
+    window_start = datetime.datetime.fromisoformat(
+        snapshot["windows"]["previous"]["start"]
+    )
+    window_end = datetime.datetime.fromisoformat(
+        snapshot["as_of"]
+    )
+
+    try:
+        with read_connection() as conn:
+            rows = fetch_signal_chronology(
+                conn,
+                content_ids=candidate["content_ids"],
+                source_groups=candidate["source_groups"],
+                window_start=window_start,
+                window_end=window_end,
+                expected_total=candidate["occurrence_count"],
+                offset=offset,
+                limit=limit,
+            )
+    except psycopg.Error as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+
+    loaded = offset + len(rows)
+    total = candidate["occurrence_count"]
+
+    return {
+        "candidate_id": candidate_key,
+        "offset": offset,
+        "loaded": loaded,
+        "total": total,
+        "has_more": loaded < total and bool(rows),
+        "items": rows,
+    }
+
+
 
 @app.get("/topics", response_class=HTMLResponse)
 def topics_page(request: Request) -> HTMLResponse:
