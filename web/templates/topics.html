@@ -231,6 +231,35 @@
             </div>
 
             <div
+                id="topics-evidence-space"
+                class="topics-segment"
+                aria-label="Інформаційний простір матеріалів"
+                hidden
+            >
+                <button
+                    type="button"
+                    data-evidence-space="all"
+                    aria-pressed="true"
+                >
+                    Усі
+                </button>
+                <button
+                    type="button"
+                    data-evidence-space="ua_space"
+                    aria-pressed="false"
+                >
+                    Укр
+                </button>
+                <button
+                    type="button"
+                    data-evidence-space="ru_space"
+                    aria-pressed="false"
+                >
+                    Рос
+                </button>
+            </div>
+
+            <div
                 id="topics-evidence-slices"
                 class="topics-segment topics-evidence-slices"
                 hidden
@@ -283,6 +312,7 @@
             selectedId: null,
             query: "",
             detailSlice: "current",
+            evidenceSpace: "all",
             compareIds: [],
             compareScope: null
         };
@@ -452,6 +482,7 @@
         function selectMarker(markerId) {
             state.selectedId = markerId;
             state.detailSlice = "current";
+            state.evidenceSpace = "all";
             detailKey = null;
             detailData = null;
             detailSourceId = null;
@@ -1947,11 +1978,77 @@
                     )[
                         detailHour.index
                     ] || []
-                ).slice(0, 8);
+                ).slice();
             } else {
                 rows = (
                     slice.source_ranking || []
-                ).slice(0, 8);
+                ).slice();
+            }
+
+            if (
+                state.space === "all" &&
+                state.evidenceSpace !== "all"
+            ) {
+                var sourceMap = new Map();
+
+                (slice.occurrences || []).forEach(
+                    function (occurrence) {
+                        if (
+                            occurrence.source_group !==
+                            state.evidenceSpace
+                        ) {
+                            return;
+                        }
+
+                        if (
+                            hourlyMode
+                        ) {
+                            var bounds =
+                                hourBounds(
+                                    detailData,
+                                    state.detailSlice,
+                                    detailHour.index
+                                );
+
+                            var observed =
+                                new Date(
+                                    occurrence.observed_at
+                                );
+
+                            if (
+                                observed < bounds.start ||
+                                observed >= bounds.end
+                            ) {
+                                return;
+                            }
+                        }
+
+                        var key = occurrence.source_id
+                            ? "id:" + occurrence.source_id
+                            : "name:" + occurrence.source_name;
+
+                        if (!sourceMap.has(key)) {
+                            sourceMap.set(key, {
+                                source_id:
+                                    occurrence.source_id || null,
+                                name:
+                                    occurrence.source_name || "—",
+                                publications: 0
+                            });
+                        }
+
+                        sourceMap.get(key).publications += 1;
+                    }
+                );
+
+                rows = Array.from(
+                    sourceMap.values()
+                ).sort(function (a, b) {
+                    return (
+                        b.publications -
+                        a.publications
+                    );
+                });
             }
 
             var note = document.getElementById(
@@ -2104,6 +2201,15 @@
             var rows = (
                 slice.occurrences || []
             ).filter(function (row) {
+                if (
+                    state.space === "all" &&
+                    state.evidenceSpace !== "all" &&
+                    row.source_group !==
+                        state.evidenceSpace
+                ) {
+                    return false;
+                }
+
                 if (
                     detailSourceId &&
                     row.source_id !==
@@ -2279,19 +2385,46 @@
                     : "Попередні 24 години"
             );
 
+            var evidenceCount =
+                rows.length;
+
+            var evidenceSpaceLabel = "";
+
+            if (
+                state.space === "all" &&
+                state.evidenceSpace === "ua_space"
+            ) {
+                evidenceSpaceLabel =
+                    " · Український простір";
+            } else if (
+                state.space === "all" &&
+                state.evidenceSpace === "ru_space"
+            ) {
+                evidenceSpaceLabel =
+                    " · Російський простір";
+            }
+
             note.textContent =
-                sliceLabel +
+                (
+                    detailHour &&
+                    detailHour.slice ===
+                        state.detailSlice
+                        ? "Вибрана година"
+                        : sliceLabel
+                ) +
                 " · " +
-                slice.publications +
+                evidenceCount +
                 " " +
                 plural(
-                    slice.publications,
+                    evidenceCount,
                     "публікація",
                     "публікації",
                     "публікацій"
                 ) +
+                evidenceSpaceLabel +
                 (
-                    detailSourceId
+                    detailSourceId ||
+                    detailSourceName
                         ? " · фільтр за джерелом"
                         : ""
                 );
@@ -2545,6 +2678,33 @@
                     "current";
             }
 
+            var spaceControls =
+                document.getElementById(
+                    "topics-evidence-space"
+                );
+
+            spaceControls.hidden = (
+                state.space !== "all"
+            );
+
+            spaceControls.style.display = (
+                state.space === "all"
+                    ? ""
+                    : "none"
+            );
+
+            spaceControls.querySelectorAll(
+                "[data-evidence-space]"
+            ).forEach(function (button) {
+                button.setAttribute(
+                    "aria-pressed",
+                    button.dataset.evidenceSpace ===
+                        state.evidenceSpace
+                        ? "true"
+                        : "false"
+                );
+            });
+
             var controls = document.getElementById(
                 "topics-evidence-slices"
             );
@@ -2753,6 +2913,7 @@
             state.space = this.value;
             state.selectedId = null;
             state.detailSlice = "current";
+            state.evidenceSpace = "all";
             detailKey = null;
             detailData = null;
             detailSourceId = null;
@@ -2774,6 +2935,7 @@
                 state.mode = this.dataset.topicMode;
                 state.selectedId = null;
                 state.detailSlice = "current";
+                state.evidenceSpace = "all";
                 detailKey = null;
                 detailData = null;
                 detailSourceId = null;
@@ -2791,6 +2953,7 @@
                 state.unit = this.dataset.topicUnit;
                 state.selectedId = null;
                 state.detailSlice = "current";
+                state.evidenceSpace = "all";
                 detailKey = null;
                 detailData = null;
                 detailSourceId = null;
@@ -2799,6 +2962,28 @@
                 evidenceShown = 8;
                 render();
             });
+        });
+
+        document.querySelectorAll(
+            "[data-evidence-space]"
+        ).forEach(function (button) {
+            button.addEventListener(
+                "click",
+                function () {
+                    state.evidenceSpace =
+                        this.dataset.evidenceSpace;
+
+                    detailSourceId = null;
+                    detailSourceName = null;
+                    evidenceShown = 8;
+
+                    if (detailData) {
+                        renderDetail(
+                            detailData
+                        );
+                    }
+                }
+            );
         });
 
         document.querySelectorAll(
