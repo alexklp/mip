@@ -1392,9 +1392,9 @@ a {
 
 .signals-workbench {
     display: flex;
-    min-height: 600px;
-    height: calc(100vh - 195px);
-    max-height: 880px;
+    min-height: 560px;
+    height: calc(100vh - 255px);
+    max-height: 820px;
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -2721,7 +2721,7 @@ a {
 
 .signals-spread-track {
     position: relative;
-    height: 62px;
+    height: 52px;
     margin: 0 4px;
 }
 
@@ -2729,7 +2729,7 @@ a {
     position: absolute;
     left: 0;
     right: 0;
-    top: 35px;
+    top: 25px;
     height: 1px;
     background: rgba(220, 214, 188, 0.28);
 }
@@ -2758,9 +2758,9 @@ a {
     position: absolute;
     z-index: 2;
     left: var(--spread-x);
-    top: calc(33px - (var(--spread-lane) * 5px));
-    width: 5px;
-    height: 5px;
+    top: calc(21px - (var(--spread-lane) * 7px));
+    width: 9px;
+    height: 9px;
     border: 1px solid rgba(8, 10, 9, 0.85);
     border-radius: 50%;
     transform: translateX(-50%);
@@ -2781,9 +2781,9 @@ a {
 }
 
 .signals-spread-point.is-first {
-    width: 7px;
-    height: 7px;
-    top: calc(32px - (var(--spread-lane) * 5px));
+    width: 11px;
+    height: 11px;
+    top: calc(20px - (var(--spread-lane) * 7px));
     box-shadow:
         0 0 0 2px rgba(15, 17, 14, 1),
         0 0 0 3px rgba(220, 214, 188, 0.72);
@@ -5797,7 +5797,7 @@ a {
 }
 
 .signals-propagation-list {
-    max-height: 250px;
+    max-height: 175px;
     overflow-y: auto;
     scrollbar-gutter: stable;
     border-top: 1px solid var(--border);
@@ -6234,4 +6234,41 @@ a {
 .contour-analysis-workspace .materials-empty {
     padding: 1rem 1.15rem;
     min-height: 0;
+}
+
+/* Sources: stable desktop filter layout */
+.sources-page .filter-panel {
+    display: grid;
+    grid-template-columns:
+        128px
+        196px
+        124px
+        minmax(240px, 1fr)
+        auto;
+    align-items: end;
+}
+
+.sources-page .filter-field {
+    min-width: 0;
+}
+
+.sources-page .filter-field select {
+    width: 100%;
+    min-width: 0;
+}
+
+.sources-page .filter-submit {
+    white-space: nowrap;
+}
+
+.sources-page .filter-reset {
+    grid-column: 1 / -1;
+    justify-self: start;
+}
+
+@media (max-width: 900px) {
+    .sources-page .filter-panel {
+        display: flex;
+        flex-wrap: wrap;
+    }
 }

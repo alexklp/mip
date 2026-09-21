@@ -45,8 +45,6 @@ if env \
         --pairs 200000 \
         --rows 100000 \
         --core-distance 0.18 \
-        --merge-distance 0.19 \
-        --merge-min-cross-links 2 \
         --related-distance 0.36 \
         --ann-probe-limit 20000 \
         --display-limit 200 \

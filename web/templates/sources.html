@@ -134,19 +134,54 @@
         {% endif %}
     </form>
 
+    {% if sources %}
+    <div class="page-summary sources-summary" aria-label="Статистика джерел">
+        <div class="page-summary-item">
+            <span>Джерел</span>
+            <strong>{{ source_stats.sources }}</strong>
+        </div>
+
+        <div class="page-summary-item">
+            <span>Матеріалів у джерелах</span>
+            <strong>{{ source_stats.materials }}</strong>
+        </div>
+
+        <div class="page-summary-item">
+            <span>Український простір</span>
+            <strong>{{ source_stats.ua_sources }}</strong>
+            <span>джерел</span>
+        </div>
+
+        <div class="page-summary-item">
+            <span>Російський простір</span>
+            <strong>{{ source_stats.ru_sources }}</strong>
+            <span>джерел</span>
+        </div>
+
+        <div class="page-summary-item">
+            <span>RSS</span>
+            <strong>{{ source_stats.rss_sources }}</strong>
+            <span>джерел</span>
+        </div>
+
+        <div class="page-summary-item">
+            <span>Telegram</span>
+            <strong>{{ source_stats.telegram_sources }}</strong>
+            <span>джерел</span>
+        </div>
+    </div>
+    {% else %}
     <p class="materials-count">
-        {% if sources %}
-            Джерел з надходженнями: {{ sources|length }}
-        {% else %}
-            Джерел з надходженнями за обраний період не знайдено.
-        {% endif %}
+        Джерел з надходженнями за обраний період не знайдено.
     </p>
+    {% endif %}
 
     {% if sources %}
         <div class="table-scroll">
             <table class="materials-table sources-table-sortable">
                 <thead>
                     <tr>
+                        <th aria-label="Порядковий номер">№</th>
                         <th class="sources-sortable"
                             data-sort-type="text"
                             aria-sort="none">
@@ -232,6 +267,7 @@
                 <tbody>
                     {% for row in sources %}
                         <tr>
+                            <td data-source-rank>{{ loop.index }}</td>
                             <td data-sort="{{ row.name }}">{{ row.name }}</td>
                             <td data-sort="{{ row.source_type }}">
                                 {% if row.source_type == "rss" %}RSS
@@ -331,7 +367,23 @@
             );
         }
 
-        headers.forEach((header, index) => {
+        function renumberRows() {
+            Array.from(tbody.rows).forEach(
+                (row, index) => {
+                    const cell = row.querySelector(
+                        "[data-source-rank]"
+                    );
+
+                    if (cell) {
+                        cell.textContent = String(index + 1);
+                    }
+                }
+            );
+        }
+
+        headers.forEach((header) => {
+            const index = header.cellIndex;
+
             const button = header.querySelector(
                 ".sources-sort-button"
             );
@@ -412,6 +464,8 @@
                 rows.forEach((row) => {
                     tbody.appendChild(row);
                 });
+
+                renumberRows();
             });
         });
     })();

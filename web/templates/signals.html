@@ -1636,8 +1636,8 @@
 
     function initSpreadTimelines() {
         var DAY_MS = 24 * 60 * 60 * 1000;
-        var MIN_SEPARATION_PERCENT = 0.65;
-        var MAX_LANES = 7;
+        var MIN_SEPARATION_PERCENT = 2.4;
+        var MAX_LANES = 5;
 
         Array.prototype.slice.call(
             document.querySelectorAll('[data-spread-timeline]')
@@ -1705,6 +1705,10 @@
 
                 item.element.style.setProperty('--spread-x', x.toFixed(3) + '%');
                 item.element.style.setProperty('--spread-lane', lane);
+
+                if (index === 0) {
+                    item.element.classList.add('is-first');
+                }
 
                 if (x < 11) {
                     item.element.classList.add('is-left-edge');

@@ -763,6 +763,30 @@ def sources_page(
         )
     ]
 
+    source_stats = {
+        "sources": len(rows),
+        "materials": sum(
+            int(row["materials"])
+            for row in rows
+        ),
+        "ua_sources": sum(
+            row["source_group"] == "ua_space"
+            for row in rows
+        ),
+        "ru_sources": sum(
+            row["source_group"] == "ru_space"
+            for row in rows
+        ),
+        "rss_sources": sum(
+            row["source_type"] == "rss"
+            for row in rows
+        ),
+        "telegram_sources": sum(
+            row["source_type"] == "telegram"
+            for row in rows
+        ),
+    }
+
     return templates.TemplateResponse(
         request,
         "sources.html",
@@ -774,6 +798,7 @@ def sources_page(
             "current_period": period,
             "periods": PERIOD_LABELS,
             "sources": rows,
+            "source_stats": source_stats,
             "source_types": source_types,
             "source_groups": source_groups,
             "source_names": source_names,
