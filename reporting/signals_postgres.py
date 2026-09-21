@@ -50,6 +50,16 @@ SELECT
         true
     ) AS max_scan_tuples
 """
+PLANNER_SORT_READ_SQL = """
+SELECT current_setting('enable_sort') AS enable_sort
+"""
+PLANNER_SORT_SET_SQL = """
+SELECT set_config(
+    'enable_sort',
+    %(enable_sort)s,
+    true
+) AS enable_sort
+"""
 MODEL_SQL = """
 SELECT model_name, model_revision, dimension, metric
 FROM embedding_models WHERE embedding_model_id = %(model_id)s
@@ -272,12 +282,81 @@ class PostgresSignalAdapter:
         started = time.monotonic()
         with self.connection.cursor() as cursor:
             if name == "neighbours":
-                # Не переходимо на generic plan після psycopg prepare_threshold.
-                cursor.execute(sql, params, prepare=False)
+                # Для filtered kNN planner інколи обирає повний explicit
+                # sort замість HNSW. Тимчасово забороняємо цей шлях лише
+                # для одного neighbour query та відновлюємо попередній
+                # transaction-local стан одразу після успішного SELECT.
+                cursor.execute(
+                    PLANNER_SORT_READ_SQL,
+                    {},
+                )
+                setting_rows = cursor.fetchall()
+
+                if (
+                    len(setting_rows) != 1
+                    or setting_rows[0]["enable_sort"]
+                    not in ("on", "off")
+                ):
+                    raise ValueError(
+                        "Не вдалося прочитати planner enable_sort"
+                    )
+
+                previous_enable_sort = (
+                    setting_rows[0]["enable_sort"]
+                )
+
+                cursor.execute(
+                    PLANNER_SORT_SET_SQL,
+                    {"enable_sort": "off"},
+                )
+                disabled_rows = cursor.fetchall()
+
+                if (
+                    len(disabled_rows) != 1
+                    or disabled_rows[0]["enable_sort"] != "off"
+                ):
+                    raise ValueError(
+                        "Не вдалося вимкнути planner sort для HNSW"
+                    )
+
+                # Не переходимо на generic plan після
+                # psycopg prepare_threshold.
+                cursor.execute(
+                    sql,
+                    params,
+                    prepare=False,
+                )
+                rows = cursor.fetchall()
+
+                cursor.execute(
+                    PLANNER_SORT_SET_SQL,
+                    {
+                        "enable_sort":
+                            previous_enable_sort,
+                    },
+                )
+                restored_rows = cursor.fetchall()
+
+                if (
+                    len(restored_rows) != 1
+                    or restored_rows[0]["enable_sort"]
+                    != previous_enable_sort
+                ):
+                    raise ValueError(
+                        "Не вдалося відновити planner enable_sort"
+                    )
             else:
-                cursor.execute(sql, params)
-            rows = cursor.fetchall()
-        self.timings.append({"query": name, "seconds": time.monotonic() - started, "rows": len(rows)})
+                cursor.execute(
+                    sql,
+                    params,
+                )
+                rows = cursor.fetchall()
+
+        self.timings.append({
+            "query": name,
+            "seconds": time.monotonic() - started,
+            "rows": len(rows),
+        })
         return rows
 
     def read(self, *, as_of: datetime, embedding_model: str, dimension: int) -> SignalData:

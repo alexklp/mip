@@ -8,7 +8,8 @@ from reporting.signals_data import SPACES, ROUTING_DECISIONS, SignalData, window
 
 
 ALGORITHM_VERSION = "signals-routing-core-review/4"
-MERGE_ALGORITHM_VERSION = "signals-routing-core-merge-review/5"
+MERGE_ALGORITHM_VERSION = "signals-routing-core-merge-review/6"
+MERGE_MIN_MEMBER_COVERAGE = 0.60
 
 
 @dataclass(frozen=True)
@@ -86,11 +87,17 @@ def _merge_supported_groups(
     merge_distance: float,
     min_cross_links: int,
 ):
-    """Об'єднуємо strict cores лише за повторюваною міжгруповою підтримкою.
+    """Об'єднуємо strict cores лише за щільною взаємною підтримкою.
 
-    Один близький міст не зливає cores. Транзитивність допускається лише
-    між cores, кожне ребро між якими має щонайменше min_cross_links
-    незалежних content-pairs у межах merge_distance.
+    Для merge потрібні:
+    - щонайменше min_cross_links між двома strict cores;
+    - cross-links мають охоплювати щонайменше 60% content
+      з кожного core;
+    - при об'єднанні компонентів кожна пара strict cores між
+      компонентами повинна мати таку підтримку.
+
+    Це не дозволяє транзитивному ланцюжку A-B-C створити один
+    giant component, якщо A та C безпосередньо не підтримані.
     """
     if not groups:
         return []
@@ -103,7 +110,9 @@ def _merge_supported_groups(
         raise ValueError("Некоректний merge distance")
 
     if type(min_cross_links) is not int or min_cross_links < 2:
-        raise ValueError("Core merge потребує щонайменше двох cross-links")
+        raise ValueError(
+            "Core merge потребує щонайменше двох cross-links"
+        )
 
     group_of = {
         cid: group_index
@@ -127,10 +136,54 @@ def _merge_supported_groups(
         ):
             continue
 
-        edge = tuple(sorted((left_group, right_group)))
-        support[edge] = support.get(edge, 0) + 1
+        if left_group < right_group:
+            edge = (left_group, right_group)
+            left_member = left
+            right_member = right
+        else:
+            edge = (right_group, left_group)
+            left_member = right
+            right_member = left
+
+        row = support.setdefault(
+            edge,
+            {
+                "links": 0,
+                "left_members": set(),
+                "right_members": set(),
+            },
+        )
+
+        row["links"] += 1
+        row["left_members"].add(left_member)
+        row["right_members"].add(right_member)
+
+    supported_edges = set()
+
+    for (left_group, right_group), row in support.items():
+        left_coverage = (
+            len(row["left_members"])
+            / len(groups[left_group])
+        )
+        right_coverage = (
+            len(row["right_members"])
+            / len(groups[right_group])
+        )
+
+        if (
+            row["links"] >= min_cross_links
+            and left_coverage >= MERGE_MIN_MEMBER_COVERAGE
+            and right_coverage >= MERGE_MIN_MEMBER_COVERAGE
+        ):
+            supported_edges.add(
+                (left_group, right_group)
+            )
 
     parent = list(range(len(groups)))
+    core_members = {
+        index: {index}
+        for index in range(len(groups))
+    }
 
     def find(index):
         while parent[index] != index:
@@ -138,23 +191,34 @@ def _merge_supported_groups(
             index = parent[index]
         return index
 
-    def union(left, right):
-        left_root = find(left)
-        right_root = find(right)
-
-        if left_root == right_root:
-            return
-
-        # Менший strict-core index завжди стає коренем:
-        # результат не залежить від порядку dict/pairs.
+    def union(left_root, right_root):
         if left_root > right_root:
             left_root, right_root = right_root, left_root
 
         parent[right_root] = left_root
+        core_members[left_root].update(
+            core_members.pop(right_root)
+        )
 
-    for (left_group, right_group), link_count in sorted(support.items()):
-        if link_count >= min_cross_links:
-            union(left_group, right_group)
+    for left_group, right_group in sorted(supported_edges):
+        left_root = find(left_group)
+        right_root = find(right_group)
+
+        if left_root == right_root:
+            continue
+
+        left_component = core_members[left_root]
+        right_component = core_members[right_root]
+
+        complete_support = all(
+            tuple(sorted((left_core, right_core)))
+            in supported_edges
+            for left_core in left_component
+            for right_core in right_component
+        )
+
+        if complete_support:
+            union(left_root, right_root)
 
     components = {}
 
@@ -167,7 +231,7 @@ def _merge_supported_groups(
         for index, cid in enumerate(selected)
     }
 
-    merged = [
+    return [
         sorted(
             members,
             key=lambda cid: selected_order[cid],
@@ -180,8 +244,6 @@ def _merge_supported_groups(
             ),
         )
     ]
-
-    return merged
 
 
 def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:

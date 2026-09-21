@@ -31,6 +31,7 @@ class FakeConnection:
         self.responses = {
             pg.GUARD_SQL: [dict(read_only='on', isolation='repeatable read', timeout='15s')],
             pg.ANN_SETTINGS_SQL: [dict(ef_search='64', iterative_scan='relaxed_order', max_scan_tuples='100')],
+            pg.PLANNER_SORT_READ_SQL: [dict(enable_sort='on')],
             pg.ROUTING_COVERAGE_SQL: None,
             pg.MODEL_SQL: [dict(model_name='synthetic', model_revision='1', dimension=1024, metric='cosine')],
             pg.DIMENSION_SQL: [],
@@ -57,6 +58,14 @@ class FakeConnection:
         self.current = sql
 
     def fetchall(self):
+        if self.current == pg.PLANNER_SORT_SET_SQL:
+            return [
+                dict(
+                    enable_sort=
+                        self.calls[-1][1]["enable_sort"]
+                )
+            ]
+
         response = self.responses[self.current]
         if isinstance(response, Exception):
             raise response
@@ -130,6 +139,65 @@ class PostgresTests(unittest.TestCase):
         self.assertTrue(data.truncated)
         self.assertEqual(data.selection['inspected_pair_count'], 1)
         self.assertEqual(data.selection['searched_anchor_count'], 2)
+
+    def test_neighbour_query_forces_hnsw_planner_path_locally(self):
+        self.read()
+
+        calls = self.conn.calls
+
+        neighbour_index = next(
+            index
+            for index, (query, _params)
+            in enumerate(calls)
+            if query == pg.NEIGHBOUR_SQL
+        )
+
+        self.assertEqual(
+            calls[neighbour_index - 2],
+            (
+                pg.PLANNER_SORT_READ_SQL,
+                {},
+            ),
+        )
+        self.assertEqual(
+            calls[neighbour_index - 1],
+            (
+                pg.PLANNER_SORT_SET_SQL,
+                {"enable_sort": "off"},
+            ),
+        )
+        self.assertEqual(
+            calls[neighbour_index + 1],
+            (
+                pg.PLANNER_SORT_SET_SQL,
+                {"enable_sort": "on"},
+            ),
+        )
+
+        rows_index = next(
+            index
+            for index, (query, _params)
+            in enumerate(calls)
+            if query == pg.ROWS_SQL
+        )
+
+        self.assertLess(
+            neighbour_index + 1,
+            rows_index,
+        )
+
+    def test_neighbour_planner_setting_fails_closed(self):
+        self.conn.responses[
+            pg.PLANNER_SORT_READ_SQL
+        ] = []
+
+        with self.assertRaises(ValueError):
+            self.read()
+
+        self.assertNotIn(
+            pg.NEIGHBOUR_SQL,
+            dict(self.conn.calls),
+        )
 
     def test_rejected_distances_also_consume_budget(self):
         self.conn.responses[pg.ANCHOR_SQL] = [dict(content_id='a'), dict(content_id='b')]

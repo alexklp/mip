@@ -151,6 +151,7 @@ class SignalTests(unittest.TestCase):
         pairs = {
             ("a", "c"): 0.18,
             ("b", "c"): 0.19,
+            ("a", "d"): 0.19,
             ("d", "e"): 0.10,
         }
 
@@ -182,6 +183,60 @@ class SignalTests(unittest.TestCase):
                 ["a", "b", "c", "d"],
                 ["e"],
             ],
+        )
+
+    def test_supported_merge_rejects_transitive_chain(self):
+        groups = [
+            ["a1", "a2"],
+            ["b1", "b2"],
+            ["c1", "c2"],
+        ]
+        selected = [
+            "a1", "a2",
+            "b1", "b2",
+            "c1", "c2",
+        ]
+        pairs = {
+            ("a1", "b1"): 0.18,
+            ("a2", "b2"): 0.18,
+            ("b1", "c1"): 0.18,
+            ("b2", "c2"): 0.18,
+        }
+
+        self.assertEqual(
+            _merge_supported_groups(
+                groups,
+                pairs,
+                selected,
+                merge_distance=0.19,
+                min_cross_links=2,
+            ),
+            [
+                ["a1", "a2", "b1", "b2"],
+                ["c1", "c2"],
+            ],
+        )
+
+    def test_supported_merge_requires_member_coverage(self):
+        left = [f"a{i}" for i in range(10)]
+        right = [f"b{i}" for i in range(10)]
+        groups = [left, right]
+        selected = left + right
+
+        pairs = {
+            ("a0", "b0"): 0.10,
+            ("a1", "b1"): 0.10,
+        }
+
+        self.assertEqual(
+            _merge_supported_groups(
+                groups,
+                pairs,
+                selected,
+                merge_distance=0.19,
+                min_cross_links=2,
+            ),
+            groups,
         )
 
     def test_merge_algorithm_version_and_config_contract(self):
@@ -260,6 +315,7 @@ class SignalTests(unittest.TestCase):
                 ("e", "f", 0.10),
                 ("a", "c", 0.185),
                 ("b", "c", 0.190),
+                ("a", "d", 0.190),
                 ("d", "e", 0.05),
             ),
         )
