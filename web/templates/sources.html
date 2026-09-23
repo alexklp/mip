@@ -278,11 +278,11 @@
                                 {% endif %}
                             </td>
                             <td data-sort="{{ row.source_group }}">
-                                {% if row.source_group == "ua_space" %}Український простір
+                                <span class="space-label is-{{ row.source_group }}">{% if row.source_group == "ua_space" %}Український простір
                                 {% elif row.source_group == "ru_space" %}Російський простір
                                 {% elif row.source_group == "other" %}Інше
                                 {% else %}Невідомо
-                                {% endif %}
+                                {% endif %}</span>
                             </td>
                             <td data-sort="{{ 1 if row.is_active else 0 }}">
                                 <span class="flag {{ 'flag-yes' if row.is_active else 'flag-no' }}">
@@ -473,3 +473,4 @@
 
 </section>
 {% endblock %}
+

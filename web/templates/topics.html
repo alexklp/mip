@@ -2336,18 +2336,17 @@
                 meta.className =
                     "topics-evidence-meta";
 
-                meta.textContent =
-                    sourceTypeName(
-                        row.source_type
-                    ) +
-                    " · " +
-                    spaceName(
-                        row.source_group
-                    ) +
-                    " · " +
-                    formatKyiv(
-                        row.observed_at
-                    );
+                var spaceLabel = document.createElement("span");
+                spaceLabel.className = "space-label";
+                if (["ua_space", "ru_space"].indexOf(row.source_group) !== -1) {
+                    spaceLabel.classList.add("is-" + row.source_group);
+                }
+                spaceLabel.textContent = spaceName(row.source_group);
+                meta.append(
+                    document.createTextNode(sourceTypeName(row.source_type) + " · "),
+                    spaceLabel,
+                    document.createTextNode(" · " + formatKyiv(row.observed_at))
+                );
 
                 var text = document.createElement(
                     "p"
@@ -3042,3 +3041,4 @@
     {% endif %}
 </section>
 {% endblock %}\n\n\n
+

@@ -1512,6 +1512,12 @@
                 </span>
             </div>
 
+            {% if contour_signals.state == "stale" %}
+                <p role="status" class="signals-status signals-status-stale">
+                    Дані застаріли. Показано останній доступний стан.
+                </p>
+            {% endif %}
+
             {% if contour_signals.state in ["ready", "stale"]
                   and contour_signals.snapshot %}
 
@@ -3747,3 +3753,4 @@
 
 </div>
 {% endblock %}
+

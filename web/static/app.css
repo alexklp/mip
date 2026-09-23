@@ -5650,7 +5650,7 @@ a {
 }
 
 .contour-evidence-item[data-space="ru_space"] {
-    border-left-color: var(--contour-data-accent);
+    border-left-color: var(--space-ru);
 }
 
 .contour-evidence-meta {
@@ -5658,7 +5658,9 @@ a {
     min-width: 0;
 }
 
-.contour-space-label {
+.space-label,
+.contour-space-label,
+.signals-propagation-space {
     display: inline-flex;
     align-items: center;
     min-height: 20px;
@@ -5670,16 +5672,20 @@ a {
     font-weight: 700;
 }
 
-.contour-space-label.is-ua {
+.space-label.is-ua_space,
+.contour-space-label.is-ua,
+.signals-propagation-space.is-ua_space {
     color: var(--teal-tint);
     background: var(--teal-chip-bg);
     border-color: var(--teal-mid);
 }
 
-.contour-space-label.is-ru {
+.space-label.is-ru_space,
+.contour-space-label.is-ru,
+.signals-propagation-space.is-ru_space {
     color: var(--text);
     background: var(--surface-2);
-    border-color: var(--contour-data-accent);
+    border-color: var(--space-ru);
 }
 
 .contour-evidence-source {
@@ -5827,20 +5833,6 @@ a {
     color: var(--text-faint);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
-}
-
-.signals-propagation-space {
-    white-space: nowrap;
-    font-size: 0.68rem;
-    font-weight: 600;
-}
-
-.signals-propagation-space.is-ua_space {
-    color: var(--space-ua);
-}
-
-.signals-propagation-space.is-ru_space {
-    color: var(--space-ru);
 }
 
 .signals-propagation-row strong {
@@ -6284,3 +6276,4 @@ a {
     color: var(--text-muted);
     font-size: 0.72rem;
 }
+

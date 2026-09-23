@@ -90,11 +90,11 @@
                             <td>
                                 {{ row.source_name }}
                                 <span class="source-meta">
-                                    {% if row.source_group == "ua_space" %}Український простір
+                                    <span class="space-label is-{{ row.source_group }}">{% if row.source_group == "ua_space" %}Український простір
                                     {% elif row.source_group == "ru_space" %}Російський простір
                                     {% elif row.source_group == "other" %}Інше
                                     {% else %}Невідомо
-                                    {% endif %}
+                                    {% endif %}</span>
                                     /
                                     {% if row.source_type == "rss" %}RSS
                                     {% elif row.source_type == "telegram" %}Telegram
@@ -136,3 +136,4 @@
         </div>
     {% endif %}
 {% endblock %}
+

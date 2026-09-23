@@ -75,13 +75,13 @@
                                 <td>{{ fmt_kyiv_zoned(row.observed_at) }}</td>
                                 <td>{{ row.source_name }}</td>
                                 <td>
-                                    {% if row.source_group == "ua_space" %}
+                                    <span class="space-label is-{{ row.source_group }}">{% if row.source_group == "ua_space" %}
                                         Український
                                     {% elif row.source_group == "ru_space" %}
                                         Російський
                                     {% else %}
                                         Інший
-                                    {% endif %}
+                                    {% endif %}</span>
                                 </td>
                                 <td>
                                     {% if row.external_ref and row.external_ref.startswith("http") %}
@@ -108,3 +108,4 @@
         {% endif %}
     {% endif %}
 {% endblock %}
+
