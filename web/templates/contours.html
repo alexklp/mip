@@ -98,9 +98,14 @@
                     {% for row in trend %}
                         <a
                             class="contour-trend-column{% if selected_day == row.day %} is-selected{% endif %}{% if loop.last %} is-today{% endif %}"
+                            {% if analysis_layer != "signals" %}
                             href="{% if selected_day == row.day %}/contours?contour=dshv_objects{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% else %}/contours?contour=dshv_objects&day={{ row.day.isoformat() }}{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% endif %}"
                             aria-pressed="{% if selected_day == row.day %}true{% else %}false{% endif %}"
                             title="{% if selected_day == row.day %}Скинути фільтр за {{ row.day.strftime('%d.%m.%Y') }}{% else %}Показати матеріали за {{ row.day.strftime('%d.%m.%Y') }}{% endif %}"
+                            {% else %}
+                            aria-disabled="true"
+                            tabindex="-1"
+                            {% endif %}
                         >
                             <div
                                 class="contour-trend-track"
@@ -212,7 +217,7 @@
 
                 <span class="contour-analysis-scope">
                     C1{% if selected %} · {{ selected.display_name }}{% endif %} · 30 днів ·
-                    {{ contour_topics.summary.materials }} матеріалів ·
+                    {{ contour_topics.summary.materials }} матеріалів для тем ·
                     {{ contour_topics.summary.sources }} джерел
                 </span>
             </div>
@@ -1463,7 +1468,13 @@
         {% endif %}
 
         {% if analysis_layer == "signals" and not selected_day %}
-        <section class="contour-analysis-workspace">
+        <section
+            class="contour-analysis-workspace"
+            id="c1-signals-workspace"
+            {% if contour_signals.snapshot %}
+                data-as-of="{{ contour_signals.snapshot.as_of }}"
+            {% endif %}
+        >
 
             <div class="contour-analysis-toolbar">
                 <div
@@ -1488,120 +1499,1710 @@
 
                 <span class="contour-analysis-scope">
                     C1{% if selected %} · {{ selected.display_name }}{% endif %}
-                    · 24 год
                     {% if contour_signals.snapshot %}
+                        {% if contour_signals.snapshot.window is defined
+                              and contour_signals.snapshot.window.days is defined %}
+                            · {{ contour_signals.snapshot.window.days }} днів
+                        {% else %}
+                            · 24 год
+                        {% endif %}
                         ·
-                        {{ contour_signals.snapshot.selection.selected_content_count }}
-                        матеріалів у вибірці
+                        {{ contour_signals.snapshot.summary.materials_30d }} матеріалів для сигналів у вибірці
                     {% endif %}
                 </span>
             </div>
 
-            <section class="topics-panel">
-                <div class="topics-panel-head">
-                    <div>
-                        <h2>Сигнали контуру</h2>
-                        <p>
-                            Кандидати, виявлені в межах поточного контуру · 24 години.
-                        </p>
+            {% if contour_signals.state in ["ready", "stale"]
+                  and contour_signals.snapshot %}
+
+                {% set c1_snapshot = contour_signals.snapshot %}
+                {% set window_days = (
+                    c1_snapshot.window.days
+                    if c1_snapshot.window is defined
+                       and c1_snapshot.window.days is defined
+                    else none
+                ) %}
+
+                <div
+                    class="page-summary signals-summary"
+                    aria-label="Стан сигналів контуру"
+                >
+                    <div class="page-summary-item signals-summary-item">
+                        <span>Вікно</span>
+                        <strong>
+                            {% if window_days %}
+                                {{ window_days }} днів
+                            {% else %}
+                                24 години
+                            {% endif %}
+                        </strong>
+                        <span>
+                            до {{ fmt_kyiv_zoned(c1_snapshot.as_of) }}
+                        </span>
                     </div>
+
+                    <div class="page-summary-item signals-summary-item">
+                        <span>Виявлено</span>
+                        <strong>{{ c1_snapshot.candidates|length }}</strong>
+                        <span>сигналів</span>
+                    </div>
+
+                    {% if window_days %}
+                    <div class="page-summary-item signals-summary-item">
+                        <span>Активні</span>
+                        <strong>
+                            {{ c1_snapshot.summary.active_24h }}
+                        </strong>
+                        <span>за 24 год</span>
+                    </div>
+                    {% endif %}
                 </div>
 
-                {% if contour_signals.state == "ready" %}
-                    <div class="contour-evidence-list">
-                    {% for candidate in contour_signals.snapshot.candidates %}
-                        {% set first = candidate.chronology[0] if candidate.chronology else none %}
+                {% if c1_snapshot.candidates %}
 
-                        <article class="contour-evidence-item">
-                            <div class="contour-evidence-meta">
-                                <span
-                                    class="contour-space-label
-                                    {% if candidate.cross_space %}
-                                        is-cross
-                                    {% elif candidate.source_groups[0] == 'ua_space' %}
-                                        is-ua
-                                    {% elif candidate.source_groups[0] == 'ru_space' %}
-                                        is-ru
-                                    {% endif %}"
-                                >
-                                    {% if candidate.cross_space %}
-                                        Між просторами
-                                    {% elif candidate.source_groups[0] == "ua_space" %}
-                                        Український
-                                    {% else %}
-                                        Російський
-                                    {% endif %}
+                <div
+                    class="signals-toolbar"
+                    aria-label="Фільтри сигналів контуру"
+                >
+                    <label class="signals-search">
+                        <span class="sr-only">Пошук у сигналах</span>
+                        <span aria-hidden="true">⌕</span>
+                        <input
+                            id="c1-signals-query"
+                            type="search"
+                            placeholder="Знайти сигнал або джерело"
+                            autocomplete="off"
+                        >
+                    </label>
+
+                    <label class="signals-filter">
+                        <span class="sr-only">
+                            Фільтр за простором
+                        </span>
+                        <select id="c1-signals-space">
+                            <option value="all">Усі простори</option>
+                            <option value="ua_space">Український</option>
+                            <option value="ru_space">Російський</option>
+                            <option value="cross">Між просторами</option>
+                        </select>
+                    </label>
+
+                    <label class="signals-filter">
+                        <span class="sr-only">
+                            Фільтр за актуальністю
+                        </span>
+                        <select id="c1-signals-work-state">
+                            <option value="all">Усі стани</option>
+                            <option value="unreviewed">Не переглянуті</option>
+                            <option value="reviewed">Переглянуті</option>
+                            <option value="watch">Під наглядом</option>
+                            <option value="forward">Передані на реагування</option>
+                        </select>
+                    </label>
+
+                    <label class="signals-filter">
+                        <span class="sr-only">
+                            Фільтр за кількістю джерел
+                        </span>
+                        <select id="c1-signals-source-count">
+                            <option value="0">Джерел: 2+</option>
+                            <option value="3">Джерел: 3+</option>
+                            <option value="5">Джерел: 5+</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="signals-workbench">
+
+                    <aside
+                        class="signals-queue"
+                        aria-label="Черга сигналів"
+                    >
+                        <div class="signals-queue-head">
+                            <div>
+                                <strong>Виявлені сигнали</strong>
+                                <span>Порядок сформовано автоматично</span>
+                            </div>
+                        </div>
+
+                        <div
+                            class="signals-queue-list"
+                            role="tablist"
+                            aria-orientation="vertical"
+                        >
+                        {% for candidate in c1_snapshot.candidates %}
+
+                            {% set active24 = (
+                                candidate.active_24h
+                                if candidate.active_24h is defined
+                                else true
+                            ) %}
+
+                            {% set signal_title = (
+                                candidate.representative_title
+                                if candidate.representative_title
+                                else (
+                                    candidate.chronology[0].title
+                                    if candidate.chronology
+                                    else "Пов’язані публікації"
+                                )
+                            ) %}
+
+                            <button
+                                class="signals-queue-item{% if loop.first %} is-active{% endif %}"
+                                type="button"
+                                role="tab"
+                                id="c1-signal-tab-{{ candidate.candidate_id }}"
+                                aria-selected="{% if loop.first %}true{% else %}false{% endif %}"
+                                aria-controls="c1-signal-panel-{{ candidate.candidate_id }}"
+                                tabindex="{% if loop.first %}0{% else %}-1{% endif %}"
+                                data-c1-signal-item
+                                data-target="c1-signal-panel-{{ candidate.candidate_id }}"
+                                data-space="{{ candidate.source_groups|join(' ') }}"
+                                data-cross="{% if candidate.cross_space %}true{% else %}false{% endif %}"
+                                data-active24="{% if active24 %}true{% else %}false{% endif %}"
+                                data-source-count="{{ candidate.source_count }}"
+                                data-reviewed="false"
+                                data-watch="false"
+                                data-forward="false"
+                                data-search="{{ candidate.search_text or signal_title }}{% for row in candidate.chronology %} {{ row.source_name }}{% endfor %}"
+                            >
+                                <span class="signals-queue-topline">
+                                    <span class="signals-queue-rank">
+                                        {{ "%02d"|format(loop.index) }}
+                                    </span>
+
+                                    <span class="signals-queue-space">
+                                        {% if candidate.cross_space %}
+                                            Між просторами
+                                        {% elif candidate.source_groups[0] == "ua_space" %}
+                                            Український
+                                        {% else %}
+                                            Російський
+                                        {% endif %}
+                                    </span>
+
+                                    <span class="signals-queue-count">
+                                        {{ candidate.source_count }} дж.
+                                    </span>
                                 </span>
 
-                                <strong class="contour-evidence-source">
-                                    {{ candidate.source_count }} джерел
-                                    · {{ candidate.occurrence_count }} публікацій
-                                    · {{ candidate.content_count }} матеріалів
-                                </strong>
-                            </div>
+                                <span class="signals-queue-title">
+                                    {{ signal_title }}
+                                </span>
 
-                            <h3>
-                                {{ first.title if first and first.title else "Пов’язані публікації" }}
-                            </h3>
+                                <span class="signals-queue-meta">
+                                    <span>
+                                        {{ candidate.occurrence_count }} публ.
+                                        ·
+                                        {{ candidate.content_count }} мат.
+                                    </span>
 
-                            <p>
-                                Кандидат сигналу ·
-                                без семантичного вердикту.
-                            </p>
+                                    {% if active24 %}
+                                        <span>Активний 24 год</span>
+                                    {% else %}
+                                        <span
+                                            data-c1-relative-time="{{ candidate.last_observed }}"
+                                        >
+                                            {{ fmt_kyiv_zoned(candidate.last_observed) }}
+                                        </span>
+                                    {% endif %}
+                                </span>
+                            </button>
+                        {% endfor %}
+                        </div>
 
-                            {% for row in candidate.chronology[:6] %}
-                            <div class="contour-evidence-match">
-                                <strong>{{ row.source_name }}</strong>
-                                {% if row.published_at %}
-                                    · {{ fmt_kyiv_zoned(row.published_at) }}
-                                {% endif %}
+                        <p
+                            class="signals-queue-empty"
+                            id="c1-signals-empty-filter"
+                            hidden
+                        >
+                            За цими умовами сигналів немає.
+                        </p>
+                    </aside>
 
-                                {% if row.safe_link %}
-                                    ·
-                                    <a
-                                        href="{{ row.safe_link }}"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                    <div
+                        class="signals-detail"
+                        role="region"
+                        aria-label="Деталі вибраного сигналу"
+                    >
+                    {% for candidate in c1_snapshot.candidates %}
+
+                        {% set active24 = (
+                            candidate.active_24h
+                            if candidate.active_24h is defined
+                            else true
+                        ) %}
+
+                        {% set signal_title = (
+                            candidate.representative_title
+                            if candidate.representative_title
+                            else (
+                                candidate.chronology[0].title
+                                if candidate.chronology
+                                else "Пов’язані публікації"
+                            )
+                        ) %}
+
+                        <article
+                            class="signals-panel"
+                            id="c1-signal-panel-{{ candidate.candidate_id }}"
+                            role="tabpanel"
+                            aria-labelledby="c1-signal-tab-{{ candidate.candidate_id }}"
+                            tabindex="0"
+                            {% if not loop.first %}hidden{% endif %}
+                        >
+                            <header class="signals-panel-head">
+
+                                <div class="signals-panel-eyebrow">
+                                    <span
+                                        class="badge {% if candidate.cross_space %}signals-badge-cross{% else %}signals-badge-space{% endif %}"
                                     >
-                                        Відкрити джерело ↗
-                                    </a>
-                                {% endif %}
+                                        {% if candidate.cross_space %}
+                                            Між просторами
+                                        {% elif candidate.source_groups[0] == "ua_space" %}
+                                            Український простір
+                                        {% else %}
+                                            Російський простір
+                                        {% endif %}
+                                    </span>
+
+                                    {% if active24 %}
+                                        <span class="badge">
+                                            Активний 24 год
+                                        </span>
+                                    {% else %}
+                                        <span
+                                            class="badge"
+                                            data-c1-relative-time="{{ candidate.last_observed }}"
+                                        >
+                                            {{ fmt_kyiv_zoned(candidate.last_observed) }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+
+                                <h2>{{ signal_title }}</h2>
+
+                                <div
+                                    class="signals-panel-counts"
+                                    aria-label="Обсяг сигналу"
+                                >
+                                    <span>
+                                        <strong>{{ candidate.source_count }}</strong>
+                                        джерел
+                                    </span>
+
+                                    <span>
+                                        <strong>{{ candidate.occurrence_count }}</strong>
+                                        публікацій
+                                    </span>
+
+                                    <span>
+                                        <strong>{{ candidate.content_count }}</strong>
+                                        матеріалів
+                                    </span>
+
+                                    {% if candidate.span_hours is defined %}
+                                    <span>
+                                        тривалість
+                                        <strong>
+                                            {{ "%.1f"|format(candidate.span_hours) }}
+                                        </strong>
+                                        год
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </header>
+
+                            <div
+                                class="signals-actions"
+                                data-c1-signal-actions
+                                data-signal-key="{% if candidate.representative_content_id is defined %}{{ candidate.representative_content_id }}{% else %}{{ candidate.candidate_id }}{% endif %}"
+                                data-signal-target="c1-signal-panel-{{ candidate.candidate_id }}"
+                                aria-label="Дії з сигналом"
+                            >
+                                <div
+                                    class="signals-action-buttons"
+                                    role="group"
+                                    aria-label="Дії аналітика"
+                                >
+                                    <button
+                                        type="button"
+                                        class="signals-action-button"
+                                        data-action-flag="reviewed"
+                                        aria-pressed="false"
+                                    >
+                                        Переглянуто
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        class="signals-action-button"
+                                        data-action-flag="watch"
+                                        aria-pressed="false"
+                                    >
+                                        Стежити
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        class="signals-action-button"
+                                        data-action-flag="forward"
+                                        aria-pressed="false"
+                                    >
+                                        Передати на реагування
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        class="signals-action-button"
+                                        data-action-flag="not_same"
+                                        aria-pressed="false"
+                                    >
+                                        Не один сюжет
+                                    </button>
+                                </div>
                             </div>
-                            {% endfor %}
+
+                            <section
+                                class="signals-section signals-section-dynamics"
+                            >
+                                <div class="signals-section-head">
+                                    <h3>Поширення сигналу</h3>
+                                    <span>
+                                        {{ candidate.occurrence_count }}
+                                        публікацій ·
+                                        {{ candidate.span_hours|round(1) }}
+                                        год
+                                    </span>
+                                </div>
+
+                                <div
+                                    class="signals-spread"
+                                    data-c1-spread
+                                    data-start="{{ candidate.first_published_at }}"
+                                    data-end="{{ candidate.last_published_at }}"
+                                    aria-label="Часове поширення сигналу"
+                                >
+                                    <div
+                                        class="signals-spread-clock"
+                                        data-c1-spread-clock
+                                        aria-hidden="true"
+                                    ></div>
+
+                                    <div
+                                        class="signals-spread-track"
+                                        data-c1-spread-track
+                                    >
+                                        <div
+                                            class="signals-spread-axis"
+                                            aria-hidden="true"
+                                        ></div>
+
+                                        {% for row in candidate.chronology %}
+                                            {% set observed_at = (
+                                                row.published_at
+                                                or row.collected_at
+                                            ) %}
+
+                                            {% if observed_at %}
+                                            <span
+                                                class="
+                                                    signals-spread-point
+                                                    signals-spread-point-{{ row.source_group }}
+                                                "
+                                                data-c1-spread-point
+                                                data-time="{{ observed_at }}"
+                                                tabindex="0"
+                                                role="img"
+                                                aria-label="{{ row.source_name }} · {{ fmt_kyiv_zoned(observed_at) }}"
+                                            >
+                                                <span
+                                                    class="signals-spread-tooltip"
+                                                    role="tooltip"
+                                                >
+                                                    <strong>
+                                                        {{ row.source_name }}
+                                                    </strong>
+                                                    <span>
+                                                        {{ fmt_kyiv_zoned(observed_at) }}
+                                                    </span>
+                                                </span>
+                                            </span>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+
+                                    <div
+                                        class="signals-spread-scale"
+                                        data-c1-spread-scale
+                                        aria-hidden="true"
+                                    >
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </div>
+
+                                    <div class="signals-spread-legend">
+                                        {% if "ua_space" in candidate.source_groups %}
+                                        <span>
+                                            <i
+                                                class="signals-spread-legend-dot is-ua"
+                                                aria-hidden="true"
+                                            ></i>
+                                            Український
+                                        </span>
+                                        {% endif %}
+
+                                        {% if "ru_space" in candidate.source_groups %}
+                                        <span>
+                                            <i
+                                                class="signals-spread-legend-dot is-ru"
+                                                aria-hidden="true"
+                                            ></i>
+                                            Російський
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="signals-section">
+                                <div class="signals-propagation">
+                                    <div class="signals-propagation-head">
+                                        <strong>Хронологія сигналу</strong>
+                                        <span>
+                                            {{ candidate.occurrence_count }}
+                                            публікацій ·
+                                            {{ candidate.source_count }}
+                                            джерел
+                                        </span>
+                                    </div>
+
+                                    <div class="signals-propagation-list">
+                                        {% for row in candidate.chronology %}
+                                        <div class="signals-propagation-row">
+                                            <time
+                                                datetime="{{ row.published_at or row.collected_at }}"
+                                            >
+                                                {{ fmt_kyiv_zoned(
+                                                    row.published_at
+                                                    or row.collected_at
+                                                ) }}
+                                            </time>
+
+                                            <span
+                                                class="signals-propagation-space is-{{ row.source_group }}"
+                                            >
+                                                {% if row.source_group == "ua_space" %}
+                                                    Український
+                                                {% elif row.source_group == "ru_space" %}
+                                                    Російський
+                                                {% else %}
+                                                    {{ row.source_group }}
+                                                {% endif %}
+                                            </span>
+
+                                            <strong>
+                                                {{ row.source_name or row.source_id }}
+                                            </strong>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </section>
+
+                            {% if candidate.cross_space %}
+                            <section class="signals-section signals-key-evidence">
+                                <div class="signals-section-head">
+                                    <h3>Формулювання у просторах</h3>
+                                </div>
+
+                                <div class="signals-evidence-list">
+                                    {% for group in ["ua_space", "ru_space"]
+                                       if group in candidate.source_groups %}
+                                        {% set sample = namespace(
+                                            found=false,
+                                            row=none
+                                        ) %}
+
+                                        {% for row in candidate.chronology
+                                           if row.source_group == group %}
+                                            {% if not sample.found %}
+                                                {% set sample.found = true %}
+                                                {% set sample.row = row %}
+                                            {% endif %}
+                                        {% endfor %}
+
+                                        {% if sample.row %}
+                                        <article class="signals-evidence">
+                                            <header>
+                                                <div>
+                                                    <strong>
+                                                        {% if group == "ua_space" %}
+                                                            Український простір
+                                                        {% else %}
+                                                            Російський простір
+                                                        {% endif %}
+                                                    </strong>
+
+                                                    <span class="signals-source-type">
+                                                        · {{ sample.row.source_name }}
+                                                    </span>
+                                                </div>
+                                            </header>
+
+                                            {% if sample.row.title %}
+                                            <h4>{{ sample.row.title }}</h4>
+                                            {% endif %}
+
+                                            {% if sample.row.text %}
+                                            <blockquote>{{ sample.row.text }}{% if sample.row.text_truncated %}…{% endif %}</blockquote>
+                                            {% endif %}
+                                        </article>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </section>
+
+                            {% else %}
+                                {% set key = namespace(row=none) %}
+
+                                {% for row in candidate.chronology %}
+                                    {% if
+                                        key.row is none
+                                        and row.content_id
+                                            == candidate.representative_content_id
+                                    %}
+                                        {% set key.row = row %}
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% if key.row and key.row.text %}
+                                <section class="signals-section signals-key-evidence">
+                                    <div class="signals-section-head">
+                                        <h3>Ключовий фрагмент</h3>
+                                    </div>
+
+                                    <blockquote>{{ key.row.text }}{% if key.row.text_truncated %}…{% endif %}</blockquote>
+                                </section>
+                                {% endif %}
+                            {% endif %}
+
+                            <section
+                                class="signals-section signals-section-evidence"
+                            >
+                                <div class="signals-section-head">
+                                    <h3>Публікації та джерела</h3>
+                                    <span>
+                                        {{ candidate.occurrence_count }}
+                                        з {{ candidate.occurrence_count }}
+                                        показано
+                                    </span>
+                                </div>
+
+                                <div class="signals-evidence-list">
+                                {% for row in candidate.chronology %}
+                                    <article class="signals-evidence">
+                                        <header>
+                                            <span class="signals-evidence-index">
+                                                {{ "%02d"|format(loop.index) }}
+                                            </span>
+
+                                            <div>
+                                                <strong>
+                                                    {{ row.source_name or row.source_id }}
+                                                </strong>
+
+                                                <span class="signals-source-type">
+                                                    ·
+                                                    {% if row.source_type == "telegram" %}
+                                                        Telegram
+                                                    {% elif row.source_type == "rss" %}
+                                                        RSS
+                                                    {% elif row.source_type == "web" %}
+                                                        Сайт
+                                                    {% else %}
+                                                        {{ row.source_type }}
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+
+                                            {% if row.safe_link %}
+                                            <a
+                                                class="signals-source-link"
+                                                href="{{ row.safe_link }}"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                Відкрити джерело ↗
+                                            </a>
+                                            {% endif %}
+                                        </header>
+
+                                        {% if row.title %}
+                                        <h4>{{ row.title }}</h4>
+                                        {% endif %}
+
+                                        {% if row.text %}
+                                        <blockquote>{{ row.text }}{% if row.text_truncated %}…{% endif %}</blockquote>
+                                        {% endif %}
+
+                                        <dl class="signals-evidence-time">
+                                            <div>
+                                                <dt>
+                                                    {% if row.published_at %}
+                                                        Опубліковано
+                                                    {% else %}
+                                                        Зафіксовано
+                                                    {% endif %}
+                                                </dt>
+                                                <dd>
+                                                    {{ fmt_kyiv_zoned(
+                                                        row.published_at
+                                                        or row.collected_at
+                                                    ) }}
+                                                </dd>
+                                            </div>
+                                        </dl>
+                                    </article>
+                                {% endfor %}
+                                </div>
+                            </section>
+
                         </article>
                     {% endfor %}
                     </div>
-
-                {% elif contour_signals.state == "empty" %}
-                    <div class="materials-empty">
-                        <strong>Кандидатів сигналів не виявлено.</strong>
-
-                        {% if contour_signals.snapshot %}
-
-                        {% endif %}
-                    </div>
-
-                {% elif contour_signals.state == "stale" %}
-                    <div class="materials-empty">
-                        Scoped Signals snapshot застарів.
-                    </div>
-
-                {% elif contour_signals.state == "missing" %}
-                    <div class="materials-empty">
-                        Для цього scope Signals snapshot ще не сформовано.
-                    </div>
+                </div>
 
                 {% else %}
                     <div class="materials-empty">
-                        Scoped Signals snapshot недоступний або не пройшов валідацію.
+                        Сигналів у вибірці немає.
                     </div>
                 {% endif %}
-            </section>
+
+            {% elif contour_signals.state == "empty" %}
+                <div class="materials-empty">
+                    Сигналів у вибірці немає.
+                </div>
+
+            {% elif contour_signals.state == "stale" %}
+                <div class="materials-empty">
+                    Дані сигналів потребують оновлення.
+                </div>
+
+            {% elif contour_signals.state == "missing" %}
+                <div class="materials-empty">
+                    Дані сигналів ще не сформовано.
+                </div>
+
+            {% else %}
+                <div class="materials-empty">
+                    Дані сигналів недоступні.
+                </div>
+            {% endif %}
 
         </section>
+
+        <script>
+(function () {
+    "use strict";
+
+    var root = document.getElementById(
+        "c1-signals-workspace"
+    );
+
+    if (!root) return;
+
+    var items = Array.prototype.slice.call(
+        root.querySelectorAll(
+            "[data-c1-signal-item]"
+        )
+    );
+
+    var panels = Array.prototype.slice.call(
+        root.querySelectorAll(
+            ".signals-panel"
+        )
+    );
+
+    var query = document.getElementById(
+        "c1-signals-query"
+    );
+
+    var space = document.getElementById(
+        "c1-signals-space"
+    );
+
+    var workState = document.getElementById(
+        "c1-signals-work-state"
+    );
+
+    var sourceCount = document.getElementById(
+        "c1-signals-source-count"
+    );
+
+    var empty = document.getElementById(
+        "c1-signals-empty-filter"
+    );
+
+
+    function visibleItems() {
+        return items.filter(
+            function (item) {
+                return !item.hidden;
+            }
+        );
+    }
+
+
+    function activate(item, moveFocus) {
+        if (!item || item.hidden) return;
+
+        items.forEach(function (candidate) {
+            var active =
+                candidate === item;
+
+            candidate.classList.toggle(
+                "is-active",
+                active
+            );
+
+            candidate.setAttribute(
+                "aria-selected",
+                active ? "true" : "false"
+            );
+
+            candidate.tabIndex =
+                active ? 0 : -1;
+        });
+
+        panels.forEach(function (panel) {
+            panel.hidden =
+                panel.id !==
+                item.dataset.target;
+        });
+
+        if (
+            window.history &&
+            window.history.replaceState
+        ) {
+            window.history.replaceState(
+                null,
+                "",
+                "#" + item.dataset.target
+            );
+        }
+
+        if (moveFocus) {
+            item.focus();
+        }
+    }
+
+
+    function applyFilters() {
+        var needle = query
+            ? query.value
+                .trim()
+                .toLocaleLowerCase("uk")
+            : "";
+
+        var selectedSpace = space
+            ? space.value
+            : "all";
+
+        var selectedWorkState = workState
+            ? workState.value
+            : "all";
+
+        var minimumSources = sourceCount
+            ? Number(
+                sourceCount.value || 0
+            )
+            : 0;
+
+        items.forEach(function (item) {
+            var searchText = String(
+                item.dataset.search || ""
+            ).toLocaleLowerCase("uk");
+
+            var matchesText =
+                !needle ||
+                searchText.indexOf(
+                    needle
+                ) !== -1;
+
+            var spaces = String(
+                item.dataset.space || ""
+            ).split(" ");
+
+            var matchesSpace =
+                selectedSpace === "all" ||
+                (
+                    selectedSpace === "cross"
+                        ? (
+                            item.dataset.cross
+                            === "true"
+                        )
+                        : (
+                            item.dataset.cross
+                            !== "true" &&
+                            spaces.indexOf(
+                                selectedSpace
+                            ) !== -1
+                        )
+                );
+
+            var matchesWorkState =
+                selectedWorkState === "all" ||
+                (
+                    selectedWorkState
+                    === "unreviewed" &&
+                    item.dataset.reviewed
+                    !== "true"
+                ) ||
+                (
+                    selectedWorkState
+                    === "reviewed" &&
+                    item.dataset.reviewed
+                    === "true"
+                ) ||
+                (
+                    selectedWorkState
+                    === "watch" &&
+                    item.dataset.watch
+                    === "true"
+                ) ||
+                (
+                    selectedWorkState
+                    === "forward" &&
+                    item.dataset.forward
+                    === "true"
+                );
+
+            var matchesSourceCount =
+                Number(
+                    item.dataset.sourceCount
+                    || 0
+                ) >= minimumSources;
+
+            item.hidden = !(
+                matchesText &&
+                matchesSpace &&
+                matchesWorkState &&
+                matchesSourceCount
+            );
+        });
+
+        var visible = visibleItems();
+
+        if (empty) {
+            empty.hidden =
+                visible.length !== 0;
+        }
+
+        var active = items.filter(
+            function (item) {
+                return (
+                    item.getAttribute(
+                        "aria-selected"
+                    ) === "true"
+                );
+            }
+        )[0];
+
+        if (!visible.length) {
+            panels.forEach(
+                function (panel) {
+                    panel.hidden = true;
+                }
+            );
+            return;
+        }
+
+        if (!active || active.hidden) {
+            active = visible[0];
+        }
+
+        activate(
+            active,
+            false
+        );
+    }
+
+
+    items.forEach(function (item) {
+        item.addEventListener(
+            "click",
+            function () {
+                activate(
+                    item,
+                    false
+                );
+            }
+        );
+
+        item.addEventListener(
+            "keydown",
+            function (event) {
+                var visible =
+                    visibleItems();
+
+                if (!visible.length) {
+                    return;
+                }
+
+                var index =
+                    visible.indexOf(item);
+
+                if (index < 0) {
+                    return;
+                }
+
+                var next = null;
+
+                if (
+                    event.key ===
+                    "ArrowDown"
+                ) {
+                    next = visible[
+                        (
+                            index + 1
+                        ) % visible.length
+                    ];
+                }
+
+                if (
+                    event.key ===
+                    "ArrowUp"
+                ) {
+                    next = visible[
+                        (
+                            index - 1 +
+                            visible.length
+                        ) % visible.length
+                    ];
+                }
+
+                if (
+                    event.key ===
+                    "Home"
+                ) {
+                    next = visible[0];
+                }
+
+                if (
+                    event.key ===
+                    "End"
+                ) {
+                    next = visible[
+                        visible.length - 1
+                    ];
+                }
+
+                if (next) {
+                    event.preventDefault();
+
+                    activate(
+                        next,
+                        true
+                    );
+                }
+            }
+        );
+    });
+
+
+    if (query) {
+        query.addEventListener(
+            "input",
+            applyFilters
+        );
+    }
+
+    [
+        space,
+        workState,
+        sourceCount
+    ].forEach(function (control) {
+        if (control) {
+            control.addEventListener(
+                "change",
+                applyFilters
+            );
+        }
+    });
+
+
+    function restoreSelect(
+        control,
+        key,
+        fallback
+    ) {
+        if (!control) return;
+
+        try {
+            var stored =
+                window.sessionStorage
+                    .getItem(key);
+
+            if (
+                stored &&
+                control.querySelector(
+                    'option[value="' +
+                    CSS.escape(stored) +
+                    '"]'
+                )
+            ) {
+                control.value = stored;
+            } else {
+                control.value = fallback;
+            }
+        } catch (error) {
+            control.value = fallback;
+        }
+    }
+
+
+    try {
+        if (query) {
+            query.value =
+                window.sessionStorage
+                    .getItem(
+                        "mip-c1-signals-query"
+                    )
+                || "";
+        }
+
+        restoreSelect(
+            space,
+            "mip-c1-signals-space",
+            "all"
+        );
+
+        restoreSelect(
+            workState,
+            "mip-c1-signals-work-state",
+            "all"
+        );
+
+        restoreSelect(
+            sourceCount,
+            "mip-c1-signals-source-count",
+            "0"
+        );
+
+        if (query) {
+            query.addEventListener(
+                "input",
+                function () {
+                    window.sessionStorage
+                        .setItem(
+                            "mip-c1-signals-query",
+                            query.value
+                        );
+                }
+            );
+        }
+
+        [
+            [
+                space,
+                "mip-c1-signals-space"
+            ],
+            [
+                workState,
+                "mip-c1-signals-work-state"
+            ],
+            [
+                sourceCount,
+                "mip-c1-signals-source-count"
+            ]
+        ].forEach(function (entry) {
+            if (!entry[0]) return;
+
+            entry[0].addEventListener(
+                "change",
+                function () {
+                    window.sessionStorage
+                        .setItem(
+                            entry[1],
+                            entry[0].value
+                        );
+                }
+            );
+        });
+
+    } catch (error) {
+        /* Filters still work without browser storage. */
+    }
+
+
+    var actionBars =
+        Array.prototype.slice.call(
+            root.querySelectorAll(
+                "[data-c1-signal-actions]"
+            )
+        );
+
+    var actionFlagNames = [
+        "reviewed",
+        "watch",
+        "forward",
+        "not_same"
+    ];
+
+
+    function actionStorageKey(bar) {
+        return (
+            "mip-c1-signal-action-" +
+            bar.dataset.signalKey
+        );
+    }
+
+
+    function emptyActionFlags() {
+        return {
+            reviewed: false,
+            watch: false,
+            forward: false,
+            not_same: false
+        };
+    }
+
+
+    function readActionFlags(bar) {
+        var flags =
+            emptyActionFlags();
+
+        try {
+            var raw =
+                window.sessionStorage
+                    .getItem(
+                        actionStorageKey(bar)
+                    );
+
+            if (!raw) {
+                return flags;
+            }
+
+            var parsed =
+                JSON.parse(raw);
+
+            if (
+                parsed &&
+                typeof parsed === "object"
+            ) {
+                actionFlagNames.forEach(
+                    function (name) {
+                        flags[name] =
+                            parsed[name]
+                            === true;
+                    }
+                );
+            }
+
+        } catch (error) {
+            /* Invalid/old local state is ignored. */
+        }
+
+        return flags;
+    }
+
+
+    function writeActionFlags(
+        bar,
+        flags
+    ) {
+        try {
+            window.sessionStorage
+                .setItem(
+                    actionStorageKey(bar),
+                    JSON.stringify(flags)
+                );
+        } catch (error) {
+            /* Actions work without storage. */
+        }
+    }
+
+
+    function applyActionFlags(
+        bar,
+        flags
+    ) {
+        Array.prototype.slice.call(
+            bar.querySelectorAll(
+                "[data-action-flag]"
+            )
+        ).forEach(function (button) {
+            var name =
+                button.dataset.actionFlag;
+
+            var active =
+                flags[name] === true;
+
+            button.classList.toggle(
+                "is-active",
+                active
+            );
+
+            button.setAttribute(
+                "aria-pressed",
+                active
+                    ? "true"
+                    : "false"
+            );
+
+            if (name === "forward") {
+                button.textContent =
+                    active
+                        ? "Передано на реагування"
+                        : "Передати на реагування";
+            }
+        });
+
+        var item = items.filter(
+            function (candidate) {
+                return (
+                    candidate.dataset.target
+                    ===
+                    bar.dataset.signalTarget
+                );
+            }
+        )[0];
+
+        if (item) {
+            item.dataset.reviewed =
+                flags.reviewed
+                    ? "true"
+                    : "false";
+
+            item.dataset.watch =
+                flags.watch
+                    ? "true"
+                    : "false";
+
+            item.dataset.forward =
+                flags.forward
+                    ? "true"
+                    : "false";
+        }
+    }
+
+
+    actionBars.forEach(function (bar) {
+        var flags =
+            readActionFlags(bar);
+
+        applyActionFlags(
+            bar,
+            flags
+        );
+
+        Array.prototype.slice.call(
+            bar.querySelectorAll(
+                "[data-action-flag]"
+            )
+        ).forEach(function (button) {
+            button.addEventListener(
+                "click",
+                function () {
+                    var name =
+                        button.dataset.actionFlag;
+
+                    flags[name] =
+                        !flags[name];
+
+                    writeActionFlags(
+                        bar,
+                        flags
+                    );
+
+                    applyActionFlags(
+                        bar,
+                        flags
+                    );
+
+                    applyFilters();
+                }
+            );
+        });
+    });
+
+
+    function dayWord(days) {
+        var mod10 = days % 10;
+        var mod100 = days % 100;
+
+        if (
+            mod10 === 1 &&
+            mod100 !== 11
+        ) {
+            return "день";
+        }
+
+        if (
+            [2, 3, 4]
+                .indexOf(mod10)
+                !== -1 &&
+            [12, 13, 14]
+                .indexOf(mod100)
+                === -1
+        ) {
+            return "дні";
+        }
+
+        return "днів";
+    }
+
+
+    var asOf = new Date(
+        root.dataset.asOf ||
+        Date.now()
+    );
+
+    root.querySelectorAll(
+        "[data-c1-relative-time]"
+    ).forEach(function (node) {
+        var value = new Date(
+            node.dataset.c1RelativeTime
+        );
+
+        if (
+            !Number.isFinite(
+                value.getTime()
+            ) ||
+            !Number.isFinite(
+                asOf.getTime()
+            )
+        ) {
+            return;
+        }
+
+        var hours = Math.max(
+            0,
+            (
+                asOf.getTime()
+                -
+                value.getTime()
+            ) / 3600000
+        );
+
+        if (hours < 24) {
+            node.textContent =
+                "Активний 24 год";
+
+            return;
+        }
+
+        var days =
+            Math.floor(
+                hours / 24
+            );
+
+        node.textContent =
+            "Остання активність " +
+            days +
+            " " +
+            dayWord(days) +
+            " тому";
+    });
+
+
+    function initSpreadTimelines() {
+        var MIN_SEPARATION_PERCENT =
+            0.65;
+
+        var MAX_LANES = 7;
+
+        var formatter =
+            new Intl.DateTimeFormat(
+                "uk-UA",
+                {
+                    timeZone:
+                        "Europe/Kyiv",
+                    day: "2-digit",
+                    month: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }
+            );
+
+        root.querySelectorAll(
+            "[data-c1-spread]"
+        ).forEach(function (timeline) {
+            var start = Date.parse(
+                timeline.dataset.start
+            );
+
+            var end = Date.parse(
+                timeline.dataset.end
+            );
+
+            if (
+                !Number.isFinite(start) ||
+                !Number.isFinite(end)
+            ) {
+                timeline.hidden = true;
+                return;
+            }
+
+            if (end <= start) {
+                end =
+                    start +
+                    60 * 60 * 1000;
+            }
+
+            var duration =
+                end - start;
+
+            var points =
+                Array.prototype.slice.call(
+                    timeline.querySelectorAll(
+                        "[data-c1-spread-point]"
+                    )
+                )
+                .map(function (point) {
+                    return {
+                        element: point,
+                        time: Date.parse(
+                            point.dataset.time
+                        )
+                    };
+                })
+                .filter(function (item) {
+                    return Number.isFinite(
+                        item.time
+                    );
+                })
+                .sort(function (a, b) {
+                    return a.time - b.time;
+                });
+
+            if (!points.length) {
+                timeline.hidden = true;
+                return;
+            }
+
+            var laneLastX = [];
+
+            for (
+                var laneIndex = 0;
+                laneIndex < MAX_LANES;
+                laneIndex += 1
+            ) {
+                laneLastX.push(
+                    -Infinity
+                );
+            }
+
+            points.forEach(
+                function (item, index) {
+                    var x = (
+                        (
+                            item.time -
+                            start
+                        ) /
+                        duration
+                    ) * 100;
+
+                    x = Math.max(
+                        0,
+                        Math.min(
+                            100,
+                            x
+                        )
+                    );
+
+                    var lane = -1;
+
+                    for (
+                        var i = 0;
+                        i < MAX_LANES;
+                        i += 1
+                    ) {
+                        if (
+                            x -
+                            laneLastX[i]
+                            >=
+                            MIN_SEPARATION_PERCENT
+                        ) {
+                            lane = i;
+                            break;
+                        }
+                    }
+
+                    if (lane === -1) {
+                        lane =
+                            laneLastX.indexOf(
+                                Math.min.apply(
+                                    null,
+                                    laneLastX
+                                )
+                            );
+                    }
+
+                    laneLastX[lane] = x;
+
+                    item.element.style
+                        .setProperty(
+                            "--spread-x",
+                            x.toFixed(3)
+                            + "%"
+                        );
+
+                    item.element.style
+                        .setProperty(
+                            "--spread-lane",
+                            lane
+                        );
+
+                    if (index === 0) {
+                        item.element
+                            .classList.add(
+                                "is-first"
+                            );
+                    }
+
+                    if (x < 11) {
+                        item.element
+                            .classList.add(
+                                "is-left-edge"
+                            );
+                    } else if (x > 89) {
+                        item.element
+                            .classList.add(
+                                "is-right-edge"
+                            );
+                    }
+                }
+            );
+
+            var clock =
+                timeline.querySelector(
+                    "[data-c1-spread-clock]"
+                );
+
+            if (clock) {
+                [
+                    0,
+                    0.25,
+                    0.5,
+                    0.75,
+                    1
+                ].forEach(
+                    function (
+                        fraction,
+                        index
+                    ) {
+                        var tick =
+                            document
+                                .createElement(
+                                    "span"
+                                );
+
+                        tick.className =
+                            "signals-spread-clock-tick";
+
+                        if (index === 0) {
+                            tick.classList
+                                .add(
+                                    "is-start"
+                                );
+                        }
+
+                        if (index === 4) {
+                            tick.classList
+                                .add(
+                                    "is-end"
+                                );
+                        }
+
+                        tick.style.left =
+                            (
+                                fraction * 100
+                            ) + "%";
+
+                        tick.textContent =
+                            formatter.format(
+                                new Date(
+                                    start +
+                                    duration *
+                                    fraction
+                                )
+                            );
+
+                        clock.appendChild(
+                            tick
+                        );
+                    }
+                );
+            }
+
+            var scale =
+                timeline.querySelectorAll(
+                    "[data-c1-spread-scale] span"
+                );
+
+            var totalHours =
+                duration / 3600000;
+
+            Array.prototype.forEach.call(
+                scale,
+                function (node, index) {
+                    var hours =
+                        totalHours *
+                        index / 4;
+
+                    node.textContent =
+                        index === 0
+                            ? "0"
+                            : (
+                                "+"
+                                +
+                                Math.round(
+                                    hours
+                                )
+                                +
+                                " год"
+                            );
+                }
+            );
+        });
+    }
+
+
+    initSpreadTimelines();
+
+
+    var hashItem = items.filter(
+        function (item) {
+            return (
+                "#" +
+                item.dataset.target
+                ===
+                window.location.hash
+            );
+        }
+    )[0];
+
+    if (hashItem) {
+        activate(
+            hashItem,
+            false
+        );
+    }
+
+    applyFilters();
+
+}());
+</script>
+
         {% endif %}
 
-        {% if selected or selected_day %}
+        {% if (selected or selected_day) and analysis_layer != "signals" %}
         <div class="contour-active-filters" aria-label="Активні фільтри">
             <span class="contour-active-filters-label">Показано:</span>
 
@@ -1626,7 +3227,7 @@
         </div>
         {% endif %}
 
-        {% if selected %}
+        {% if selected and analysis_layer != "signals" %}
         <section class="contour-object">
 
             <header class="contour-object-head">
@@ -1747,6 +3348,7 @@
 
         {% endif %}
 
+        {% if analysis_layer != "signals" %}
         <section class="contour-evidence">
             <div class="contour-section-head">
                 <div>
@@ -1761,7 +3363,6 @@
                         {% if selected %}
                             Публікації про вибраний об'єкт
                             за останні 30 днів.
-                            Одна строка — одна публікація, не окрема подія.
                         {% elif selected_day %}
                             Публікації про об'єкти ДШВ за
                             {{ selected_day.strftime("%d.%m.%Y") }}.
@@ -2098,6 +3699,9 @@
             </div>
         </section>
 
+        {% endif %}
+
+        {% if analysis_layer != "signals" %}
         <details class="contour-quiet">
             <summary>
                 Інші об'єкти без нових згадок за 24 години
@@ -2125,6 +3729,7 @@
                 {% endfor %}
             </div>
         </details>
+        {% endif %}
 
     {% else %}
 

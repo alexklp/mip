@@ -295,6 +295,12 @@ def contours_page(
         else "topics"
     )
 
+    # Signals має власний 30-денний horizon.
+    # Параметр day належить Topics/drill-down і не
+    # повинен створювати несумісний Signals state.
+    if analysis_layer == "signals":
+        day = None
+
     try:
         with read_connection() as conn:
             contour_rows = fetch_contours(conn)
@@ -512,30 +518,46 @@ def contours_page(
                     )
                 )
 
-                from web.contour_topics import (
-                    load_c1_contour_topics,
-                )
+                if analysis_layer == "topics":
+                    from web.contour_topics import (
+                        load_c1_contour_topics,
+                    )
 
-                contour_topics = load_c1_contour_topics(
-                    object_id=(
-                        selected["object_id"]
-                        if selected
-                        else None
-                    ),
-                    limit=10,
-                )
+                    contour_topics = (
+                        load_c1_contour_topics(
+                            object_id=(
+                                selected["object_id"]
+                                if selected
+                                else None
+                            ),
+                            limit=10,
+                        )
+                    )
 
-                from web.contour_signals import (
-                    load_c1_contour_signals,
-                )
+                    contour_signals = {
+                        "state": "missing",
+                        "snapshot": None,
+                    }
 
-                contour_signals = load_c1_contour_signals(
-                    object_id=(
-                        selected["object_id"]
-                        if selected
-                        else None
-                    ),
-                )
+                else:
+                    from web.contour_signals import (
+                        load_c1_contour_signals,
+                    )
+
+                    contour_topics = {
+                        "state": "missing",
+                        "items": [],
+                    }
+
+                    contour_signals = (
+                        load_c1_contour_signals(
+                            object_id=(
+                                selected["object_id"]
+                                if selected
+                                else None
+                            ),
+                        )
+                    )
 
                 quiet_objects = [
                     row

@@ -49,9 +49,26 @@ fi
         reporting/topics_snapshot.py \
         --output reporting/topics.latest.json
 
-    rc=$?
+    global_rc=$?
+
+    echo "C1 TOPICS SNAPSHOT BUILD $(date --iso-8601=seconds)"
+
+    PYTHONPATH=reporting:. \
+        nice -n 10 \
+        "$PYTHON" \
+        reporting/contour_topics_c1.py \
+        --all-objects
+
+    c1_rc=$?
+
+    if [ "$global_rc" -ne 0 ]; then
+        rc="$global_rc"
+    else
+        rc="$c1_rc"
+    fi
+
     set -e
 
-    echo "TOPICS SNAPSHOT END rc=$rc $(date --iso-8601=seconds)"
+    echo "TOPICS SNAPSHOT END global_rc=$global_rc c1_rc=$c1_rc rc=$rc $(date --iso-8601=seconds)"
     exit "$rc"
 ) >>"$LOG_FILE" 2>&1

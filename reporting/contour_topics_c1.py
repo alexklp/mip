@@ -38,24 +38,23 @@ def scoped_output_path(
 
 
 def fetch_object_ids() -> list[int]:
-    """Return C1 analytical objects eligible for scoped Topics."""
-    gate = c1_analytical_gate_sql("a")
-
+    """Return all active C1 analytical objects."""
     with psycopg.connect(ts.DB_DSN) as conn:
         rows = conn.execute(
-            f"""
-            SELECT DISTINCT a.object_id
-            FROM content_contour_assignments a
-            WHERE a.monitoring_contour_id = 1
-              AND a.object_id IS NOT NULL
-              AND a.object_id <> 1
-              AND a.evidence_type = 'exact_reference'
-              {gate}
-            ORDER BY a.object_id
+            """
+            SELECT object_id
+            FROM contour_reference_objects
+            WHERE monitoring_contour_id = 1
+              AND active
+            ORDER BY object_id
             """
         ).fetchall()
 
-    return [int(row[0]) for row in rows]
+    return [
+        int(row[0])
+        for row in rows
+    ]
+
 
 SCHEMA_VERSION = "contour-topics-c1/1"
 
@@ -442,7 +441,7 @@ def build_snapshot(
         else 0.0
     )
 
-    if coverage_pct < ts.TOPICS_MIN_NLP_COVERAGE_PCT:
+    if total and coverage_pct < ts.TOPICS_MIN_NLP_COVERAGE_PCT:
         raise RuntimeError(
             "C1 Topics NLP cache coverage too low: "
             f"{coverage_pct:.2f}% "

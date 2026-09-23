@@ -1134,7 +1134,8 @@ a {
     overflow-wrap: anywhere;
 }
 
-.signals-page [hidden] {
+.signals-page [hidden],
+#c1-signals-workspace [hidden] {
     display: none !important;
 }
 
@@ -6271,4 +6272,15 @@ a {
         display: flex;
         flex-wrap: wrap;
     }
+}
+
+/* C1 Signals: stale snapshot stays inspectable. */
+.signals-stale-note {
+    margin: 0.55rem 0;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: 0.72rem;
 }
