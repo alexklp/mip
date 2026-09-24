@@ -47,6 +47,7 @@ ACTIVE_HOURS = 24
 CORE_DISTANCE = 0.18
 MERGE_DISTANCE = 0.24
 MERGE_MIN_CROSS_LINKS = 2
+MERGE_MIN_MEMBER_COVERAGE = 0.60
 MAX_STORY_SPAN = timedelta(hours=72)
 
 
@@ -401,16 +402,22 @@ def build_snapshot(
         if left_group == right_group:
             continue
 
-        edge = tuple(sorted((
-            left_group,
-            right_group,
-        )))
+        if left_group < right_group:
+            edge = (left_group, right_group)
+            edge_left_member = left
+            edge_right_member = right
+        else:
+            edge = (right_group, left_group)
+            edge_left_member = right
+            edge_right_member = left
 
         row = support.setdefault(
             edge,
             {
                 "links": 0,
                 "min_distance": value,
+                "left_members": set(),
+                "right_members": set(),
             },
         )
 
@@ -419,6 +426,8 @@ def build_snapshot(
             row["min_distance"],
             value,
         )
+        row["left_members"].add(edge_left_member)
+        row["right_members"].add(edge_right_member)
 
     edges = sorted(
         (
@@ -430,6 +439,14 @@ def build_snapshot(
             )
             for (left, right), row in support.items()
             if row["links"] >= MERGE_MIN_CROSS_LINKS
+            and (
+                len(row["left_members"]) / len(groups[left])
+                >= MERGE_MIN_MEMBER_COVERAGE
+            )
+            and (
+                len(row["right_members"]) / len(groups[right])
+                >= MERGE_MIN_MEMBER_COVERAGE
+            )
         ),
         key=lambda row: (
             -row[2],
@@ -439,11 +456,21 @@ def build_snapshot(
         ),
     )
 
+    supported_edges = {
+        (left, right)
+        for left, right, _links, _minimum in edges
+    }
+
     parent = list(range(len(groups)))
 
     members = {
         index: list(group)
         for index, group in enumerate(groups)
+    }
+
+    group_indices = {
+        index: {index}
+        for index in range(len(groups))
     }
 
     def find(index: int) -> int:
@@ -462,6 +489,19 @@ def build_snapshot(
         if left_root == right_root:
             continue
 
+        left_component = group_indices[left_root]
+        right_component = group_indices[right_root]
+
+        complete_support = all(
+            tuple(sorted((left_core, right_core)))
+            in supported_edges
+            for left_core in left_component
+            for right_core in right_component
+        )
+
+        if not complete_support:
+            continue
+
         combined = (
             members[left_root]
             + members[right_root]
@@ -469,6 +509,10 @@ def build_snapshot(
 
         if span_of(combined) > MAX_STORY_SPAN:
             continue
+
+        combined_group_indices = (
+            left_component | right_component
+        )
 
         if left_root > right_root:
             left_root, right_root = (
@@ -479,6 +523,8 @@ def build_snapshot(
         parent[right_root] = left_root
         members[left_root] = combined
         members[right_root] = []
+        group_indices[left_root] = combined_group_indices
+        group_indices.pop(right_root, None)
 
         accepted_merges += 1
 
