@@ -986,8 +986,8 @@ a {
 }
 
 .signals-badge-cross {
-    background: var(--teal-chip-bg);
-    color: var(--teal-tint);
+    background: var(--steel-chip-bg);
+    color: var(--steel-tint);
 }
 
 .signals-rank {
@@ -1585,8 +1585,8 @@ a {
 }
 
 .signals-badge-cross {
-    background: var(--teal-chip-bg);
-    color: var(--teal-tint);
+    background: var(--steel-chip-bg);
+    color: var(--steel-tint);
 }
 
 .signals-panel-head h2 {
@@ -1661,6 +1661,11 @@ a {
 
 .signals-dynamic-row > strong {
     flex: 1 1 90px;
+    font-size: 0.75rem;
+}
+
+.signals-dynamic-row > .space-label {
+    flex: 0 0 auto;
     font-size: 0.75rem;
 }
 
@@ -2770,11 +2775,11 @@ a {
 }
 
 .signals-spread-point-ru_space {
-    background: #5d9ca8;
+    background: var(--space-ru);
 }
 
 .signals-spread-point-ua_space {
-    background: #b59a62;
+    background: var(--teal-tint);
 }
 
 .signals-spread-point:not(.signals-spread-point-ru_space):not(.signals-spread-point-ua_space) {
@@ -2885,11 +2890,11 @@ a {
 }
 
 .signals-spread-legend-dot.is-ru {
-    background: #5d9ca8;
+    background: var(--space-ru);
 }
 
 .signals-spread-legend-dot.is-ua {
-    background: #b59a62;
+    background: var(--teal-tint);
 }
 
 @media (max-width: 760px) {
@@ -3828,7 +3833,7 @@ a {
 
 /* Sources table sorting */
 
-.sources-sortable {
+.sources-table-sortable th.sources-sortable {
     padding: 0;
 }
 
@@ -5662,6 +5667,7 @@ a {
 .contour-space-label,
 .signals-propagation-space {
     display: inline-flex;
+    white-space: nowrap;
     align-items: center;
     min-height: 20px;
     padding: 0.12rem 0.42rem;
@@ -5675,9 +5681,9 @@ a {
 .space-label.is-ua_space,
 .contour-space-label.is-ua,
 .signals-propagation-space.is-ua_space {
-    color: var(--teal-tint);
-    background: var(--teal-chip-bg);
-    border-color: var(--teal-mid);
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--space-ua);
 }
 
 .space-label.is-ru_space,
@@ -6277,3 +6283,13 @@ a {
     font-size: 0.72rem;
 }
 
+/* Короткі значення таблиці джерел не розриваються. */
+.sources-table-sortable td:nth-child(1),
+.sources-table-sortable td:nth-child(3),
+.sources-table-sortable td:nth-child(5),
+.sources-table-sortable td:nth-child(6),
+.sources-table-sortable td:nth-child(7),
+.sources-table-sortable td:nth-child(8),
+.sources-table-sortable td:nth-child(9) {
+    white-space: nowrap;
+}

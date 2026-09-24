@@ -1678,15 +1678,7 @@
                                         {{ "%02d"|format(loop.index) }}
                                     </span>
 
-                                    <span class="signals-queue-space">
-                                        {% if candidate.cross_space %}
-                                            Між просторами
-                                        {% elif candidate.source_groups[0] == "ua_space" %}
-                                            Український
-                                        {% else %}
-                                            Російський
-                                        {% endif %}
-                                    </span>
+                                    <span class="signals-queue-space">{% if candidate.cross_space %}<span class="badge signals-badge-cross">Між просторами</span>{% elif candidate.source_groups[0] == "ua_space" %}<span class="contour-space-label is-ua">Український</span>{% else %}<span class="contour-space-label is-ru">Російський</span>{% endif %}</span>
 
                                     <span class="signals-queue-count">
                                         {{ candidate.source_count }} дж.
@@ -1761,17 +1753,7 @@
                             <header class="signals-panel-head">
 
                                 <div class="signals-panel-eyebrow">
-                                    <span
-                                        class="badge {% if candidate.cross_space %}signals-badge-cross{% else %}signals-badge-space{% endif %}"
-                                    >
-                                        {% if candidate.cross_space %}
-                                            Між просторами
-                                        {% elif candidate.source_groups[0] == "ua_space" %}
-                                            Український простір
-                                        {% else %}
-                                            Російський простір
-                                        {% endif %}
-                                    </span>
+                                    {% if candidate.cross_space %}<span class="badge signals-badge-cross">Між просторами</span>{% elif candidate.source_groups[0] == "ua_space" %}<span class="contour-space-label is-ua">Український простір</span>{% else %}<span class="contour-space-label is-ru">Російський простір</span>{% endif %}
 
                                     {% if active24 %}
                                         <span class="badge">
@@ -3631,12 +3613,6 @@
                                     >
                                         {{ fmt_kyiv_zoned(row.published_at) }}
                                     </time>
-                                {% endif %}
-
-                                {% if row.multi_object %}
-                                    <span class="badge badge-maybe">
-                                        Кілька об'єктів
-                                    </span>
                                 {% endif %}
                             </div>
 

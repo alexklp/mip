@@ -172,7 +172,7 @@
                 >
                     <span class="signals-queue-topline">
                         <span class="signals-queue-rank">{{ '%02d'|format(loop.index) }}</span>
-                        <span class="signals-queue-space">{{ 'Між просторами' if candidate.cross_space else space_name(candidate.source_groups[0]) }}</span>
+                        <span class="signals-queue-space">{% if candidate.cross_space %}<span class="badge signals-badge-cross">Між просторами</span>{% else %}<span class="space-label is-{{ candidate.source_groups[0] }}">{{ space_name(candidate.source_groups[0]) }}</span>{% endif %}</span>
                         <span class="signals-queue-count">{{ candidate.source_count }} дж.</span>
                     </span>
                     <span class="signals-queue-title">{{ rendered_title }}</span>
@@ -201,7 +201,7 @@
             >
                 <header class="signals-panel-head">
                     <div class="signals-panel-eyebrow">
-                        <span class="badge {{ 'signals-badge-cross' if candidate.cross_space else 'signals-badge-space' }}">{{ 'Між просторами' if candidate.cross_space else space_name(candidate.source_groups[0]) ~ ' простір' }}</span>
+                        {% if candidate.cross_space %}<span class="badge signals-badge-cross">Між просторами</span>{% else %}<span class="space-label is-{{ candidate.source_groups[0] }}">{{ space_name(candidate.source_groups[0]) }} простір</span>{% endif %}
                     </div>
                     <h2>{{ rendered_title }}</h2>
                     <div class="signals-panel-counts" aria-label="Обсяг сигналу">
@@ -241,7 +241,7 @@
                     <div class="signals-dynamics">
                     {% for group in candidate.source_groups %}
                         <div class="signals-dynamic-row">
-                            <strong>{{ space_name(group) }}</strong>
+                            <span class="space-label is-{{ group }}">{{ space_name(group) }}</span>
                             {% if not snapshot.selection or group in snapshot.selection.source_groups %}
                                 {% set dynamic = candidate.dynamics.get(group) if candidate.dynamics else none %}
                                 {% set current = dynamic.current if dynamic and dynamic.current else none %}
@@ -531,6 +531,7 @@
                                 <span class="signals-evidence-index">{{ '%02d'|format(loop.index) }}</span>
                                 <div>
                                     <strong>{{ evidence.source_name or evidence.source_id }}</strong><span class="signals-source-type"> · {{ source_type_name(evidence.source_type) }}</span>
+                                    <span class="space-label is-{{ evidence.source_group }}">{{ space_name(evidence.source_group) }}</span>
                                 </div>
                                 {% if evidence.safe_link %}<a class="signals-source-link" href="{{ evidence.safe_link }}" target="_blank" rel="noopener noreferrer" aria-label="Відкрити публікацію у джерелі">Відкрити джерело ↗</a>{% endif %}
                             </header>
@@ -556,7 +557,7 @@
                         data-evidence-more
                         data-page-size="30"
                     >
-                        Показати ще 30
+                        Показати ще
                     </button>
                     {% endif %}
                 </section>
@@ -1143,6 +1144,14 @@
         sourceWrap.appendChild(source);
         sourceWrap.appendChild(sourceType);
 
+        var sourceSpace = document.createElement("span");
+        sourceSpace.className = "space-label";
+        if (row.source_group === "ua_space" || row.source_group === "ru_space") {
+            sourceSpace.classList.add("is-" + row.source_group);
+        }
+        sourceSpace.textContent = signalSpaceName(row.source_group);
+        sourceWrap.appendChild(sourceSpace);
+
         header.appendChild(index);
         header.appendChild(sourceWrap);
 
@@ -1318,14 +1327,7 @@
                     ) {
                         this.hidden = true;
                     } else {
-                        var remaining =
-                            payload.total - loaded;
-                        this.textContent =
-                            "Показати ще " +
-                            Math.min(
-                                pageSize,
-                                remaining
-                            );
+                        this.textContent = "Показати ще";
                     }
                 } catch (error) {
                     console.error(
