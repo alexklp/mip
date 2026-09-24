@@ -46,12 +46,14 @@ if env \
         --rows 100000 \
         --core-distance 0.18 \
         --related-distance 0.36 \
+        --merge-distance 0.19 \
+        --merge-min-cross-links 2 \
         --ann-probe-limit 20000 \
         --display-limit 200 \
         --max-related-links 100 \
         --evidence-chars 600 \
         --max-evidence 12 \
-        --statement-timeout-ms 90000 \
+        --statement-timeout-ms 120000 \
         --output "$OUTPUT"
 then
     elapsed=$(( $(date +%s) - started_at ))

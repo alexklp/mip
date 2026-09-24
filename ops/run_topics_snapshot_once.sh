@@ -14,6 +14,7 @@ mkdir -p "$LOG_DIR"
 exec 9>"$LOCK_FILE"
 
 if ! flock -n 9; then
+    echo "TOPICS SNAPSHOT SKIP (lock busy, попередній прогон ще виконується) $(date --iso-8601=seconds)" >>"$LOG_FILE" 2>&1
     exit 0
 fi
 

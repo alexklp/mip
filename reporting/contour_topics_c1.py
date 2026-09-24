@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from datetime import timedelta
 from pathlib import Path
+import time
 from zoneinfo import ZoneInfo
 
 import psycopg
@@ -421,10 +422,21 @@ def build_snapshot(
     days: int,
     object_id: int | None = None,
 ) -> dict:
+    fetch_started = time.perf_counter()
+
     as_of, start_at, rows = fetch_rows(
         days,
         object_id=object_id,
     )
+
+    print(
+        f"C1 timing: object_id={object_id} "
+        f"fetch={time.perf_counter() - fetch_started:.1f}s "
+        f"rows={len(rows)}",
+        flush=True,
+    )
+
+    nlp_started = time.perf_counter()
 
     (
         terms_by_content,
@@ -432,6 +444,12 @@ def build_snapshot(
         language_counts,
         cache_status,
     ) = ts.process_contents(rows)
+
+    print(
+        f"C1 timing: object_id={object_id} "
+        f"nlp={time.perf_counter() - nlp_started:.1f}s",
+        flush=True,
+    )
 
     total = cache_status["total"]
 
@@ -680,15 +698,23 @@ def main() -> int:
         jobs = [(args.object_id, output)]
 
     for object_id, output in jobs:
+        build_started = time.perf_counter()
+
         snapshot = build_snapshot(
             days=args.days,
             object_id=object_id,
         )
 
+        build_elapsed = time.perf_counter() - build_started
+
+        write_started = time.perf_counter()
+
         ts.atomic_write_json(
             output,
             snapshot,
         )
+
+        write_elapsed = time.perf_counter() - write_started
 
         current = snapshot["summary"]["all"]["current"]
 
@@ -699,6 +725,8 @@ def main() -> int:
             f"publications={current['publications']}",
             f"materials={current['materials']}",
             f"sources={current['sources']}",
+            f"build={build_elapsed:.1f}s",
+            f"write={write_elapsed:.1f}s",
             f"output={output}",
         )
 
