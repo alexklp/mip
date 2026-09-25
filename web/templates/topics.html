@@ -152,7 +152,7 @@
                 <div>
                     <h2 id="topics-ranking-title">Теми для порівняння</h2>
                     <p id="topics-ranking-note">
-                        Топ 50 поточного потоку · до 5 для графіка.
+                        Топ 200 поточного потоку · до 5 для графіка.
                     </p>
                 </div>
 
@@ -407,7 +407,7 @@
             var scope = compareScopeKey();
 
             var eligible = rows
-                .slice(0, 50)
+                .slice(0, 200)
                 .map(function (row) {
                     return row.marker_id;
                 });
@@ -628,7 +628,7 @@
                 state.compareIds.length + " / 5";
 
             var ranked = rows.slice();
-            var visible = filteredRows(ranked).slice(0, 50);
+            var visible = filteredRows(ranked).slice(0, 200);
             var rankLookup = {};
 
             ranked.forEach(function (row, index) {
@@ -670,7 +670,7 @@
                     "topics-compare-checkbox";
                 checkbox.checked = checked;
                 var compareEligible =
-                    rankLookup[row.marker_id] <= 50;
+                    rankLookup[row.marker_id] <= 200;
 
                 checkbox.disabled = (
                     !compareEligible ||
@@ -1316,31 +1316,8 @@
         }
 
         function kyivOffset(value) {
-            var parts = new Intl.DateTimeFormat(
-                "en-US",
-                {
-                    timeZone: "Europe/Kyiv",
-                    timeZoneName: "shortOffset"
-                }
-            ).formatToParts(value);
-
-            var zone = parts.find(
-                function (part) {
-                    return (
-                        part.type ===
-                        "timeZoneName"
-                    );
-                }
-            );
-
-            return (
-                zone
-                    ? zone.value.replace(
-                        "GMT",
-                        "UTC"
-                    )
-                    : "Europe/Kyiv"
-            );
+            // Час в UI завжди київський (вказано в сайдбарі) — офсет не дублюємо.
+            return "";
         }
 
         function hourBounds(
@@ -1855,6 +1832,48 @@
                 break;
             }
 
+            var spaceBreakdown =
+                detail.current.space_breakdown;
+
+            var showSpaceLines = Boolean(
+                state.space === "all" &&
+                spaceBreakdown &&
+                spaceBreakdown.ru_space &&
+                spaceBreakdown.ua_space &&
+                spaceBreakdown.ru_space.publications > 0 &&
+                spaceBreakdown.ua_space.publications > 0
+            );
+
+            if (showSpaceLines) {
+                svg.appendChild(
+                    svgElement(
+                        "polyline",
+                        {
+                            points: trendPoints(
+                                spaceBreakdown.ru_space.hourly,
+                                maxValue
+                            ),
+                            class:
+                                "topics-trend-line is-space-ru"
+                        }
+                    )
+                );
+
+                svg.appendChild(
+                    svgElement(
+                        "polyline",
+                        {
+                            points: trendPoints(
+                                spaceBreakdown.ua_space.hourly,
+                                maxValue
+                            ),
+                            class:
+                                "topics-trend-line is-space-ua"
+                        }
+                    )
+                );
+            }
+
             if (state.mode === "changes") {
                 svg.appendChild(
                     svgElement(
@@ -1938,6 +1957,26 @@
                 previousItem.textContent =
                     "Попередні 24 год";
                 legend.appendChild(previousItem);
+            }
+
+            if (showSpaceLines) {
+                var ruItem = document.createElement(
+                    "span"
+                );
+                ruItem.className =
+                    "topics-trend-legend-space-ru";
+                ruItem.textContent =
+                    "Російський простір";
+                legend.appendChild(ruItem);
+
+                var uaItem = document.createElement(
+                    "span"
+                );
+                uaItem.className =
+                    "topics-trend-legend-space-ua";
+                uaItem.textContent =
+                    "Український простір";
+                legend.appendChild(uaItem);
             }
 
             document.getElementById(
@@ -2858,7 +2897,7 @@
             document.getElementById(
                 "topics-ranking-note"
             ).textContent = isThemes
-                ? "Топ 50 поточного потоку · до 5 для графіка."
+                ? "Топ 200 поточного потоку · до 5 для графіка."
                 : "Зміна частки маркера у потоці, п.п.";
         }
 

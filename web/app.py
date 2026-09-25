@@ -92,6 +92,13 @@ templates.env.globals.update(
     utc_offset_label=utc_offset_label,
 )
 
+from web.timefmt import fmt_kyiv_precise, fmt_kyiv_span  # noqa: E402
+
+templates.env.globals.update(
+    fmt_kyiv_precise=fmt_kyiv_precise,
+    fmt_kyiv_span=fmt_kyiv_span,
+)
+
 
 @app.get("/health")
 def health() -> dict[str, str]:
@@ -939,6 +946,45 @@ def signals_page(request: Request) -> HTMLResponse:
         stale_seconds=getattr(request.app.state, 'signals_stale_seconds', 7200),
     )
     return templates.TemplateResponse(request, "signals.html", {"active_page": "signals", **view})
+
+
+@app.get("/signals/search-index")
+def signals_search_index(request: Request, q: str) -> dict:
+    """Пошук серед усіх eligible-кандидатів поза топ-N; без chronology/evidence."""
+    from web.signals import DEFAULT_SNAPSHOT, load_signals
+
+    needle = q.strip().lower()
+
+    if not needle or len(needle) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Некоректний пошуковий запит.",
+        )
+
+    view = load_signals(
+        getattr(request.app.state, 'signals_snapshot_path', DEFAULT_SNAPSHOT),
+        stale_seconds=getattr(request.app.state, 'signals_stale_seconds', 7200),
+    )
+
+    snapshot = view.get("snapshot")
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Знімок сигналів недоступний.",
+        )
+
+    all_matches = [
+        row
+        for row in snapshot.get("search_index", [])
+        if needle in row["representative_title"].lower()
+        or needle in row["search_text"].lower()
+    ]
+
+    return {
+        "total_matches": len(all_matches),
+        "matches": all_matches[:50],
+    }
 
 
 @app.get("/signals/{candidate_id}/chronology")

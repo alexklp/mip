@@ -39,17 +39,54 @@ def fmt_kyiv_clock(value: datetime | str | None) -> str:
 
 
 def fmt_kyiv_zoned(value: datetime | str | None) -> str:
+    """UI-час: завжди київський (вказано один раз у сайдбарі), без офсету."""
+    return fmt_kyiv(value)
+
+
+def fmt_kyiv_clock_zoned(value: datetime | str | None) -> str:
+    return fmt_kyiv_clock(value)
+
+
+def fmt_kyiv_precise(value: datetime | str | None) -> str:
+    """Точний час з офсетом — для tooltip."""
     dt = to_kyiv(value)
     if dt is None:
         return "—"
     return f"{dt.strftime('%d.%m.%Y · %H:%M')} {utc_offset_label(dt)}"
 
 
-def fmt_kyiv_clock_zoned(value: datetime | str | None) -> str:
-    dt = to_kyiv(value)
-    if dt is None:
+def _kyiv_day_label(dt: datetime, today) -> str:
+    delta = (today - dt.date()).days
+    if delta == 0:
+        return "сьогодні"
+    if delta == 1:
+        return "вчора"
+    if dt.year == today.year:
+        return dt.strftime("%d.%m")
+    return dt.strftime("%d.%m.%Y")
+
+
+def fmt_kyiv_span(
+    first: datetime | str | None,
+    last: datetime | str | None = None,
+    now: datetime | str | None = None,
+) -> str:
+    """Людський діапазон: 'сьогодні 11:00–21:15', 'вчора 11:00 → сьогодні 07:37'."""
+    a = to_kyiv(first)
+    if a is None:
         return "—"
-    return f"{dt.strftime('%H:%M')} {utc_offset_label(dt)}"
+    b = to_kyiv(last) if last else None
+    today = (to_kyiv(now) if now else datetime.now(KYIV_TZ)).date()
+    label_a = _kyiv_day_label(a, today)
+    clock_a = a.strftime("%H:%M")
+    if b is None:
+        return f"{label_a} {clock_a}"
+    clock_b = b.strftime("%H:%M")
+    if a.date() == b.date():
+        if clock_a == clock_b:
+            return f"{label_a} {clock_a}"
+        return f"{label_a} {clock_a}–{clock_b}"
+    return f"{label_a} {clock_a} → {_kyiv_day_label(b, today)} {clock_b}"
 
 
 def utc_offset_label(value: datetime | str | None = None) -> str:

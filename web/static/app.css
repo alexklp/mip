@@ -14,7 +14,7 @@
     --mundir: #4d4634;
     --text: #edeae0;
     --text-muted: #b0ac9c;
-    --text-faint: #8f8b7a;
+    --text-faint: #a39f8d;
 
     --gold: #f39200;
     --gold-chip-bg: #3a2807;
@@ -1394,8 +1394,8 @@ a {
 .signals-workbench {
     display: flex;
     min-height: 560px;
-    height: calc(100vh - 255px);
-    max-height: 820px;
+    height: calc(100vh - 215px);
+    max-height: none;
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -3532,6 +3532,28 @@ a {
 
 .topics-trend-legend-previous::before {
     background: #747773;
+}
+
+.topics-trend-line.is-space-ru {
+    stroke: var(--space-ru);
+    stroke-width: 1.5;
+    opacity: 0.45;
+}
+
+.topics-trend-line.is-space-ua {
+    stroke: var(--space-ua);
+    stroke-width: 1.5;
+    opacity: 0.45;
+}
+
+.topics-trend-legend-space-ru::before {
+    background: var(--space-ru);
+    opacity: 0.6;
+}
+
+.topics-trend-legend-space-ua::before {
+    background: var(--space-ua);
+    opacity: 0.6;
 }
 
 .topics-sources {
@@ -6292,4 +6314,32 @@ a {
 .sources-table-sortable td:nth-child(8),
 .sources-table-sortable td:nth-child(9) {
     white-space: nowrap;
+}
+
+/* Читабельність: мінімальні розміри мета-тексту (спільно для всіх сторінок). */
+.signals-queue-meta,
+.signals-evidence-time,
+.signals-link-missing,
+.signals-source-type,
+.signals-section-head > span,
+.signals-timeline,
+.topics-evidence-meta,
+.topics-evidence-item-head span,
+.topics-panel-head p,
+.topics-metric span,
+.topics-trend-legend,
+.topics-compare-legend,
+.contour-summary-item span,
+.contour-rank-row small,
+.page-freshness {
+    font-size: 0.75rem;
+}
+
+.signals-queue-topline,
+.signals-evidence-index,
+.topics-kicker,
+.topics-rank-number,
+.topics-compare-rank,
+.contour-trend-day {
+    font-size: 0.6875rem;
 }

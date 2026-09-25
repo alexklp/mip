@@ -177,15 +177,25 @@
                     </span>
                     <span class="signals-queue-title">{{ rendered_title }}</span>
                     <span class="signals-queue-meta">
-                        <span>{{ candidate.occurrence_count }} публ. · {{ candidate.content_count }} мат.</span>
+                        <span>{{ candidate.occurrence_count }} публ.</span>
                         {% if candidate.first_published_at and candidate.last_published_at %}
-                            <span>{{ fmt_kyiv_zoned(candidate.first_published_at) }} → {{ fmt_kyiv_zoned(candidate.last_published_at) }}</span>
+                            <span title="{{ fmt_kyiv_precise(candidate.first_published_at) }} → {{ fmt_kyiv_precise(candidate.last_published_at) }}">{{ fmt_kyiv_span(candidate.first_published_at, candidate.last_published_at) }}</span>
                         {% endif %}
                     </span>
                 </button>
             {% endfor %}
             </div>
+            <button
+                type="button"
+                class="signals-evidence-more"
+                id="signals-queue-more"
+                hidden
+            >Показати ще</button>
             <p class="signals-queue-empty" id="signals-empty-filter" hidden>За цими умовами сигналів немає.</p>
+            <div class="signals-extra-matches" id="signals-extra-matches" hidden>
+                <p class="signals-extra-matches-note"></p>
+                <ul class="signals-extra-matches-list"></ul>
+            </div>
         </aside>
 
         <div class="signals-detail" role="region" aria-label="Деталі вибраного сигналу">
@@ -573,58 +583,6 @@
     </div>
     {% endif %}
 
-    <details class="signals-method">
-        <summary>Методика та обмеження даних</summary>
-        <div class="signals-method-body">
-            <p>Кількість публікацій і джерел описує спостережуваний потік, а не незалежні підтвердження. Подібність текстів не доводить спільність події чи запозичення.</p>
-            <dl class="signals-meta">
-                <dt>Станом на</dt><dd>{{ fmt_kyiv_zoned(snapshot.as_of) }}</dd>
-                <dt>Згенеровано</dt><dd>{{ fmt_kyiv_zoned(snapshot.generated_at) }}</dd>
-                <dt>Модель</dt><dd>{{ snapshot.embedding_model }} · {{ snapshot.embedding_dimension }}</dd>
-                {% for name, window in snapshot.windows.items() %}
-                <dt>{{ 'Поточні 24 години' if name == 'current' else 'Попередні 24 години' }}</dt>
-                <dd>{{ fmt_kyiv_zoned(window.start) }} — {{ fmt_kyiv_zoned(window.end) }}</dd>
-                {% endfor %}
-            </dl>
-            {% for warning in snapshot.warnings %}<p class="signals-warning">{{ warning }}</p>{% endfor %}
-            <div class="signals-table">
-                <table>
-                    <thead><tr><th>Вікно</th><th>Простір</th><th>Публікації</th><th>Матеріали</th><th>Джерела</th><th>Без embedding</th><th>Без часу</th></tr></thead>
-                    <tbody>
-                    {% for window, groups in snapshot.coverage.items() %}
-                    {% for group, counts in groups.items() %}
-                    {% if not snapshot.selection or group in snapshot.selection.source_groups %}
-                    <tr><td>{{ 'Поточне' if window == 'current' else 'Попереднє' }}</td><td>{{ space_name(group) }}</td><td>{{ counts.occurrence_count }}</td><td>{{ counts.content_count }}</td><td>{{ counts.source_count }}</td><td>{{ counts.missing_embedding_content_count }}</td><td>{{ counts.missing_published_at }}</td></tr>
-                    {% endif %}
-                    {% endfor %}
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% if snapshot.routing_coverage %}
-            <details class="signals-routing">
-                <summary>Покриття попередньої класифікації</summary>
-                <div class="signals-table">
-                    <table>
-                        <thead><tr><th>Вікно</th><th>Простір</th><th>До аналізу</th><th>Можливо</th><th>Пропущено</th><th>Без рішення</th></tr></thead>
-                        <tbody>
-                        {% for window, groups in snapshot.routing_coverage.items() %}
-                        {% for group, counts in groups.items() %}
-                        {% if not snapshot.selection or group in snapshot.selection.source_groups %}
-                        <tr><td>{{ 'Поточне' if window == 'current' else 'Попереднє' }}</td><td>{{ space_name(group) }}</td><td>{{ counts.analyze }}</td><td>{{ counts.maybe }}</td><td>{{ counts.skip }}</td><td>{{ counts.missing }}</td></tr>
-                        {% endif %}
-                        {% endfor %}
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </details>
-            {% endif %}
-            {% if snapshot.presentation %}
-            <p class="signals-technical-note">Показано {{ snapshot.presentation.displayed_candidate_count }} із {{ snapshot.presentation.eligible_candidate_count }} придатних кандидатів. Не показано одно-джерельних груп: {{ snapshot.presentation.suppressed.values()|sum }}. Core-поріг: {{ snapshot.recall.max_distance }}; review-поріг: {{ snapshot.recall.related_distance }}.</p>
-            {% endif %}
-        </div>
-    </details>
 
     {% endif %}
 </section>
@@ -639,6 +597,9 @@
     var dynamicsFilter = document.getElementById('signals-dynamics-filter');
     var sourceCountFilter = document.getElementById('signals-source-count');
     var empty = document.getElementById('signals-empty-filter');
+    var queueMore = document.getElementById('signals-queue-more');
+    var pageSize = 100;
+    var visibleCount = pageSize;
 
     function activate(item, moveFocus) {
         if (!item || item.hidden) return;
@@ -675,12 +636,95 @@
         return items.filter(function (item) { return !item.hidden; });
     }
 
+    var extraMatches = document.getElementById('signals-extra-matches');
+    var extraMatchesNote = extraMatches
+        ? extraMatches.querySelector('.signals-extra-matches-note')
+        : null;
+    var extraMatchesList = extraMatches
+        ? extraMatches.querySelector('.signals-extra-matches-list')
+        : null;
+    var searchBeyondTimer = null;
+
+    function renderExtraMatches(needle, payload) {
+        if (!extraMatches || !extraMatchesNote || !extraMatchesList) return;
+
+        if (!payload || !payload.matches || !payload.matches.length) {
+            extraMatches.hidden = true;
+            extraMatchesNote.textContent = '';
+            extraMatchesList.innerHTML = '';
+            return;
+        }
+
+        extraMatches.hidden = false;
+        extraMatchesNote.textContent =
+            'Знайдено ' + payload.total_matches +
+            ' поза топ-' + items.length +
+            ' (немає деталей для перегляду):';
+
+        extraMatchesList.innerHTML = '';
+
+        payload.matches.forEach(function (row) {
+            var li = document.createElement('li');
+            var space = document.createElement('span');
+            space.className = 'space-label' +
+                (row.cross_space
+                    ? ''
+                    : ' is-' + row.source_groups[0]);
+            space.textContent = row.cross_space
+                ? 'Між просторами'
+                : (row.source_groups[0] === 'ua_space' ? 'Український' : 'Російський');
+            var title = document.createElement('span');
+            title.textContent = row.representative_title + ' (' + row.source_count + ' дж.)';
+            li.appendChild(space);
+            li.appendChild(title);
+            extraMatchesList.appendChild(li);
+        });
+    }
+
+    function searchBeyondDisplayed(needle, visibleCountNow) {
+        if (!extraMatches) return;
+
+        if (searchBeyondTimer) {
+            clearTimeout(searchBeyondTimer);
+            searchBeyondTimer = null;
+        }
+
+        if (!needle || visibleCountNow > 0) {
+            renderExtraMatches(needle, null);
+            return;
+        }
+
+        searchBeyondTimer = setTimeout(function () {
+            fetch('/signals/search-index?q=' + encodeURIComponent(needle), {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' },
+            })
+                .then(function (response) {
+                    return response.ok ? response.json() : null;
+                })
+                .then(function (payload) {
+                    renderExtraMatches(needle, payload);
+                })
+                .catch(function () {
+                    renderExtraMatches(needle, null);
+                });
+        }, 300);
+    }
+
     function applyFilters() {
         var needle = query ? query.value.trim().toLocaleLowerCase('uk') : '';
         var selectedSpace = space ? space.value : 'all';
         var selectedWorkState = workState ? workState.value : 'all';
         var selectedDynamics = dynamicsFilter ? dynamicsFilter.value : 'all';
         var minimumSources = sourceCountFilter ? Number(sourceCountFilter.value || 0) : 0;
+
+        var filtersActive = !!needle ||
+            selectedSpace !== 'all' ||
+            selectedWorkState !== 'all' ||
+            selectedDynamics !== 'all' ||
+            minimumSources > 0;
+
+        var shown = 0;
 
         items.forEach(function (item) {
             var matchesText = !needle ||
@@ -709,17 +753,31 @@
             var matchesSourceCount =
                 Number(item.dataset.sourceCount || 0) >= minimumSources;
 
-            item.hidden = !(
+            var matches =
                 matchesText &&
                 matchesSpace &&
                 matchesWorkState &&
                 matchesDynamics &&
-                matchesSourceCount
-            );
+                matchesSourceCount;
+
+            var withinPage = true;
+
+            if (matches) {
+                withinPage = filtersActive || shown < visibleCount;
+                shown += 1;
+            }
+
+            item.hidden = !(matches && withinPage);
         });
+
+        if (queueMore) {
+            queueMore.hidden = filtersActive || shown <= visibleCount;
+        }
 
         var visible = visibleItems();
         if (empty) empty.hidden = visible.length !== 0;
+
+        searchBeyondDisplayed(needle, visible.length);
 
         var active = items.filter(function (item) {
             return item.getAttribute('aria-selected') === 'true';
@@ -748,10 +806,22 @@
         });
     });
 
-    if (query) query.addEventListener('input', applyFilters);
+    function resetPageAndApply() {
+        visibleCount = pageSize;
+        applyFilters();
+    }
+
+    if (query) query.addEventListener('input', resetPageAndApply);
     [space, workState, dynamicsFilter, sourceCountFilter].forEach(function (control) {
-        if (control) control.addEventListener('change', applyFilters);
+        if (control) control.addEventListener('change', resetPageAndApply);
     });
+
+    if (queueMore) {
+        queueMore.addEventListener('click', function () {
+            visibleCount += pageSize;
+            applyFilters();
+        });
+    }
 
     try {
         if (query) query.value = window.sessionStorage.getItem('mip-signals-query') || '';
