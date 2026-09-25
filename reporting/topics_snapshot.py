@@ -45,7 +45,7 @@ SOURCE_GROUPS = ("ru_space", "ua_space")
 VIEWS = ("all",) + SOURCE_GROUPS
 UNITS = ("phrases", "words")
 
-THEME_LIMIT = 120
+THEME_LIMIT = 200
 CHANGE_LIMIT = 40
 
 THEME_MIN_PUBLICATIONS = 2

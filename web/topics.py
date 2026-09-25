@@ -15,7 +15,7 @@ DEFAULT_SNAPSHOT = (
 
 EXPECTED_SCHEMA = "topics/1"
 VALID_VIEWS = {"all", "ru_space", "ua_space"}
-TOPICS_COMPARE_LIMIT = 50
+TOPICS_COMPARE_LIMIT = 200
 
 
 def _timestamp(value: str) -> datetime:
@@ -29,7 +29,7 @@ def _timestamp(value: str) -> datetime:
     return result
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=2)
 def _load_snapshot_cached(
     path_value: str,
     mtime_ns: int,
@@ -322,6 +322,9 @@ def load_topic_marker(
                     ],
                     "share": space_row[
                         "share"
+                    ],
+                    "hourly": space_row[
+                        "hourly"
                     ],
                 }
 
