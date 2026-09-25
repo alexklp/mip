@@ -644,6 +644,18 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
         c['candidate_id'],
     ))
     eligible_count = len(candidates)
+    search_index = [
+        {
+            "candidate_id": c["candidate_id"],
+            "representative_title": c["representative_title"],
+            "search_text": c["search_text"][:100],
+            "source_count": c["source_count"],
+            "cross_space": c["cross_space"],
+            "source_groups": c["source_groups"],
+            "last_observed": c["last_observed"],
+        }
+        for c in candidates
+    ]
     candidates = candidates[:config.display_limit]
     selected_set = set(selected)
     related = [{"left_content_id": a, "right_content_id": b, "distance": d,
@@ -679,4 +691,4 @@ def detect(data: SignalData, *, as_of: datetime, config: RecallConfig) -> dict:
         warnings.append("Невідомі інформаційні простори виключено з кандидатів.")
     if any(coverage[name][space]["missing_published_at"] for name in bounds for space in (*SPACES, "excluded")):
         warnings.append("Для частини публікацій час публікації невідомий.")
-    return {"critical_incomplete": data.critical_incomplete, "selection": data.selection, "coverage": coverage, "routing_coverage": routing_coverage, "presentation": presentation, "related_links": related, "outside_window_occurrence_count": outside, "omitted_content_count": len(eligible_ids) - len(selected), "truncated": truncated, "incomplete": truncated or missing or excluded or routing_missing, "candidates": candidates, "warnings": warnings}
+    return {"critical_incomplete": data.critical_incomplete, "selection": data.selection, "coverage": coverage, "routing_coverage": routing_coverage, "presentation": presentation, "related_links": related, "outside_window_occurrence_count": outside, "omitted_content_count": len(eligible_ids) - len(selected), "truncated": truncated, "incomplete": truncated or missing or excluded or routing_missing, "candidates": candidates, "search_index": search_index, "warnings": warnings}

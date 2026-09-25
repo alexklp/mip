@@ -58,7 +58,7 @@ def build_snapshot(data: SignalData, *, as_of: datetime, config: RecallConfig, g
 
 
 def deterministic_json(snapshot: dict) -> str:
-    return json.dumps(snapshot, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n"
+    return json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
 
 
 def write_snapshot(snapshot: dict, destination: Path) -> None:
@@ -349,6 +349,30 @@ def validate_snapshot(value: dict) -> None:
                 ('related_limit_reached', presentation['related_links_available'] > presentation['related_link_count'])):
             if type(presentation[key]) is not bool or presentation[key] != expected:
                 raise ValueError("Неузгоджені presentation flags")
+        search_index = value['search_index']
+        if not isinstance(search_index, list) or len(search_index) != presentation['eligible_candidate_count']:
+            raise ValueError("Некоректний search index")
+        seen_index_ids = set()
+        for row in search_index:
+            string(row['candidate_id'])
+            if row['candidate_id'] in seen_index_ids:
+                raise ValueError("Дублікат у search index")
+            seen_index_ids.add(row['candidate_id'])
+            string(row['representative_title'], 240)
+            string(row['search_text'], 100)
+            nonnegative(row['source_count'])
+            if type(row['cross_space']) is not bool:
+                raise ValueError("Некоректний cross_space у search index")
+            if (
+                not isinstance(row['source_groups'], list)
+                or not row['source_groups']
+                or set(row['source_groups']) - {'ru_space', 'ua_space'}
+                or row['source_groups'] != sorted(set(row['source_groups']))
+            ):
+                raise ValueError("Некоректні простори у search index")
+            timestamp(row['last_observed'])
+        if {c['candidate_id'] for c in value['candidates']} - seen_index_ids:
+            raise ValueError("Показані кандидати відсутні в search index")
         links = value['related_links']
         if (not isinstance(links, list) or len(links) != presentation['related_link_count']
                 or len(links) != min(config.max_related_links, presentation['related_links_available'])
