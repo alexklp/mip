@@ -32,3 +32,11 @@ reporting/output/
 reporting/signals.latest.json
 
 reporting/topics.latest.json
+
+# Runtime snapshots — дані прогону, не код (див. AGENTS.md).
+reporting/*.latest.json
+reporting/*.object_*.json
+reporting/*_experimental*.json
+
+# Побічні бекапи патч-тулів.
+*.orig
