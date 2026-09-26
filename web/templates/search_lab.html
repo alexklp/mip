@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Пошук публікацій · тест — МІП{% endblock %}
+
+{% block content %}
+<div class="page-shell search-lab-page">
+    <header class="page-header">
+        <div>
+            <h1 class="page-title">Пошук публікацій</h1>
+            <p class="page-lede">Тестова сторінка · збіги в заголовках і збереженому тексті</p>
+        </div>
+    </header>
+
+    <form class="search-lab-form" method="get" action="/search-lab" role="search">
+        <div class="search-lab-query">
+            <label for="search-lab-q">Що шукаємо</label>
+            <input id="search-lab-q" type="search" name="q" value="{{ filters.q }}"
+                   minlength="3" maxlength="80" required autofocus
+                   placeholder="Наприклад: Апостол">
+        </div>
+        <div class="search-lab-filter">
+            <label for="search-lab-period">Період</label>
+            <select id="search-lab-period" name="period">
+                <option value="24h" {% if filters.period == "24h" %}selected{% endif %}>24 години</option>
+                <option value="72h" {% if filters.period == "72h" %}selected{% endif %}>72 години</option>
+                <option value="7d" {% if filters.period == "7d" %}selected{% endif %}>7 днів</option>
+            </select>
+        </div>
+        <div class="search-lab-filter">
+            <label for="search-lab-space">Простір</label>
+            <select id="search-lab-space" name="source_group">
+                <option value="" {% if not filters.source_group %}selected{% endif %}>Усі</option>
+                <option value="ua_space" {% if filters.source_group == "ua_space" %}selected{% endif %}>Український</option>
+                <option value="ru_space" {% if filters.source_group == "ru_space" %}selected{% endif %}>Російський</option>
+            </select>
+        </div>
+        <button class="filter-submit" type="submit">Знайти</button>
+    </form>
+
+    {% if error %}
+        <p class="search-lab-message" role="alert">{{ error }}</p>
+    {% elif not searched %}
+        <p class="search-lab-message">Введи слово або фразу. Пошук не залежить від рейтингу Тем і групування Сигналів.</p>
+    {% else %}
+        <p class="search-lab-summary" role="status">
+            {% if rows %}Знайдено публікацій: {{ total_matches }} · показано {{ range_start }}–{{ range_end }} · сторінка {{ page }} із {{ total_pages }}
+            {% elif page > 1 %}На цій сторінці збігів немає. Повернися на попередню.
+            {% else %}Збігів за обраний період не знайдено.{% endif %}
+        </p>
+        {% if rows %}
+        <div class="search-lab-results">
+            {% for row in rows %}
+            <article class="search-lab-result">
+                <div class="search-lab-meta">
+                    <time title="{{ row.occurred_at.isoformat() }}">{{ fmt_kyiv_zoned(row.occurred_at) }}</time>
+                    <span>{{ row.source_name }}</span>
+                </div>
+                <h2 class="search-lab-title">
+                    {% if row.safe_link %}<a href="{{ row.safe_link }}" target="_blank" rel="noopener noreferrer">{{ row.display_title }}</a>
+                    {% else %}{{ row.display_title }}{% endif %}
+                </h2>
+                <p class="search-lab-excerpt">{{ row.excerpt_before }}{% if row.excerpt_match %}<mark>{{ row.excerpt_match }}</mark>{% endif %}{{ row.excerpt_after }}</p>
+            </article>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <nav class="search-lab-pagination" aria-label="Сторінки пошуку">
+            {% if previous_url %}<a href="{{ previous_url }}">← Попередня</a>{% endif %}
+            {% if next_url %}<a href="{{ next_url }}">Наступна →</a>{% endif %}
+        </nav>
+        {% if has_more_beyond_limit %}<p class="search-lab-message">Досягнуто межі тестової видачі. Уточни запит або період.</p>{% endif %}
+    {% endif %}
+</div>
+{% endblock %}

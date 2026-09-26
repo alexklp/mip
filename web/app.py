@@ -10,6 +10,8 @@ import datetime
 import io
 import sys
 from pathlib import Path
+from typing import Literal
+from urllib.parse import urlencode
 from uuid import UUID
 
 import psycopg
@@ -32,6 +34,7 @@ from web.materials import (
     fetch_materials,
 )
 from web.overview import fetch_overview_stats
+from web.search_pilot import MAX_PAGE, PAGE_SIZE, fetch_search_pilot
 from web.contours import (
     fetch_contours,
     fetch_c1_summary,
@@ -257,6 +260,85 @@ def materials(
             "filters": filters,
         },
     )
+
+
+@app.get("/search-lab", response_class=HTMLResponse)
+def search_lab(
+    request: Request,
+    q: str = "",
+    period: Literal["24h", "72h", "7d"] = "7d",
+    page: int = 1,
+    source_group: str | None = None,
+) -> HTMLResponse:
+    """Тестовий пошук у публікаціях без посилання з навігації."""
+    if source_group not in (None, "", "ua_space", "ru_space"):
+        raise HTTPException(status_code=400, detail="Некоректний простір")
+    source_group = source_group or None
+    query = q.strip()
+    if not 1 <= page <= MAX_PAGE:
+        raise HTTPException(status_code=400, detail="Некоректна сторінка")
+
+    error = None
+    rows = []
+    total_matches = None
+    if query:
+        if not 3 <= len(query) <= 80:
+            error = "Введи від 3 до 80 символів."
+        else:
+            try:
+                with read_connection() as conn:
+                    rows, total_matches = fetch_search_pilot(
+                        conn,
+                        query=query,
+                        period=period,
+                        page=page,
+                        source_group=source_group,
+                    )
+            except psycopg.Error as exc:
+                print(f"/search-lab: db error: {exc}", file=sys.stderr)
+                raise HTTPException(
+                    status_code=503, detail=DB_UNAVAILABLE_MESSAGE
+                ) from exc
+
+    filters = {
+        "q": query,
+        "period": period,
+        "source_group": source_group,
+    }
+    has_more = total_matches is not None and page * PAGE_SIZE < total_matches
+    total_pages = (
+        min(MAX_PAGE, (total_matches + PAGE_SIZE - 1) // PAGE_SIZE)
+        if total_matches is not None else None
+    )
+
+    def page_url(number: int) -> str:
+        return "/search-lab?" + urlencode({
+            **{key: value for key, value in filters.items() if value is not None},
+            "page": number,
+        })
+
+    response = templates.TemplateResponse(
+        request,
+        "search_lab.html",
+        {
+            "active_page": None,
+            "filters": filters,
+            "rows": rows,
+            "error": error,
+            "searched": bool(query) and error is None,
+            "page": page,
+            "total_matches": total_matches,
+            "total_pages": total_pages,
+            "range_start": (page - 1) * PAGE_SIZE + 1 if rows else None,
+            "range_end": (page - 1) * PAGE_SIZE + len(rows) if rows else None,
+            "previous_url": page_url(page - 1) if page > 1 else None,
+            "next_url": page_url(page + 1) if has_more and page < MAX_PAGE else None,
+            "has_more_beyond_limit": has_more and page == MAX_PAGE,
+        },
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
 
 
 CONTOUR_SHORT_NAMES = {

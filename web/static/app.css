@@ -6343,3 +6343,54 @@ a {
 .contour-trend-day {
     font-size: 0.6875rem;
 }
+/* Тестова сторінка пошуку публікацій. */
+.search-lab-page { max-width: 1040px; }
+.search-lab-form {
+    display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem;
+    padding: 1rem; margin-bottom: 1.25rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+.search-lab-query, .search-lab-filter {
+    display: flex; flex-direction: column; gap: 0.3rem;
+}
+.search-lab-query { flex: 1 1 280px; }
+.search-lab-filter { flex: 0 1 145px; }
+.search-lab-form label {
+    color: var(--text-muted); font-size: 0.75rem; font-weight: 600;
+}
+.search-lab-form input, .search-lab-form select {
+    width: 100%; min-height: 40px; padding: 0.4rem 0.65rem;
+    background: var(--bg); border: 1px solid var(--border-interactive);
+    border-radius: var(--radius); color: var(--text); font: inherit;
+}
+.search-lab-form .filter-submit { min-height: 40px; }
+.search-lab-summary, .search-lab-message {
+    margin: 0.75rem 0 1rem; color: var(--text-muted);
+}
+.search-lab-results { display: grid; gap: 0.65rem; }
+.search-lab-result {
+    padding: 0.9rem 1rem; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+}
+.search-lab-meta {
+    display: flex; flex-wrap: wrap; gap: 0.45rem 0.8rem;
+    align-items: center; color: var(--text-muted); font-size: 0.78rem;
+}
+.search-lab-title {
+    margin: 0.5rem 0 0.35rem; font-size: 1rem;
+    line-height: 1.4; font-weight: 650;
+}
+.search-lab-title a { color: var(--text); text-decoration: none; }
+.search-lab-title a:hover { color: var(--gold); text-decoration: underline; }
+.search-lab-excerpt { margin: 0; color: var(--text-muted); overflow-wrap: anywhere; }
+.search-lab-excerpt mark {
+    background: var(--gold-chip-bg); color: var(--gold); border-radius: 2px;
+}
+.search-lab-pagination { display: flex; gap: 1.5rem; margin-top: 1.25rem; }
+.search-lab-pagination a { min-height: 40px; display: inline-flex; align-items: center; }
+@media (max-width: 680px) {
+    .search-lab-form { padding: 0.75rem; }
+    .search-lab-query { flex-basis: 100%; }
+    .search-lab-filter { flex: 1 1 130px; }
+}
