@@ -417,6 +417,18 @@ def build_phrase_details(
     )
 
 
+# Реєстр ідентичностей C1 однаковий для всіх об'єктів одного прогону:
+# рахуємо один раз на процес (раніше stanza ганялась ~500 разів на КОЖЕН об'єкт).
+from functools import lru_cache as _lru_cache  # noqa: E402
+
+_fetch_identity_words_uncached = fetch_identity_words
+
+
+@_lru_cache(maxsize=1)
+def fetch_identity_words() -> frozenset[str]:
+    return frozenset(_fetch_identity_words_uncached())
+
+
 def build_snapshot(
     *,
     days: int,
@@ -715,6 +727,24 @@ def main() -> int:
         )
 
         write_elapsed = time.perf_counter() - write_started
+
+        if build_elapsed > 60:
+            try:
+                import subprocess as _sp
+                top = _sp.run(
+                    ["ps", "-eo", "pid,pcpu,pmem,comm", "--sort=-pcpu"],
+                    capture_output=True, text=True, timeout=5,
+                ).stdout.splitlines()[:11]
+                load = Path("/proc/loadavg").read_text().strip()
+                print(
+                    f"C1 slow-build diagnostics: object_id={object_id} "
+                    f"build={build_elapsed:.1f}s loadavg={load}",
+                    flush=True,
+                )
+                for line in top:
+                    print(f"C1 slow-build top: {line}", flush=True)
+            except Exception as exc:
+                print(f"C1 slow-build diagnostics failed: {exc}", flush=True)
 
         current = snapshot["summary"]["all"]["current"]
 

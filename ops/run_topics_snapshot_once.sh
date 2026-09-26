@@ -11,6 +11,13 @@ LOG_FILE="$LOG_DIR/topics-snapshot-$(date +%F).log"
 
 mkdir -p "$LOG_DIR"
 
+# NLP (stanza/torch) + BLAS інакше беруть усі ядра і б'ються з рештою пайплайну.
+# Ізольований замір 25.09: 1 потік швидше за 24 (18.5 с проти 23.2 с на об'єкт).
+export OMP_NUM_THREADS=4
+export OPENBLAS_NUM_THREADS=4
+export MKL_NUM_THREADS=4
+export NUMEXPR_NUM_THREADS=4
+
 exec 9>"$LOCK_FILE"
 
 if ! flock -n 9; then

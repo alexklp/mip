@@ -493,6 +493,17 @@ def filter_operational_alert_notices(
     return kept, suppressed
 
 
+# NLP cache читаємо один раз на процес (C1 --all-objects кликав це для кожного об'єкта).
+from functools import lru_cache as _lru_cache  # noqa: E402
+
+_load_topics_nlp_cache_uncached = load_topics_nlp_cache
+
+
+@_lru_cache(maxsize=1)
+def load_topics_nlp_cache():
+    return _load_topics_nlp_cache_uncached()
+
+
 def process_contents(
     rows: list[dict[str, Any]],
 ) -> tuple[
