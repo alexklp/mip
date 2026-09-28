@@ -105,17 +105,6 @@
         </label>
 
         <label class="signals-filter">
-            <span class="sr-only">Фільтр за робочим станом</span>
-            <select id="signals-work-state">
-                <option value="all">Усі стани</option>
-                <option value="unreviewed">Не переглянуті</option>
-                <option value="reviewed">Переглянуті</option>
-                <option value="watch">Під наглядом</option>
-                <option value="forward">Передані на реагування</option>
-            </select>
-        </label>
-
-        <label class="signals-filter">
             <span class="sr-only">Фільтр за кількістю джерел</span>
             <select id="signals-source-count">
                 <option value="0">Джерел: 2+</option>
@@ -165,9 +154,6 @@
                     data-source-count="{{ candidate.source_count }}"
                     data-new="{{ 'true' if flags.new else 'false' }}"
                     data-growing="{{ 'true' if flags.growing else 'false' }}"
-                    data-reviewed="false"
-                    data-watch="false"
-                    data-forward="false"
                     data-search="{{ candidate.search_text or rendered_title }}{% for evidence in candidate.chronology %} {{ evidence.source_name or evidence.source_id }}{% endfor %}"
                 >
                     <span class="signals-queue-topline">
@@ -206,7 +192,6 @@
                 id="signal-panel-{{ candidate.candidate_id }}"
                 role="tabpanel"
                 aria-labelledby="signal-tab-{{ candidate.candidate_id }}"
-                tabindex="0"
                 {% if not loop.first %}hidden{% endif %}
             >
                 <header class="signals-panel-head">
@@ -221,25 +206,41 @@
                 </header>
 
                 <div
-                    class="signals-actions"
-                    data-signal-actions
-                    data-signal-key="{{ candidate.representative_content_id }}"
-                    data-signal-target="signal-panel-{{ candidate.candidate_id }}"
-                    aria-label="Дії з сигналом"
+                    class="signals-actions signals-actions-export-only"
+                    aria-label="Вивантаження сигналу"
                 >
-                    <div class="signals-action-buttons" role="group" aria-label="Дії аналітика">
-                        <button type="button" class="signals-action-button" data-action-flag="reviewed" aria-pressed="false">
-                            Переглянуто
-                        </button>
-                        <button type="button" class="signals-action-button" data-action-flag="watch" aria-pressed="false">
-                            Стежити
-                        </button>
-                        <button type="button" class="signals-action-button" data-action-flag="forward" aria-pressed="false">
-                            Передати на реагування
-                        </button>
-                        <button type="button" class="signals-action-button" data-action-flag="not_same" aria-pressed="false">
-                            Не один сюжет
-                        </button>
+                    <div class="signals-action-buttons">
+                        <a
+                            class="signals-action-button signals-export-button"
+                            href="/signals/{{ candidate.candidate_id }}/export.xlsx"
+                        >
+                            <svg
+                                class="signals-export-icon"
+                                viewBox="0 0 20 20"
+                                fill="none"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M4.5 2.5h7l4 4v11h-11z"
+                                    stroke="currentColor"
+                                    stroke-width="1.5"
+                                    stroke-linejoin="round"
+                                />
+                                <path
+                                    d="M11.5 2.5v4h4"
+                                    stroke="currentColor"
+                                    stroke-width="1.5"
+                                    stroke-linejoin="round"
+                                />
+                                <path
+                                    d="M7 9l3 5m0-5-3 5"
+                                    stroke="currentColor"
+                                    stroke-width="1.6"
+                                    stroke-linecap="round"
+                                />
+                            </svg>
+                            <span>Вивантажити звіт</span>
+                        </a>
                     </div>
                 </div>
 
@@ -428,89 +429,56 @@
                     {% endif %}
                 </section>
 
-                {% if candidate.cross_space %}
-                <section class="signals-section signals-key-evidence" aria-labelledby="key-evidence-title-{{ candidate.candidate_id }}">
+                                {% if candidate.ai_theses %}
+                <section
+                    class="signals-section signals-key-evidence signals-theses"
+                    aria-labelledby="signal-theses-title-{{ candidate.candidate_id }}"
+                >
                     <div class="signals-section-head">
-                        <h3 id="key-evidence-title-{{ candidate.candidate_id }}">Формулювання у просторах</h3>
-                        <span>По одному зафіксованому прикладу з кожного простору</span>
+                        <h3 id="signal-theses-title-{{ candidate.candidate_id }}">
+                            Тези
+                        </h3>
+                        <span>
+                            Матеріалів у сигналі:
+                            {{ candidate.ai_theses.material_count }}
+                        </span>
                     </div>
 
-                    <div class="signals-evidence-list">
-                    {% for group in ['ua_space', 'ru_space'] if group in candidate.source_groups %}
-                        {% set sample = namespace(
-                            found=false,
-                            content_id=none,
-                            title='',
-                            source_name='',
-                            source_type='',
-                            observed_at=none
-                        ) %}
+                    <div class="signals-theses-summary">
+                        <strong>Коротко</strong>
+                        <p>{{ candidate.ai_theses.summary }}</p>
+                    </div>
 
-                        {% for evidence in candidate.chronology if evidence.source_group == group %}
-                            {% if not sample.found %}
-                                {% set sample.found = true %}
-                                {% set sample.content_id = evidence.content_id %}
-                                {% set sample.title = evidence.title or '' %}
-                                {% set sample.source_name = evidence.source_name or evidence.source_id %}
-                                {% set sample.source_type = evidence.source_type or '' %}
-                                {% set sample.observed_at = evidence.published_at %}
-                            {% endif %}
-                        {% endfor %}
+                    <div class="signals-theses-body">
+                        <strong class="signals-theses-label">
+                            Основні тези
+                        </strong>
 
-                        <article class="signals-evidence">
-                            <header>
-                                <div>
-                                    <strong>{{ space_name(group) }} простір</strong>
-                                    {% if sample.source_name %}
-                                    <span class="signals-source-type">
-                                        · {{ sample.source_name }}
-                                        {% if sample.source_type %} · {{ source_type_name(sample.source_type) }}{% endif %}
-                                    </span>
-                                    {% endif %}
-                                </div>
-                            </header>
-
-                            {% if sample.title %}
-                            <h4>{{ sample.title }}</h4>
-                            {% endif %}
-
-                            {% set excerpt_found = namespace(value=false) %}
-                            {% for excerpt in candidate.evidence_references
-                                if sample.content_id and excerpt.content_id == sample.content_id %}
-                                {% set excerpt_found.value = true %}
-                                <blockquote>{{ excerpt.text }}{% if excerpt.text_truncated %}…{% endif %}</blockquote>
+                        <ol class="signals-theses-list">
+                            {% for thesis in candidate.ai_theses.theses %}
+                            <li>{{ thesis.text }}</li>
                             {% endfor %}
-
-                            {% if sample.found and not excerpt_found.value %}
-                            <span class="signals-link-missing">
-                                Текстовий фрагмент цього прикладу не потрапив до evidence-вибірки.
-                            </span>
-                            {% endif %}
-
-                            {% if sample.observed_at %}
-                            <dl class="signals-evidence-time">
-                                <div>
-                                    <dt>Зафіксовано</dt>
-                                    <dd>{{ fmt_kyiv_zoned(sample.observed_at) }}</dd>
-                                </div>
-                            </dl>
-                            {% endif %}
-                        </article>
-                    {% endfor %}
+                        </ol>
                     </div>
                 </section>
                 {% else %}
-                {% for excerpt in candidate.evidence_references if excerpt.content_id == candidate.representative_content_id %}
-                <section class="signals-section signals-key-evidence" aria-labelledby="key-evidence-title-{{ candidate.candidate_id }}">
+                <section
+                    class="signals-section signals-key-evidence signals-theses"
+                    aria-labelledby="signal-theses-title-{{ candidate.candidate_id }}"
+                >
                     <div class="signals-section-head">
-                        <h3 id="key-evidence-title-{{ candidate.candidate_id }}">Ключовий фрагмент</h3>
+                        <h3 id="signal-theses-title-{{ candidate.candidate_id }}">
+                            Тези
+                        </h3>
                     </div>
-                    <blockquote>{{ excerpt.text }}{% if excerpt.text_truncated %}…{% endif %}</blockquote>
+
+                    <p class="signals-theses-empty">
+                        Ще не сформовано для цього сигналу.
+                    </p>
                 </section>
-                {% endfor %}
                 {% endif %}
 
-                <section
+<section
                     class="signals-section signals-section-evidence"
                     aria-labelledby="evidence-title-{{ candidate.candidate_id }}"
                     data-evidence-section
@@ -593,7 +561,6 @@
     var panels = Array.prototype.slice.call(document.querySelectorAll('.signals-panel'));
     var query = document.getElementById('signals-query');
     var space = document.getElementById('signals-space');
-    var workState = document.getElementById('signals-work-state');
     var dynamicsFilter = document.getElementById('signals-dynamics-filter');
     var sourceCountFilter = document.getElementById('signals-source-count');
     var empty = document.getElementById('signals-empty-filter');
@@ -714,13 +681,11 @@
     function applyFilters() {
         var needle = query ? query.value.trim().toLocaleLowerCase('uk') : '';
         var selectedSpace = space ? space.value : 'all';
-        var selectedWorkState = workState ? workState.value : 'all';
         var selectedDynamics = dynamicsFilter ? dynamicsFilter.value : 'all';
         var minimumSources = sourceCountFilter ? Number(sourceCountFilter.value || 0) : 0;
 
         var filtersActive = !!needle ||
             selectedSpace !== 'all' ||
-            selectedWorkState !== 'all' ||
             selectedDynamics !== 'all' ||
             minimumSources > 0;
 
@@ -738,13 +703,6 @@
                         item.dataset.space.split(' ').indexOf(selectedSpace) !== -1
                     ));
 
-            var matchesWorkState =
-                selectedWorkState === 'all' ||
-                (selectedWorkState === 'unreviewed' && item.dataset.reviewed !== 'true') ||
-                (selectedWorkState === 'reviewed' && item.dataset.reviewed === 'true') ||
-                (selectedWorkState === 'watch' && item.dataset.watch === 'true') ||
-                (selectedWorkState === 'forward' && item.dataset.forward === 'true');
-
             var matchesDynamics =
                 selectedDynamics === 'all' ||
                 (selectedDynamics === 'new' && item.dataset.new === 'true') ||
@@ -756,7 +714,6 @@
             var matches =
                 matchesText &&
                 matchesSpace &&
-                matchesWorkState &&
                 matchesDynamics &&
                 matchesSourceCount;
 
@@ -812,7 +769,7 @@
     }
 
     if (query) query.addEventListener('input', resetPageAndApply);
-    [space, workState, dynamicsFilter, sourceCountFilter].forEach(function (control) {
+    [space, dynamicsFilter, sourceCountFilter].forEach(function (control) {
         if (control) control.addEventListener('change', resetPageAndApply);
     });
 
@@ -826,7 +783,6 @@
     try {
         if (query) query.value = window.sessionStorage.getItem('mip-signals-query') || '';
         if (space) space.value = window.sessionStorage.getItem('mip-signals-space') || 'all';
-        if (workState) workState.value = window.sessionStorage.getItem('mip-signals-work-state') || 'all';
         if (dynamicsFilter) dynamicsFilter.value = window.sessionStorage.getItem('mip-signals-dynamics-filter') || 'all';
         if (sourceCountFilter) sourceCountFilter.value = window.sessionStorage.getItem('mip-signals-source-count') || '0';
 
@@ -836,7 +792,6 @@
 
         [
             [space, 'mip-signals-space'],
-            [workState, 'mip-signals-work-state'],
             [dynamicsFilter, 'mip-signals-dynamics-filter'],
             [sourceCountFilter, 'mip-signals-source-count']
         ].forEach(function (entry) {
@@ -849,106 +804,6 @@
     } catch (error) {
         /* Фільтри працюють і без browser storage. */
     }
-
-    var actionBars = Array.prototype.slice.call(document.querySelectorAll('[data-signal-actions]'));
-    var actionFlagNames = ['reviewed', 'watch', 'forward', 'not_same', 'irrelevant'];
-
-    function actionStorageKey(bar) {
-        return 'mip-signals-action-' + bar.dataset.signalKey;
-    }
-
-    function emptyActionFlags() {
-        return {
-            reviewed: false,
-            watch: false,
-            forward: false,
-            not_same: false,
-            irrelevant: false
-        };
-    }
-
-    function readActionFlags(bar) {
-        var flags = emptyActionFlags();
-
-        try {
-            var raw = window.sessionStorage.getItem(actionStorageKey(bar));
-            if (!raw) return flags;
-
-            try {
-                var parsed = JSON.parse(raw);
-                if (parsed && typeof parsed === 'object') {
-                    actionFlagNames.forEach(function (name) {
-                        flags[name] = parsed[name] === true;
-                    });
-                    return flags;
-                }
-            } catch (error) {
-                /* Старий demo-state був простим рядком. */
-            }
-
-            if (actionFlagNames.indexOf(raw) !== -1) {
-                flags[raw] = true;
-            }
-        } catch (error) {
-            /* Дії працюють і без browser storage. */
-        }
-
-        return flags;
-    }
-
-    function writeActionFlags(bar, flags) {
-        try {
-            window.sessionStorage.setItem(actionStorageKey(bar), JSON.stringify(flags));
-        } catch (error) {
-            /* Стан лишається локальним до reload. */
-        }
-    }
-
-    function applyActionFlags(bar, flags) {
-        Array.prototype.slice.call(bar.querySelectorAll('[data-action-flag]')).forEach(function (button) {
-            var name = button.dataset.actionFlag;
-            var active = flags[name] === true;
-
-            button.classList.toggle('is-active', active);
-            button.setAttribute('aria-pressed', active ? 'true' : 'false');
-
-            if (name === 'forward') {
-                button.textContent = active
-                    ? 'Передано на реагування'
-                    : 'Передати на реагування';
-            }
-        });
-
-        var item = items.filter(function (candidate) {
-            return candidate.dataset.target === bar.dataset.signalTarget;
-        })[0];
-
-        if (item) {
-            item.dataset.reviewed = flags.reviewed ? 'true' : 'false';
-            item.dataset.watch = flags.watch ? 'true' : 'false';
-            item.dataset.forward = flags.forward ? 'true' : 'false';
-        }
-    }
-
-    actionBars.forEach(function (bar) {
-        var flags = readActionFlags(bar);
-        applyActionFlags(bar, flags);
-
-        Array.prototype.slice.call(bar.querySelectorAll('[data-action-flag]')).forEach(function (button) {
-            button.addEventListener('click', function () {
-                var name = button.dataset.actionFlag;
-                flags[name] = !flags[name];
-
-                writeActionFlags(bar, flags);
-                applyActionFlags(bar, flags);
-                applyFilters();
-
-                var details = button.closest('details');
-                if (details) details.open = false;
-            });
-        });
-    });
-
 
     function signalSpaceName(value) {
         if (value === "ua_space") return "Український";

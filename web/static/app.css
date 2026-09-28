@@ -1363,6 +1363,7 @@ a {
     color: var(--text-faint);
 }
 
+.topics-search input:focus-visible,
 .signals-search input:focus-visible {
     box-shadow: none;
 }
@@ -1554,10 +1555,6 @@ a {
 .signals-panel {
     min-height: 100%;
     padding: 1rem 1.15rem 1.5rem;
-}
-
-.signals-panel:focus-visible {
-    box-shadow: inset 0 0 0 2px var(--gold);
 }
 
 .signals-panel-head {
@@ -2209,6 +2206,24 @@ a {
 .signals-action-button {
     padding: 0.3rem 0.6rem;
 }
+
+.signals-actions-export-only {
+    justify-content: flex-end;
+}
+
+.signals-export-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    text-decoration: none;
+}
+
+.signals-export-icon {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+}
+
 
 .signals-action-button:hover,
 .signals-action-button:focus-visible,
@@ -6393,4 +6408,58 @@ a {
     .search-lab-form { padding: 0.75rem; }
     .search-lab-query { flex-basis: 100%; }
     .search-lab-filter { flex: 1 1 130px; }
+}
+
+/* Signals: LLM-generated summary and main theses. */
+
+.signals-theses-summary {
+    padding: 0.15rem 0 0.8rem;
+}
+
+.signals-theses-summary > strong,
+.signals-theses-label {
+    color: var(--text);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.signals-theses-summary p {
+    margin: 0.35rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.signals-theses-body {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.signals-theses-list {
+    margin: 0.45rem 0 0;
+    padding-left: 1.4rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.signals-theses-list li {
+    padding-left: 0.2rem;
+}
+
+.signals-theses-list li + li {
+    margin-top: 0.45rem;
+}
+
+.signals-theses-list li::marker {
+    color: var(--teal-tint);
+    font-size: 0.6875rem;
+    font-weight: 700;
+}
+
+.signals-theses-empty {
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    line-height: 1.45;
 }

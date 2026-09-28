@@ -11,7 +11,7 @@ import io
 import sys
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 import psycopg
@@ -692,6 +692,154 @@ def contours_page(
     )
 
 
+@app.get("/contours/signal/{candidate_id}/export.xlsx")
+def c1_signal_export(
+    candidate_id: str,
+    object_id: int | None = None,
+) -> Response:
+    """Вивантажити робочий XLSX-звіт за вибраним C1 сигналом."""
+    from web.contour_signals import load_c1_contour_signals
+    from web.signal_export import (
+        build_signal_xlsx,
+        fetch_signal_publications,
+        find_signal_candidate,
+    )
+
+    if object_id is not None and object_id <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Некоректний object_id.",
+        )
+
+    loaded = load_c1_contour_signals(
+        object_id=object_id,
+    )
+    snapshot = loaded.get("snapshot")
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Дані сигналів тимчасово недоступні.",
+        )
+
+    try:
+        candidate = find_signal_candidate(
+            snapshot,
+            candidate_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Сигнал не знайдено у поточному знімку.",
+        ) from exc
+
+    scope_label = "C1 · Об'єкти ДШВ"
+
+    try:
+        with read_connection() as conn:
+            publications = fetch_signal_publications(
+                conn,
+                candidate,
+            )
+
+            if object_id is not None:
+                object_row = next(
+                    (
+                        row
+                        for row in fetch_objects_overview(conn)
+                        if row["object_id"] == object_id
+                    ),
+                    None,
+                )
+
+                if object_row is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Об'єкт моніторингу не знайдено.",
+                    )
+
+                scope_label = (
+                    "C1 · "
+                    + _c1_display_name(
+                        object_row["canonical_name"]
+                    )
+                )
+
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        print(
+            f"/contours/signal/export: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Дані сигналу змінилися. "
+                "Онови сторінку та повтори вивантаження."
+            ),
+        ) from exc
+
+    payload = build_signal_xlsx(
+        snapshot=snapshot,
+        candidate=candidate,
+        publications=publications,
+        scope_label=scope_label,
+    )
+
+    from zoneinfo import ZoneInfo
+
+    report_date = (
+        datetime.datetime.now(
+            ZoneInfo("Europe/Kyiv")
+        )
+        .date()
+        .isoformat()
+    )
+
+    signal_short_id = candidate_id[:8]
+
+    filename_unicode = (
+        "МІП — звіт за сигналом C1 — "
+        + report_date
+        + " — "
+        + signal_short_id
+        + ".xlsx"
+    )
+
+    filename_ascii = (
+        "MIP_C1_signal_report_"
+        + report_date
+        + "_"
+        + signal_short_id
+        + ".xlsx"
+    )
+
+    content_disposition = (
+        f'attachment; filename="{filename_ascii}"; '
+        "filename*=UTF-8''"
+        + quote(filename_unicode)
+    )
+
+    return Response(
+        content=payload,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": content_disposition,
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @app.get("/contours/topic/{marker_id}")
 def contour_topic_detail(
     marker_id: str,
@@ -1067,6 +1215,164 @@ def signals_search_index(request: Request, q: str) -> dict:
         "total_matches": len(all_matches),
         "matches": all_matches[:50],
     }
+
+
+@app.get("/signals/{candidate_id}/export.xlsx")
+def signals_export(
+    request: Request,
+    candidate_id: UUID,
+) -> Response:
+    """Вивантажити XLSX-звіт за вибраним глобальним сигналом."""
+    from zoneinfo import ZoneInfo
+
+    from web.signal_export import (
+        build_signal_xlsx,
+        fetch_global_signal_publications,
+        find_signal_candidate,
+    )
+    from web.signals import (
+        DEFAULT_SNAPSHOT,
+        load_signals,
+    )
+
+    view = load_signals(
+        getattr(
+            request.app.state,
+            "signals_snapshot_path",
+            DEFAULT_SNAPSHOT,
+        ),
+        stale_seconds=getattr(
+            request.app.state,
+            "signals_stale_seconds",
+            7200,
+        ),
+    )
+
+    snapshot = view.get("snapshot")
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Знімок сигналів недоступний.",
+        )
+
+    candidate_key = str(candidate_id)
+
+    try:
+        candidate = find_signal_candidate(
+            snapshot,
+            candidate_key,
+        )
+
+        window_start = (
+            datetime.datetime.fromisoformat(
+                snapshot["windows"][
+                    "previous"
+                ]["start"]
+            )
+        )
+
+        window_end = (
+            datetime.datetime.fromisoformat(
+                snapshot["as_of"]
+            )
+        )
+
+        history_start = (
+            window_end
+            - datetime.timedelta(days=7)
+        )
+
+        with read_connection() as conn:
+            publications = (
+                fetch_global_signal_publications(
+                    conn,
+                    candidate,
+                    window_start=window_start,
+                    window_end=window_end,
+                    history_start=history_start,
+                )
+            )
+
+        payload = build_signal_xlsx(
+            snapshot=snapshot,
+            candidate=candidate,
+            publications=publications,
+            scope_label="Загальні сигнали",
+            strict_candidate_totals=False,
+        )
+
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Сигнал не знайдено у поточному знімку.",
+        ) from exc
+
+    except psycopg.Error as exc:
+        print(
+            f"/signals/export: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Дані сигналу змінилися. "
+                "Онови сторінку та повтори вивантаження."
+            ),
+        ) from exc
+
+    report_date = (
+        datetime.datetime.now(
+            ZoneInfo("Europe/Kyiv")
+        )
+        .date()
+        .isoformat()
+    )
+
+    short_id = candidate_key[:8]
+
+    filename_unicode = (
+        "МІП — звіт за сигналом — "
+        + report_date
+        + " — "
+        + short_id
+        + ".xlsx"
+    )
+
+    filename_ascii = (
+        "MIP_signal_report_"
+        + report_date
+        + "_"
+        + short_id
+        + ".xlsx"
+    )
+
+    content_disposition = (
+        f'attachment; filename="{filename_ascii}"; '
+        "filename*=UTF-8''"
+        + quote(filename_unicode)
+    )
+
+    return Response(
+        content=payload,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition":
+                content_disposition,
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options":
+                "nosniff",
+        },
+    )
 
 
 @app.get("/signals/{candidate_id}/chronology")

@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 from reporting.signals_snapshot import MAX_SNAPSHOT_BYTES, validate_snapshot
 from reporting.signals_data import require_utc
+from web.signal_theses import attach_ready_theses
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SNAPSHOT = ROOT / 'reporting' / 'signals.latest.json'
@@ -160,6 +161,11 @@ def load_signals(path=DEFAULT_SNAPSHOT, *, now=None, stale_seconds=7200) -> dict
         for candidate in snapshot['candidates']:
             for row in candidate['chronology']:
                 row['safe_link'] = safe_link(row['external_ref'])
+
+        attach_ready_theses(
+            snapshot['candidates']
+        )
+
         # Новий generated_at не робить старий as_of свіжим.
         stale = now - min(as_of, generated) > timedelta(seconds=stale_seconds)
         state = 'stale' if stale else 'ready' if snapshot['candidates'] else 'empty'

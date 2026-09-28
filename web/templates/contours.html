@@ -1595,19 +1595,6 @@
 
                     <label class="signals-filter">
                         <span class="sr-only">
-                            Фільтр за актуальністю
-                        </span>
-                        <select id="c1-signals-work-state">
-                            <option value="all">Усі стани</option>
-                            <option value="unreviewed">Не переглянуті</option>
-                            <option value="reviewed">Переглянуті</option>
-                            <option value="watch">Під наглядом</option>
-                            <option value="forward">Передані на реагування</option>
-                        </select>
-                    </label>
-
-                    <label class="signals-filter">
-                        <span class="sr-only">
                             Фільтр за кількістю джерел
                         </span>
                         <select id="c1-signals-source-count">
@@ -1745,7 +1732,6 @@
                             id="c1-signal-panel-{{ candidate.candidate_id }}"
                             role="tabpanel"
                             aria-labelledby="c1-signal-tab-{{ candidate.candidate_id }}"
-                            tabindex="0"
                             {% if not loop.first %}hidden{% endif %}
                         >
                             <header class="signals-panel-head">
@@ -1801,52 +1787,41 @@
                             </header>
 
                             <div
-                                class="signals-actions"
-                                data-c1-signal-actions
-                                data-signal-key="{% if candidate.representative_content_id is defined %}{{ candidate.representative_content_id }}{% else %}{{ candidate.candidate_id }}{% endif %}"
-                                data-signal-target="c1-signal-panel-{{ candidate.candidate_id }}"
-                                aria-label="Дії з сигналом"
+                                class="signals-actions signals-actions-export-only"
+                                aria-label="Вивантаження сигналу"
                             >
-                                <div
-                                    class="signals-action-buttons"
-                                    role="group"
-                                    aria-label="Дії аналітика"
-                                >
-                                    <button
-                                        type="button"
-                                        class="signals-action-button"
-                                        data-action-flag="reviewed"
-                                        aria-pressed="false"
+                                <div class="signals-action-buttons">
+                                    <a
+                                        class="signals-action-button signals-export-button"
+                                        href="/contours/signal/{{ candidate.candidate_id }}/export.xlsx{% if selected %}?object_id={{ selected.object_id }}{% endif %}"
                                     >
-                                        Переглянуто
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        class="signals-action-button"
-                                        data-action-flag="watch"
-                                        aria-pressed="false"
-                                    >
-                                        Стежити
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        class="signals-action-button"
-                                        data-action-flag="forward"
-                                        aria-pressed="false"
-                                    >
-                                        Передати на реагування
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        class="signals-action-button"
-                                        data-action-flag="not_same"
-                                        aria-pressed="false"
-                                    >
-                                        Не один сюжет
-                                    </button>
+                                        <svg
+                                            class="signals-export-icon"
+                                            viewBox="0 0 20 20"
+                                            fill="none"
+                                            aria-hidden="true"
+                                        >
+                                            <path
+                                                d="M4.5 2.5h7l4 4v11h-11z"
+                                                stroke="currentColor"
+                                                stroke-width="1.5"
+                                                stroke-linejoin="round"
+                                            />
+                                            <path
+                                                d="M11.5 2.5v4h4"
+                                                stroke="currentColor"
+                                                stroke-width="1.5"
+                                                stroke-linejoin="round"
+                                            />
+                                            <path
+                                                d="M7 9l3 5m0-5-3 5"
+                                                stroke="currentColor"
+                                                stroke-width="1.6"
+                                                stroke-linecap="round"
+                                            />
+                                        </svg>
+                                        <span>Вивантажити звіт</span>
+                                    </a>
                                 </div>
                             </div>
 
@@ -2000,84 +1975,56 @@
                                 </div>
                             </section>
 
-                            {% if candidate.cross_space %}
-                            <section class="signals-section signals-key-evidence">
+                                                        {% if candidate.ai_theses %}
+                            <section
+                                class="signals-section signals-key-evidence signals-theses"
+                                aria-labelledby="c1-signal-theses-title-{{ candidate.candidate_id }}"
+                            >
                                 <div class="signals-section-head">
-                                    <h3>Формулювання у просторах</h3>
+                                    <h3 id="c1-signal-theses-title-{{ candidate.candidate_id }}">
+                                        Тези
+                                    </h3>
+                                    <span>
+                                        Матеріалів у сигналі:
+                                        {{ candidate.ai_theses.material_count }}
+                                    </span>
                                 </div>
 
-                                <div class="signals-evidence-list">
-                                    {% for group in ["ua_space", "ru_space"]
-                                       if group in candidate.source_groups %}
-                                        {% set sample = namespace(
-                                            found=false,
-                                            row=none
-                                        ) %}
+                                <div class="signals-theses-summary">
+                                    <strong>Коротко</strong>
+                                    <p>{{ candidate.ai_theses.summary }}</p>
+                                </div>
 
-                                        {% for row in candidate.chronology
-                                           if row.source_group == group %}
-                                            {% if not sample.found %}
-                                                {% set sample.found = true %}
-                                                {% set sample.row = row %}
-                                            {% endif %}
+                                <div class="signals-theses-body">
+                                    <strong class="signals-theses-label">
+                                        Основні тези
+                                    </strong>
+
+                                    <ol class="signals-theses-list">
+                                        {% for thesis in candidate.ai_theses.theses %}
+                                        <li>{{ thesis.text }}</li>
                                         {% endfor %}
-
-                                        {% if sample.row %}
-                                        <article class="signals-evidence">
-                                            <header>
-                                                <div>
-                                                    <strong>
-                                                        {% if group == "ua_space" %}
-                                                            Український простір
-                                                        {% else %}
-                                                            Російський простір
-                                                        {% endif %}
-                                                    </strong>
-
-                                                    <span class="signals-source-type">
-                                                        · {{ sample.row.source_name }}
-                                                    </span>
-                                                </div>
-                                            </header>
-
-                                            {% if sample.row.title %}
-                                            <h4>{{ sample.row.title }}</h4>
-                                            {% endif %}
-
-                                            {% if sample.row.text %}
-                                            <blockquote>{{ sample.row.text }}{% if sample.row.text_truncated %}…{% endif %}</blockquote>
-                                            {% endif %}
-                                        </article>
-                                        {% endif %}
-                                    {% endfor %}
+                                    </ol>
                                 </div>
                             </section>
-
                             {% else %}
-                                {% set key = namespace(row=none) %}
+                            <section
+                                class="signals-section signals-key-evidence signals-theses"
+                                aria-labelledby="c1-signal-theses-title-{{ candidate.candidate_id }}"
+                            >
+                                <div class="signals-section-head">
+                                    <h3 id="c1-signal-theses-title-{{ candidate.candidate_id }}">
+                                        Тези
+                                    </h3>
+                                </div>
 
-                                {% for row in candidate.chronology %}
-                                    {% if
-                                        key.row is none
-                                        and row.content_id
-                                            == candidate.representative_content_id
-                                    %}
-                                        {% set key.row = row %}
-                                    {% endif %}
-                                {% endfor %}
-
-                                {% if key.row and key.row.text %}
-                                <section class="signals-section signals-key-evidence">
-                                    <div class="signals-section-head">
-                                        <h3>Ключовий фрагмент</h3>
-                                    </div>
-
-                                    <blockquote>{{ key.row.text }}{% if key.row.text_truncated %}…{% endif %}</blockquote>
-                                </section>
-                                {% endif %}
+                                <p class="signals-theses-empty">
+                                    Ще не сформовано для цього сигналу.
+                                </p>
+                            </section>
                             {% endif %}
 
-                            <section
+<section
                                 class="signals-section signals-section-evidence"
                             >
                                 <div class="signals-section-head">

@@ -12,6 +12,7 @@ from web.signals import (
     ROOT,
     safe_link,
 )
+from web.signal_theses import attach_ready_theses
 
 
 EXPECTED_SCHEMA = "contour-signals-c1-30d/1"
@@ -415,6 +416,10 @@ def load_c1_contour_signals(
                 if snapshot["candidates"]
                 else "empty"
             )
+        )
+
+        attach_ready_theses(
+            snapshot["candidates"]
         )
 
         return {
