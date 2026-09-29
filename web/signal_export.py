@@ -506,6 +506,50 @@ def build_signal_xlsx(
         or "Сигнал без заголовка"
     )
 
+    thesis_summary: str | None = None
+    thesis_texts: list[str] = []
+
+    ai_theses = candidate.get(
+        "ai_theses"
+    )
+
+    if isinstance(ai_theses, dict):
+        summary_value = ai_theses.get(
+            "summary"
+        )
+        theses_value = ai_theses.get(
+            "theses"
+        )
+
+        if (
+            isinstance(summary_value, str)
+            and summary_value.strip()
+            and isinstance(theses_value, list)
+        ):
+            parsed_texts = []
+
+            for thesis in theses_value:
+                if (
+                    not isinstance(thesis, dict)
+                    or not isinstance(
+                        thesis.get("text"),
+                        str,
+                    )
+                    or not thesis["text"].strip()
+                ):
+                    parsed_texts = []
+                    break
+
+                parsed_texts.append(
+                    thesis["text"].strip()
+                )
+
+            if 2 <= len(parsed_texts) <= 4:
+                thesis_summary = (
+                    summary_value.strip()
+                )
+                thesis_texts = parsed_texts
+
     output = io.BytesIO()
 
     workbook = xlsxwriter.Workbook(
@@ -824,8 +868,71 @@ def build_signal_xlsx(
         fmt_value,
     )
 
+    dynamics_row = 20
+
+    if thesis_summary is not None:
+        summary.merge_range(
+            "A20:H20",
+            "Тези",
+            fmt_section,
+        )
+
+        summary.merge_range(
+            "A21:B22",
+            "Коротко",
+            fmt_label,
+        )
+        summary.merge_range(
+            "C21:H22",
+            thesis_summary,
+            fmt_value,
+        )
+
+        summary.set_row(20, 27)
+        summary.set_row(21, 27)
+
+        thesis_start_row = 24
+        thesis_end_row = (
+            thesis_start_row
+            + len(thesis_texts)
+            - 1
+        )
+
+        summary.merge_range(
+            (
+                f"A{thesis_start_row}:"
+                f"B{thesis_end_row}"
+            ),
+            "Основні тези",
+            fmt_label,
+        )
+
+        for index, thesis_text in enumerate(
+            thesis_texts,
+            start=1,
+        ):
+            excel_row = (
+                thesis_start_row
+                + index
+                - 1
+            )
+
+            summary.merge_range(
+                f"C{excel_row}:H{excel_row}",
+                f"{index}. {thesis_text}",
+                fmt_value,
+            )
+
+            summary.set_row(
+                excel_row - 1,
+                42,
+            )
+
+        # Один порожній рядок перед графіком.
+        dynamics_row = thesis_end_row + 2
+
     summary.merge_range(
-        "A20:H20",
+        f"A{dynamics_row}:H{dynamics_row}",
         "Динаміка поширення",
         fmt_section,
     )
@@ -1054,7 +1161,7 @@ def build_signal_xlsx(
     })
 
     summary.insert_chart(
-        "A21",
+        f"A{dynamics_row + 1}",
         chart,
     )
 
