@@ -51,8 +51,11 @@ ENDPOINT = (
     "/v1/chat/completions"
 )
 
-MAX_TOKENS = 384
+MAX_TOKENS = 768
 TIMEOUT_SECONDS = 150.0
+
+MAX_TASKS_PER_RUN = 3
+START_BUDGET_SECONDS = 75.0
 
 FENCE_RE = re.compile(
     r"^\s*```(?:json)?\s*\n(.*?)\n?```\s*$",
@@ -512,8 +515,60 @@ def parse_model_response(
     return validated, fenced
 
 
+def build_response_schema(
+    material_count: int,
+) -> dict:
+    """JSON Schema для constrained generation Mamay."""
+
+    return {
+        "type": "object",
+        "properties": {
+            "summary": {
+                "type": "string",
+                "minLength": 1,
+            },
+            "theses": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 4,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "minLength": 1,
+                        },
+                        "evidence_material_ids": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 3,
+                            "items": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": material_count,
+                            },
+                        },
+                    },
+                    "required": [
+                        "text",
+                        "evidence_material_ids",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": [
+            "summary",
+            "theses",
+        ],
+        "additionalProperties": False,
+    }
+
+
 def call_mamay(
     prompt: str,
+    *,
+    material_count: int,
 ) -> tuple[str, float, str | None, int | None]:
     payload = {
         "model": MODEL_NAME,
@@ -527,6 +582,12 @@ def call_mamay(
         "seed": 42,
         "top_k": 1,
         "samplers": ["top_k"],
+        "response_format": {
+            "type": "json_object",
+            "schema": build_response_schema(
+                material_count
+            ),
+        },
     }
 
     request = urllib.request.Request(
@@ -630,7 +691,8 @@ def run_task(
         finish_reason,
         completion_tokens,
     ) = call_mamay(
-        prompt
+        prompt,
+        material_count=len(materials),
     )
 
     if finish_reason != "stop":
@@ -696,6 +758,138 @@ def run_task(
     return 0
 
 
+def run_automatic_batch(
+    *,
+    max_tasks: int = MAX_TASKS_PER_RUN,
+    start_budget_seconds: float = START_BUDGET_SECONDS,
+) -> int:
+    """Обробити bounded batch pending thesis tasks."""
+
+    if max_tasks < 1:
+        raise ValueError(
+            "max_tasks має бути >= 1"
+        )
+
+    if start_budget_seconds <= 0:
+        raise ValueError(
+            "start_budget_seconds має бути > 0"
+        )
+
+    started = time.monotonic()
+
+    attempted = 0
+    succeeded = 0
+    failed = 0
+
+    while attempted < max_tasks:
+        elapsed = (
+            time.monotonic()
+            - started
+        )
+
+        if (
+            attempted > 0
+            and elapsed
+                >= start_budget_seconds
+        ):
+            print(
+                "BATCH BUDGET STOP:",
+                f"duration={elapsed:.1f}s",
+                f"budget={start_budget_seconds:.1f}s",
+            )
+            break
+
+        _states, _references, tasks = (
+            scan_queue()
+        )
+
+        blocked = deferred_hashes(
+            tasks
+        )
+
+        task = select_pending_task(
+            tasks,
+            excluded_hashes=blocked,
+        )
+
+        if task is None:
+            pending_count = sum(
+                not item.ready
+                for item in tasks
+            )
+
+            if pending_count:
+                print(
+                    "QUEUE DEFERRED:",
+                    f"pending={pending_count},",
+                    f"cooldown={len(blocked)}",
+                )
+            else:
+                print(
+                    "QUEUE EMPTY: "
+                    "pending thesis tasks відсутні"
+                )
+
+            break
+
+        attempted += 1
+
+        print()
+        print(
+            "=== BATCH TASK "
+            f"{attempted}/{max_tasks} ==="
+        )
+
+        try:
+            run_task(
+                task,
+                dry_run=False,
+            )
+        except Exception as exc:
+            failure = record_failure(
+                task.input_hash,
+                exc,
+            )
+
+            failed += 1
+
+            print()
+            print(
+                "TASK FAILED:",
+                type(exc).__name__,
+                str(exc),
+            )
+            print(
+                "FAILURE DEFERRED:",
+                f"attempts={failure['attempts']}",
+                f"retry_after={failure['retry_after']}",
+            )
+
+            continue
+
+        clear_failure(
+            task.input_hash
+        )
+
+        succeeded += 1
+
+    elapsed = (
+        time.monotonic()
+        - started
+    )
+
+    print()
+    print(
+        "=== BATCH END ===",
+        f"attempted={attempted}",
+        f"succeeded={succeeded}",
+        f"failed={failed}",
+        f"duration={elapsed:.1f}s",
+    )
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
 
@@ -714,67 +908,75 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    _states, _references, tasks = (
-        scan_queue()
-    )
-
-    blocked = deferred_hashes(
-        tasks
-    )
-
-    task = select_pending_task(
-        tasks,
-        input_hash_prefix=args.input_hash,
-        excluded_hashes=blocked,
-    )
-
-    if task is None:
-        pending_count = sum(
-            not item.ready
-            for item in tasks
+    # Явний hash та dry-run залишаються
+    # строго одно-задачними режимами.
+    if (
+        args.dry_run
+        or args.input_hash is not None
+    ):
+        _states, _references, tasks = (
+            scan_queue()
         )
 
-        if pending_count:
-            print(
-                "QUEUE DEFERRED: "
-                f"pending={pending_count}, "
-                f"cooldown={len(blocked)}"
-            )
-        else:
-            print(
-                "QUEUE EMPTY: "
-                "pending thesis tasks відсутні"
-            )
-
-        return 0
-
-    try:
-        result = run_task(
-            task,
-            dry_run=args.dry_run,
+        blocked = deferred_hashes(
+            tasks
         )
-    except Exception as exc:
+
+        task = select_pending_task(
+            tasks,
+            input_hash_prefix=args.input_hash,
+            excluded_hashes=blocked,
+        )
+
+        if task is None:
+            pending_count = sum(
+                not item.ready
+                for item in tasks
+            )
+
+            if pending_count:
+                print(
+                    "QUEUE DEFERRED: "
+                    f"pending={pending_count}, "
+                    f"cooldown={len(blocked)}"
+                )
+            else:
+                print(
+                    "QUEUE EMPTY: "
+                    "pending thesis tasks відсутні"
+                )
+
+            return 0
+
+        try:
+            result = run_task(
+                task,
+                dry_run=args.dry_run,
+            )
+        except Exception as exc:
+            if not args.dry_run:
+                failure = record_failure(
+                    task.input_hash,
+                    exc,
+                )
+
+                print()
+                print(
+                    "FAILURE DEFERRED:",
+                    f"attempts={failure['attempts']}",
+                    f"retry_after={failure['retry_after']}",
+                )
+
+            raise
+
         if not args.dry_run:
-            failure = record_failure(
-                task.input_hash,
-                exc,
+            clear_failure(
+                task.input_hash
             )
 
-            print()
-            print(
-                "FAILURE DEFERRED:",
-                f"attempts={failure['attempts']}",
-                f"retry_after={failure['retry_after']}",
-            )
+        return result
 
-        raise
-
-    if not args.dry_run:
-        clear_failure(
-            task.input_hash
-        )
-
-    return result
+    return run_automatic_batch()
 
 
 if __name__ == "__main__":
