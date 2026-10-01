@@ -60,7 +60,7 @@ class C1UIContractTest(unittest.TestCase):
             script,
         )
 
-        self.assertIn(
+        self.assertNotIn(
             'id="c1-signals-work-state"',
             template,
         )
@@ -69,7 +69,7 @@ class C1UIContractTest(unittest.TestCase):
             template,
         )
         self.assertIn(
-            "data-c1-signal-actions",
+            "signals-actions-export-only",
             template,
         )
 
@@ -98,14 +98,106 @@ class C1UIContractTest(unittest.TestCase):
             self.template,
         )
 
-    def test_signals_day_drilldown_is_disabled(self):
-        self.assertIn(
-            'analysis_layer != "signals"',
+    def test_signals_day_cross_filter_is_enabled(self):
+        self.assertNotIn(
+            '{% if analysis_layer == "signals" and not selected_day %}',
+            self.template,
+        )
+        self.assertNotIn(
+            'aria-disabled="true"',
             self.template,
         )
         self.assertIn(
-            'aria-disabled="true"',
+            'analysis={{ analysis_layer }}',
             self.template,
+        )
+        self.assertIn(
+            'contour_signals.view_candidates',
+            self.template,
+        )
+        self.assertIn(
+            'day={{ row.day.isoformat() }}',
+            self.template,
+        )
+        self.assertIn(
+            'id="c1-signals-visible-count"',
+            self.template,
+        )
+        self.assertIn(
+            "visibleCount.textContent",
+            self.template,
+        )
+
+    def test_object_selector_has_30d_and_24h_scales(self):
+        self.assertIn(
+            "contour-rank-metric is-30d",
+            self.template,
+        )
+        self.assertIn(
+            "contour-rank-metric is-24h",
+            self.template,
+        )
+        self.assertIn(
+            "row.contents_30d",
+            self.template,
+        )
+        self.assertIn(
+            "row.contents_24h",
+            self.template,
+        )
+        self.assertIn(
+            ".contour-rank-metric.is-24h",
+            self.css,
+        )
+        self.assertNotIn(
+            "contour-quiet-list",
+            self.template,
+        )
+        self.assertIn(
+            "dashboard_active_24h_count",
+            self.template,
+        )
+
+    def test_filtered_topics_keeps_full_workspace(self):
+        self.assertNotIn(
+            'and not selected_day',
+            self.template,
+        )
+        self.assertNotIn(
+            "contour-analysis-toolbar-filtered",
+            self.template,
+        )
+        self.assertIn(
+            'Теми за {{ selected_day.strftime("%d.%m.%Y") }}',
+            self.template,
+        )
+        self.assertIn(
+            'Теми за {{ selected_day.strftime("%d.%m.%Y") }}',
+            self.template,
+        )
+        self.assertIn(
+            'Публікації про вибраний об\'єкт за',
+            self.template,
+        )
+        self.assertIn(
+            "c1-topics-cloud",
+            self.template,
+        )
+        self.assertIn(
+            "c1-topics-ranking",
+            self.template,
+        )
+        self.assertIn(
+            "analysis=signals",
+            self.template,
+        )
+        self.assertIn(
+            ".contour-trend-column:hover",
+            self.css,
+        )
+        self.assertIn(
+            "background: transparent;",
+            self.css,
         )
 
     def test_c1_topics_refreshes_all_active_objects(self):

@@ -6463,3 +6463,106 @@ a {
     font-size: 0.75rem;
     line-height: 1.45;
 }
+
+
+/* ---------- C1 object selector 30d / 24h ---------- */
+
+.contour-dashboard-objects {
+    max-height: 300px;
+}
+
+.contour-rank-metrics {
+    display: grid;
+    gap: 0.22rem;
+    margin-top: 0.35rem;
+}
+
+.contour-rank-metric {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 26px;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    font-size: 0.64rem;
+}
+
+.contour-rank-metric > span {
+    color: var(--text-faint);
+    white-space: nowrap;
+}
+
+.contour-rank-metric > strong {
+    color: var(--text-muted);
+    text-align: right;
+    font-size: 0.68rem;
+}
+
+.contour-rank-metric-track {
+    height: 5px;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--surface-2);
+}
+
+.contour-rank-metric-fill {
+    height: 100%;
+    border-radius: inherit;
+}
+
+.contour-rank-metric.is-30d .contour-rank-metric-fill {
+    background: var(--contour-data-accent);
+}
+
+.contour-rank-metric.is-24h .contour-rank-metric-fill {
+    background: color-mix(
+        in srgb,
+        var(--teal-mid) 62%,
+        var(--text-muted)
+    );
+}
+
+
+/* ---------- C1 selected day: compact marker ---------- */
+
+.contour-trend-column.is-selected {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.contour-trend-column.is-selected .contour-trend-bar {
+    opacity: 1;
+    box-shadow:
+        0 0 0 2px var(--teal-mid);
+}
+
+.contour-trend-column.is-selected .contour-trend-day {
+    color: var(--text);
+    font-weight: 700;
+    text-decoration-line: underline;
+    text-decoration-color: var(--teal-mid);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4px;
+}
+
+
+/* ---------- C1 trend interaction cleanup ---------- */
+
+.contour-trend-column:hover {
+    background: transparent;
+}
+
+.contour-trend-column:hover .contour-trend-bar {
+    opacity: 1;
+    box-shadow:
+        0 0 0 1px var(--border-interactive);
+}
+
+.contour-trend-column:hover .contour-trend-day {
+    color: var(--text);
+}
+
+.contour-trend-column.is-selected:hover .contour-trend-bar {
+    box-shadow:
+        0 0 0 2px var(--teal-mid);
+}

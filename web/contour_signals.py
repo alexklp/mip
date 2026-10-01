@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import json
 from pathlib import Path
 from typing import Any
@@ -328,6 +329,69 @@ def _validate_snapshot(
         )
 
     return as_of, generated_at
+
+
+_KYIV = ZoneInfo("Europe/Kyiv")
+
+
+def filter_c1_signal_candidates_by_day(
+    candidates: list[dict[str, Any]],
+    *,
+    day: date,
+) -> list[dict[str, Any]]:
+    """Відібрати сигнали з активністю у вибраний київський день.
+
+    Сам сигнал не обрізається: якщо хоча б одна публікація
+    потрапила у вибраний день, повертається весь candidate
+    з повною chronology.
+    """
+    if (
+        not isinstance(day, date)
+        or isinstance(day, datetime)
+    ):
+        raise ValueError("Некоректний день сигналів")
+
+    result: list[dict[str, Any]] = []
+
+    for candidate in candidates:
+        chronology = candidate.get("chronology")
+
+        if not isinstance(chronology, list):
+            raise ValueError(
+                "Некоректна chronology сигналу"
+            )
+
+        matches = False
+
+        for row in chronology:
+            if not isinstance(row, dict):
+                raise ValueError(
+                    "Некоректний рядок chronology сигналу"
+                )
+
+            value = (
+                row.get("published_at")
+                or row.get("collected_at")
+            )
+
+            observed_at = _aware_datetime(
+                value,
+                field="candidate.chronology.observed_at",
+            )
+
+            if (
+                observed_at
+                .astimezone(_KYIV)
+                .date()
+                == day
+            ):
+                matches = True
+                break
+
+        if matches:
+            result.append(candidate)
+
+    return result
 
 
 def load_c1_contour_signals(

@@ -67,7 +67,7 @@ C1_EVIDENCE_LIMIT = 200
 def build_daily_comparison(
     rows: list[dict],
     content_markers: dict,
-    marker_rows: list[dict],
+    marker_ids: set[str],
     *,
     as_of,
     days: int,
@@ -85,11 +85,6 @@ def build_daily_comparison(
         for index, day in enumerate(day_values)
     }
 
-    marker_ids = {
-        row["marker_id"]
-        for row in marker_rows[:COMPARE_LIMIT]
-    }
-
     series = {
         marker_id: [0] * days
         for marker_id in marker_ids
@@ -102,9 +97,17 @@ def build_daily_comparison(
 
         if published_at is None:
             missing_published_at += 1
+
+        observed_at = (
+            row.get("observed_at")
+            or published_at
+            or row.get("collected_at")
+        )
+
+        if observed_at is None:
             continue
 
-        day = published_at.astimezone(KYIV).date()
+        day = observed_at.astimezone(KYIV).date()
         index = day_index.get(day)
 
         if index is None:
@@ -130,6 +133,243 @@ def build_daily_comparison(
         "series": series,
         "missing_published_at": missing_published_at,
     }
+
+
+def build_daily_phrase_views(
+    rows: list[dict],
+    content_markers: dict,
+    marker_meta: dict,
+    *,
+    as_of,
+    days: int,
+) -> tuple[
+    dict[str, dict],
+    set[str],
+    set[str],
+]:
+    """Побудувати точні денні зрізи фраз за календарним днем Києва.
+
+    Належність до дня використовує ту саму часову основу C1:
+    observed_at = COALESCE(published_at, collected_at).
+    """
+    last_day = as_of.astimezone(KYIV).date()
+    first_day = last_day - timedelta(
+        days=days - 1
+    )
+
+    day_values = [
+        first_day + timedelta(days=index)
+        for index in range(days)
+    ]
+
+    rows_by_day = {
+        day: []
+        for day in day_values
+    }
+
+    for row in rows:
+        day = (
+            row["observed_at"]
+            .astimezone(KYIV)
+            .date()
+        )
+
+        if day in rows_by_day:
+            rows_by_day[day].append(row)
+
+    daily: dict[str, dict] = {}
+    selected_marker_ids: set[str] = set()
+    referenced_occurrences: set[str] = set()
+
+    for day in day_values:
+        day_rows = rows_by_day[day]
+
+        marker_buckets: dict[str, dict] = {}
+
+        for row in day_rows:
+            mids = (
+                content_markers
+                .get(row["content_id"], {})
+                .get("phrases", set())
+            )
+
+            for marker_id in mids:
+                meta = marker_meta.get(
+                    marker_id
+                )
+
+                if (
+                    meta is None
+                    or meta.get("unit")
+                    != "phrases"
+                    or not ts.presentation_marker_visible(
+                        "phrases",
+                        meta.get("label", ""),
+                    )
+                ):
+                    continue
+
+                bucket = marker_buckets.setdefault(
+                    marker_id,
+                    {
+                        "rows": [],
+                        "contents": set(),
+                        "sources": set(),
+                    },
+                )
+
+                bucket["rows"].append(row)
+                bucket["contents"].add(
+                    row["content_id"]
+                )
+                bucket["sources"].add(
+                    row["source_id"]
+                )
+
+        phrase_rows = []
+
+        for marker_id, bucket in (
+            marker_buckets.items()
+        ):
+            publications = len(
+                bucket["rows"]
+            )
+
+            if (
+                publications
+                < ts.THEME_MIN_PUBLICATIONS
+            ):
+                continue
+
+            meta = marker_meta[marker_id]
+
+            phrase_rows.append(
+                {
+                    "marker_id": marker_id,
+                    "label": meta["label"],
+                    "publications": publications,
+                    "materials": len(
+                        bucket["contents"]
+                    ),
+                    "sources": len(
+                        bucket["sources"]
+                    ),
+                    "share": round(
+                        ts.pct(
+                            publications,
+                            len(day_rows),
+                        ),
+                        3,
+                    ),
+                }
+            )
+
+        phrase_rows.sort(
+            key=lambda row: (
+                -int(row["publications"]),
+                -int(row["sources"]),
+                str(
+                    row["label"]
+                ).casefold(),
+            )
+        )
+
+        phrase_rows = phrase_rows[
+            : ts.THEME_LIMIT
+        ]
+
+        marker_details = {}
+
+        for phrase in phrase_rows:
+            marker_id = phrase[
+                "marker_id"
+            ]
+
+            selected_marker_ids.add(
+                marker_id
+            )
+
+            selected_rows = list(
+                marker_buckets[
+                    marker_id
+                ]["rows"]
+            )
+
+            selected_rows.sort(
+                key=lambda row: (
+                    row["published_at"]
+                    or row["observed_at"],
+                    row["occurrence_id"],
+                ),
+                reverse=True,
+            )
+
+            occurrence_refs = [
+                row["occurrence_id"]
+                for row in selected_rows[
+                    :C1_EVIDENCE_LIMIT
+                ]
+            ]
+
+            referenced_occurrences.update(
+                occurrence_refs
+            )
+
+            marker_details[
+                marker_id
+            ] = {
+                "marker_id": marker_id,
+                "unit": "phrases",
+                "label": phrase["label"],
+                "publications": len(
+                    selected_rows
+                ),
+                "materials": len({
+                    row["content_id"]
+                    for row in selected_rows
+                }),
+                "sources": len({
+                    row["source_id"]
+                    for row in selected_rows
+                }),
+                "source_ranking":
+                    ts.source_rank(
+                        selected_rows
+                    ),
+                "evidence_total": len(
+                    selected_rows
+                ),
+                "evidence_limit_reached": (
+                    len(selected_rows)
+                    > C1_EVIDENCE_LIMIT
+                ),
+                "occurrence_refs":
+                    occurrence_refs,
+            }
+
+        daily[day.isoformat()] = {
+            "summary": {
+                "publications": len(
+                    day_rows
+                ),
+                "materials": len({
+                    row["content_id"]
+                    for row in day_rows
+                }),
+                "sources": len({
+                    row["source_id"]
+                    for row in day_rows
+                }),
+            },
+            "phrases": phrase_rows,
+            "markers": marker_details,
+        }
+
+    return (
+        daily,
+        selected_marker_ids,
+        referenced_occurrences,
+    )
 
 
 def fetch_rows(
@@ -561,10 +801,33 @@ def build_snapshot(
         unit="phrases",
     )
 
+    (
+        daily,
+        daily_marker_ids,
+        daily_occurrence_ids,
+    ) = build_daily_phrase_views(
+        rows,
+        content_markers,
+        visible_marker_meta,
+        as_of=as_of,
+        days=days,
+    )
+
+    comparison_marker_ids = {
+        row["marker_id"]
+        for row in all_phrases[
+            :COMPARE_LIMIT
+        ]
+    }
+
+    comparison_marker_ids.update(
+        daily_marker_ids
+    )
+
     comparison = build_daily_comparison(
         rows,
         content_markers,
-        all_phrases,
+        comparison_marker_ids,
         as_of=as_of,
         days=days,
     )
@@ -577,6 +840,10 @@ def build_snapshot(
         content_markers,
         visible_marker_meta,
         all_phrases,
+    )
+
+    referenced_occurrence_ids.update(
+        daily_occurrence_ids
     )
 
     occurrences = {
@@ -623,6 +890,7 @@ def build_snapshot(
                 "phrases": comparison,
             },
         },
+        "daily": daily,
         "markers": marker_details,
         "occurrences": occurrences,
         "clouds": {
@@ -635,7 +903,11 @@ def build_snapshot(
                 "c1_identity_vocabulary_v1"
             ),
             "comparison_limit": COMPARE_LIMIT,
-            "comparison_time_basis": "published_at",
+            "comparison_time_basis": "COALESCE(published_at,collected_at)",
+            "day_filter_time_basis": (
+                "COALESCE(published_at,collected_at)"
+            ),
+            "day_filter_timezone": "Europe/Kyiv",
             "phrases_primary": True,
             "identity_words": len(
                 identity_words

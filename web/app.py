@@ -384,12 +384,6 @@ def contours_page(
         else "topics"
     )
 
-    # Signals має власний 30-денний horizon.
-    # Параметр day належить Topics/drill-down і не
-    # повинен створювати несумісний Signals state.
-    if analysis_layer == "signals":
-        day = None
-
     try:
         with read_connection() as conn:
             contour_rows = fetch_contours(conn)
@@ -455,17 +449,24 @@ def contours_page(
                     for row in fetch_objects_overview(conn)
                 ]
 
-                dashboard_objects_raw = [
-                    row
-                    for row in all_objects
-                    if int(row["contents_24h"]) > 0
-                    and row["canonical_name"]
-                    != "Десантно-штурмові війська ЗСУ"
-                ]
-
-                dashboard_max = max(
+                dashboard_objects_raw = sorted(
                     (
-                        int(row["contents_24h"])
+                        row
+                        for row in all_objects
+                        if int(row["contents_30d"]) > 0
+                        and row["canonical_name"]
+                        != "Десантно-штурмові війська ЗСУ"
+                    ),
+                    key=lambda row: (
+                        -int(row["contents_30d"]),
+                        -int(row["contents_24h"]),
+                        row["canonical_name"],
+                    ),
+                )
+
+                dashboard_max_30d = max(
+                    (
+                        int(row["contents_30d"])
                         for row in dashboard_objects_raw
                     ),
                     default=0,
@@ -474,14 +475,24 @@ def contours_page(
                 dashboard_objects = [
                     {
                         **row,
-                        "bar_pct": round(
+                        "bar_30d_pct": round(
+                            100
+                            * int(row["contents_30d"])
+                            / dashboard_max_30d
+                        ),
+                        "bar_24h_pct": round(
                             100
                             * int(row["contents_24h"])
-                            / dashboard_max
+                            / dashboard_max_30d
                         ),
                     }
                     for row in dashboard_objects_raw
                 ]
+
+                dashboard_active_24h_count = sum(
+                    int(row["contents_24h"]) > 0
+                    for row in dashboard_objects_raw
+                )
 
                 trend_days = {
                     row["day"]
@@ -491,7 +502,7 @@ def contours_page(
                 if day is not None and day not in trend_days:
                     raise HTTPException(
                         status_code=404,
-                        detail="День поза межами поточного 7-денного вікна.",
+                        detail="День поза межами поточного 30-денного вікна.",
                     )
 
                 trend_max = max(
@@ -619,6 +630,7 @@ def contours_page(
                                 if selected
                                 else None
                             ),
+                            day=day,
                             limit=10,
                         )
                     )
@@ -630,6 +642,7 @@ def contours_page(
 
                 else:
                     from web.contour_signals import (
+                        filter_c1_signal_candidates_by_day,
                         load_c1_contour_signals,
                     )
 
@@ -648,11 +661,30 @@ def contours_page(
                         )
                     )
 
-                quiet_objects = [
-                    row
-                    for row in all_objects
-                    if int(row["contents_24h"]) == 0
-                ]
+                    signal_snapshot = (
+                        contour_signals.get(
+                            "snapshot"
+                        )
+                    )
+
+                    if signal_snapshot is not None:
+                        signal_candidates = (
+                            signal_snapshot[
+                                "candidates"
+                            ]
+                        )
+
+                        if day is not None:
+                            signal_candidates = (
+                                filter_c1_signal_candidates_by_day(
+                                    signal_candidates,
+                                    day=day,
+                                )
+                            )
+
+                        contour_signals[
+                            "view_candidates"
+                        ] = signal_candidates
 
                 context.update(
                     {
@@ -660,8 +692,10 @@ def contours_page(
                         "trend": trend_view,
                         "active_objects": active_view,
                         "dashboard_objects": dashboard_objects,
+                        "dashboard_active_24h_count": (
+                            dashboard_active_24h_count
+                        ),
                         "all_objects": all_objects,
-                        "quiet_objects": quiet_objects,
                         "selected": selected,
                         "selected_activity": selected_activity,
                         "selected_breakdown": selected_breakdown,
@@ -844,6 +878,7 @@ def c1_signal_export(
 def contour_topic_detail(
     marker_id: str,
     object_id: int | None = None,
+    day: datetime.date | None = None,
 ) -> dict:
     """Detail/evidence for one C1 topic marker."""
     from web.contour_topics import (
@@ -854,6 +889,7 @@ def contour_topic_detail(
         return load_c1_contour_topic(
             marker_id=marker_id,
             object_id=object_id,
+            day=day,
         )
     except KeyError as exc:
         raise HTTPException(

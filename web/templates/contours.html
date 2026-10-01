@@ -53,7 +53,7 @@
                 </div>
 
                 <div class="contour-summary-item">
-                    <strong>{{ dashboard_objects|length }}</strong>
+                    <strong>{{ dashboard_active_24h_count }}</strong>
                     <span>активні об'єкти за 24 год</span>
                 </div>
 
@@ -98,14 +98,9 @@
                     {% for row in trend %}
                         <a
                             class="contour-trend-column{% if selected_day == row.day %} is-selected{% endif %}{% if loop.last %} is-today{% endif %}"
-                            {% if analysis_layer != "signals" %}
-                            href="{% if selected_day == row.day %}/contours?contour=dshv_objects{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% else %}/contours?contour=dshv_objects&day={{ row.day.isoformat() }}{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% endif %}"
+                            href="/contours?contour=dshv_objects&analysis={{ analysis_layer }}{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% if selected_day != row.day %}&day={{ row.day.isoformat() }}{% endif %}"
                             aria-pressed="{% if selected_day == row.day %}true{% else %}false{% endif %}"
                             title="{% if selected_day == row.day %}Скинути фільтр за {{ row.day.strftime('%d.%m.%Y') }}{% else %}Показати матеріали за {{ row.day.strftime('%d.%m.%Y') }}{% endif %}"
-                            {% else %}
-                            aria-disabled="true"
-                            tabindex="-1"
-                            {% endif %}
                         >
                             <div
                                 class="contour-trend-track"
@@ -142,10 +137,10 @@
             <article class="contour-panel">
                 <div class="contour-panel-head">
                     <div>
-                        <h3>Активність об'єктів · 24 год</h3>
+                        <h3>Об'єкти</h3>
                         <p>
-                            {{ dashboard_objects|length }}
-                            конкретних об'єктів із активністю.
+                            30 днів — загальна активність ·
+                            24 год — поточна активність.
                         </p>
                     </div>
                 </div>
@@ -158,31 +153,47 @@
                                 {% if selected and row.object_id == selected.object_id %}
                                     is-selected
                                 {% endif %}"
-                            href="{% if selected and row.object_id == selected.object_id %}/contours?contour=dshv_objects&analysis={{ analysis_layer }}{% else %}/contours?contour=dshv_objects&object_id={{ row.object_id }}&analysis={{ analysis_layer }}{% endif %}"
+                            href="/contours?contour=dshv_objects&analysis={{ analysis_layer }}{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}{% if not selected or row.object_id != selected.object_id %}&object_id={{ row.object_id }}{% endif %}"
                         >
                             <div class="contour-rank-head">
                                 <span>{{ row.display_name }}</span>
-                                <strong>{{ row.contents_24h }}</strong>
                             </div>
 
-                            <div class="contour-rank-track">
-                                <div
-                                    class="contour-rank-fill"
-                                    style="width: {{ row.bar_pct }}%;"
-                                ></div>
-                            </div>
+                            <div class="contour-rank-metrics">
+                                <div class="contour-rank-metric is-30d">
+                                    <span>30 днів</span>
 
-                            <small>
-                                {{ row.sources_24h }} дж.
-                                · UA {{ row.ua_24h }}
-                                · RU {{ row.ru_24h }}
-                            </small>
+                                    <div class="contour-rank-metric-track">
+                                        <div
+                                            class="contour-rank-metric-fill"
+                                            style="width: {{ row.bar_30d_pct }}%;"
+                                        ></div>
+                                    </div>
+
+                                    <strong>{{ row.contents_30d }}</strong>
+                                </div>
+
+                                <div class="contour-rank-metric is-24h">
+                                    <span>24 год</span>
+
+                                    <div class="contour-rank-metric-track">
+                                        {% if row.contents_24h %}
+                                        <div
+                                            class="contour-rank-metric-fill"
+                                            style="width: {{ row.bar_24h_pct }}%;"
+                                        ></div>
+                                        {% endif %}
+                                    </div>
+
+                                    <strong>{{ row.contents_24h }}</strong>
+                                </div>
+                            </div>
                         </a>
                     {% endfor %}
                 </div>
                 {% else %}
                     <div class="contour-dashboard-empty">
-                        За останні 24 години згадок
+                        За останні 30 днів згадок
                         про конкретні об'єкти не зафіксовано.
                     </div>
                 {% endif %}
@@ -190,11 +201,34 @@
 
         </section>
 
+        {% if selected or selected_day %}
+        <div class="contour-active-filters" aria-label="Активні фільтри">
+            <span class="contour-active-filters-label">Показано:</span>
+
+            {% if selected %}
+                <span class="contour-filter-chip">
+                    Об'єкт · {{ selected.display_name }}
+                </span>
+            {% endif %}
+
+            {% if selected_day %}
+                <span class="contour-filter-chip">
+                    День · {{ selected_day.strftime("%d.%m.%Y") }}
+                </span>
+            {% endif %}
+
+            <a
+                class="contour-filter-reset"
+                href="/contours?contour=dshv_objects&analysis={{ analysis_layer }}"
+            >
+                Скинути
+            </a>
+        </div>
+        {% endif %}
+
         {% if analysis_layer == "topics"
-              and not selected_day
               and contour_topics
-              and contour_topics.state == "ready"
-              and contour_topics["phrases"] %}
+              and contour_topics.state == "ready" %}
 
         <section class="contour-analysis-workspace">
 
@@ -209,16 +243,21 @@
                     <button
                         type="button"
                         aria-pressed="false"
-                        onclick="window.location.href='/contours?contour=dshv_objects{% if selected %}&object_id={{ selected.object_id }}{% endif %}&analysis=signals'"
+                        onclick="window.location.href='/contours?contour=dshv_objects&analysis=signals{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}'"
                     >
                         Сигнали
                     </button>
                 </div>
 
                 <span class="contour-analysis-scope">
-                    C1{% if selected %} · {{ selected.display_name }}{% endif %} · 30 днів ·
-                    {{ contour_topics.summary.materials }} матеріалів для тем ·
-                    {{ contour_topics.summary.sources }} джерел
+                    C1{% if selected %} · {{ selected.display_name }}{% endif %}
+                    {% if selected_day %}
+                        · {{ selected_day.strftime("%d.%m.%Y") }}
+                    {% else %}
+                        · 30 днів
+                    {% endif %}
+                    · {{ contour_topics.summary.materials }} матеріалів для тем
+                    · {{ contour_topics.summary.sources }} джерел
                 </span>
             </div>
 
@@ -228,8 +267,14 @@
                     <div>
                         <h2>Порівняння динаміки тем</h2>
                         <p>
-                            Публікації за днями ·
-                            до 5 вибраних тем · час публікації.
+                            {% if selected_day %}
+                                30-денна динаміка тем,
+                                активних {{ selected_day.strftime("%d.%m.%Y") }} ·
+                                до 5 вибраних тем.
+                            {% else %}
+                                Публікації за днями ·
+                                до 5 вибраних тем · час публікації.
+                            {% endif %}
                         </p>
                     </div>
 
@@ -254,7 +299,12 @@
                         class="topics-empty topics-compare-empty"
                         hidden
                     >
-                        Оберіть хоча б одну тему для порівняння.
+                        {% if selected_day and not contour_topics["phrases"] %}
+                            За {{ selected_day.strftime("%d.%m.%Y") }}
+                            тем за поточним порогом не виявлено.
+                        {% else %}
+                            Оберіть хоча б одну тему для порівняння.
+                        {% endif %}
                     </p>
                 </div>
             </section>
@@ -267,7 +317,11 @@
                         <div>
                             <h2>Тематичне поле</h2>
                             <p>
-                                Локальні теми навколо об'єктів ДШВ ·
+                                {% if selected_day %}
+                                    Теми за {{ selected_day.strftime("%d.%m.%Y") }} ·
+                                {% else %}
+                                    Локальні теми навколо об'єктів ДШВ ·
+                                {% endif %}
                                 розмір маркера відповідає кількості публікацій.
                             </p>
                         </div>
@@ -290,7 +344,13 @@
                         <div>
                             <h2>Теми для порівняння</h2>
                             <p>
-                                C1 · 30 днів · до 5 тем для графіка.
+                                C1 ·
+                                {% if selected_day %}
+                                    {{ selected_day.strftime("%d.%m.%Y") }}
+                                {% else %}
+                                    30 днів
+                                {% endif %}
+                                · до 5 тем для графіка.
                             </p>
                         </div>
 
@@ -549,13 +609,23 @@
                     "Матеріали за темою · " +
                     label;
 
+                var detailScope =
+                    detail.selected_day
+                        ? detail.selected_day
+                            .split("-")
+                            .reverse()
+                            .join(".")
+                        : "30 днів";
+
                 evidenceNote.textContent =
                     detail.publications +
                     " публ. · " +
                     detail.materials +
                     " мат. · " +
                     detail.sources +
-                    " джер. · 30 днів.";
+                    " джер. · " +
+                    detailScope +
+                    ".";
 
                 if (
                     detail.evidence_limit_reached
@@ -919,13 +989,32 @@
                     "/contours/topic/" +
                     encodeURIComponent(markerId);
 
+                var detailParams =
+                    new URLSearchParams();
+
                 if (
                     data.object_id !== null &&
                     data.object_id !== undefined
                 ) {
+                    detailParams.set(
+                        "object_id",
+                        data.object_id
+                    );
+                }
+
+                if (data.selected_day) {
+                    detailParams.set(
+                        "day",
+                        data.selected_day
+                    );
+                }
+
+                if (
+                    detailParams.toString()
+                ) {
                     detailUrl +=
-                        "?object_id=" +
-                        encodeURIComponent(data.object_id);
+                        "?" +
+                        detailParams.toString();
                 }
 
                 fetch(detailUrl)
@@ -1467,7 +1556,7 @@
 
         {% endif %}
 
-        {% if analysis_layer == "signals" and not selected_day %}
+        {% if analysis_layer == "signals" %}
         <section
             class="contour-analysis-workspace"
             id="c1-signals-workspace"
@@ -1484,7 +1573,7 @@
                     <button
                         type="button"
                         aria-pressed="false"
-                        onclick="window.location.href='/contours?contour=dshv_objects{% if selected %}&object_id={{ selected.object_id }}{% endif %}&analysis=topics'"
+                        onclick="window.location.href='/contours?contour=dshv_objects&analysis=topics{% if selected %}&object_id={{ selected.object_id }}{% endif %}{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}'"
                     >
                         Теми
                     </button>
@@ -1522,6 +1611,11 @@
                   and contour_signals.snapshot %}
 
                 {% set c1_snapshot = contour_signals.snapshot %}
+                {% set c1_candidates = (
+                    contour_signals.view_candidates
+                    if contour_signals.view_candidates is defined
+                    else c1_snapshot.candidates
+                ) %}
                 {% set window_days = (
                     c1_snapshot.window.days
                     if c1_snapshot.window is defined
@@ -1548,12 +1642,22 @@
                     </div>
 
                     <div class="page-summary-item signals-summary-item">
-                        <span>Виявлено</span>
-                        <strong>{{ c1_snapshot.candidates|length }}</strong>
-                        <span>сигналів</span>
+                        <span>Сигнали</span>
+                        <strong id="c1-signals-visible-count">
+                            {{ c1_candidates|length }}
+                        </strong>
+                        <span>показано</span>
                     </div>
 
-                    {% if window_days %}
+                    {% if selected_day %}
+                    <div class="page-summary-item signals-summary-item">
+                        <span>День</span>
+                        <strong>
+                            {{ selected_day.strftime("%d.%m") }}
+                        </strong>
+                        <span>Київ</span>
+                    </div>
+                    {% elif window_days %}
                     <div class="page-summary-item signals-summary-item">
                         <span>Активні</span>
                         <strong>
@@ -1564,7 +1668,7 @@
                     {% endif %}
                 </div>
 
-                {% if c1_snapshot.candidates %}
+                {% if c1_candidates %}
 
                 <div
                     class="signals-toolbar"
@@ -1623,7 +1727,7 @@
                             role="tablist"
                             aria-orientation="vertical"
                         >
-                        {% for candidate in c1_snapshot.candidates %}
+                        {% for candidate in c1_candidates %}
 
                             {% set active24 = (
                                 candidate.active_24h
@@ -1709,7 +1813,7 @@
                         role="region"
                         aria-label="Деталі вибраного сигналу"
                     >
-                    {% for candidate in c1_snapshot.candidates %}
+                    {% for candidate in c1_candidates %}
 
                         {% set active24 = (
                             candidate.active_24h
@@ -2181,6 +2285,10 @@
         "c1-signals-empty-filter"
     );
 
+    var visibleCount = document.getElementById(
+        "c1-signals-visible-count"
+    );
+
 
     function visibleItems() {
         return items.filter(
@@ -2330,6 +2438,11 @@
         });
 
         var visible = visibleItems();
+
+        if (visibleCount) {
+            visibleCount.textContent =
+                String(visible.length);
+        }
 
         if (empty) {
             empty.hidden =
@@ -3135,31 +3248,6 @@
 
         {% endif %}
 
-        {% if (selected or selected_day) and analysis_layer != "signals" %}
-        <div class="contour-active-filters" aria-label="Активні фільтри">
-            <span class="contour-active-filters-label">Показано:</span>
-
-            {% if selected %}
-                <span class="contour-filter-chip">
-                    Об'єкт · {{ selected.display_name }}
-                </span>
-            {% endif %}
-
-            {% if selected_day %}
-                <span class="contour-filter-chip">
-                    День · {{ selected_day.strftime("%d.%m.%Y") }}
-                </span>
-            {% endif %}
-
-            <a
-                class="contour-filter-reset"
-                href="/contours?contour=dshv_objects"
-            >
-                Скинути
-            </a>
-        </div>
-        {% endif %}
-
         {% if selected and analysis_layer != "signals" %}
         <section class="contour-object">
 
@@ -3293,7 +3381,10 @@
                         {% endif %}
                     </h2>
                     <p id="c1-evidence-note">
-                        {% if selected %}
+                        {% if selected and selected_day %}
+                            Публікації про вибраний об'єкт за
+                            {{ selected_day.strftime("%d.%m.%Y") }}.
+                        {% elif selected %}
                             Публікації про вибраний об'єкт
                             за останні 30 днів.
                         {% elif selected_day %}
@@ -3626,36 +3717,6 @@
             </div>
         </section>
 
-        {% endif %}
-
-        {% if analysis_layer != "signals" %}
-        <details class="contour-quiet">
-            <summary>
-                Інші об'єкти без нових згадок за 24 години
-                <span>{{ quiet_objects|length }}</span>
-            </summary>
-
-            <div class="contour-quiet-list">
-                {% for row in quiet_objects %}
-                    <a
-                        href="/contours?contour=dshv_objects&object_id={{ row.object_id }}{% if selected_day %}&day={{ selected_day.isoformat() }}{% endif %}"
-                    >
-                        <span>{{ row.display_name }}</span>
-                        <small>
-                            {% if row.contents_30d %}
-                                {{ row.contents_30d }}
-                                за 30 днів
-                            {% elif row.last_seen %}
-                                остання:
-                                {{ fmt_kyiv_zoned(row.last_seen) }}
-                            {% else %}
-                                згадок не зафіксовано
-                            {% endif %}
-                        </small>
-                    </a>
-                {% endfor %}
-            </div>
-        </details>
         {% endif %}
 
     {% else %}
