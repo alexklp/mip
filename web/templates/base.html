@@ -27,7 +27,7 @@
             </div>
             <div class="status-pills">
                 <span class="pill">Тестова версія</span>
-                <span class="pill">Лише перегляд</span>
+                <span class="pill">Аналітична розмітка</span>
                 <span class="pill" title="Усі дати й час в інтерфейсі — за Києвом">Час — київський</span>
             </div>
             <ul class="nav-list">
@@ -36,6 +36,11 @@
                 </li>
                 <li>
                     <a class="nav-link" href="/signals" {% if active_page == "signals" %}aria-current="page"{% endif %}>Сигнали</a>
+                </li>
+                <li>
+                    <a class="nav-link" href="/report" {% if active_page == "report" %}aria-current="page"{% endif %}>
+                        Звіт · <span data-report-count>0</span>
+                    </a>
                 </li>
                 <li>
                     <a class="nav-link" href="/contours" {% if active_page == "contours" %}aria-current="page"{% endif %}>Контури</a>
@@ -49,5 +54,43 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+<script>
+(function () {
+    var key = "mip-report-draft-v1";
+
+    function updateReportCount() {
+        var count = 0;
+
+        try {
+            var raw = window.localStorage.getItem(key);
+            var draft = raw ? JSON.parse(raw) : null;
+
+            if (draft && Array.isArray(draft.items)) {
+                count = draft.items.length;
+            }
+        } catch (error) {
+            count = 0;
+        }
+
+        document.querySelectorAll(
+            "[data-report-count]"
+        ).forEach(function (node) {
+            node.textContent = String(count);
+        });
+    }
+
+    window.addEventListener(
+        "storage",
+        updateReportCount
+    );
+
+    window.addEventListener(
+        "mip-report-updated",
+        updateReportCount
+    );
+
+    updateReportCount();
+}());
+</script>
 </body>
 </html>

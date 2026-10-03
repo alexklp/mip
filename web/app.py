@@ -1202,6 +1202,162 @@ def topics_marker(
         ) from exc
 
 
+@app.post("/report/export.docx")
+async def report_export_docx(
+    request: Request,
+) -> Response:
+    """Сформувати редагований DOCX з browser-local report draft."""
+    import json
+    from zoneinfo import ZoneInfo
+
+    from web.report_docx import (
+        build_report_docx,
+        validate_report_draft,
+    )
+    from web.report_resolve import (
+        resolve_report_draft,
+    )
+    from web.signals import (
+        DEFAULT_SNAPSHOT,
+    )
+
+    content_type = (
+        request.headers
+        .get("content-type", "")
+        .split(";", 1)[0]
+        .strip()
+        .lower()
+    )
+
+    if content_type != "application/json":
+        raise HTTPException(
+            status_code=415,
+            detail="Очікується application/json.",
+        )
+
+    body = await request.body()
+
+    if len(body) > 512 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="Чернетка звіту завелика.",
+        )
+
+    try:
+        payload = json.loads(
+            body.decode("utf-8")
+        )
+        draft = validate_report_draft(
+            payload
+        )
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Некоректний JSON.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    now = datetime.datetime.now(
+        ZoneInfo("Europe/Kyiv")
+    )
+
+    try:
+        resolved_draft = (
+            resolve_report_draft(
+                payload=payload,
+                validated_draft=draft,
+                snapshot_path=getattr(
+                    request.app.state,
+                    "signals_snapshot_path",
+                    DEFAULT_SNAPSHOT,
+                ),
+                stale_seconds=getattr(
+                    request.app.state,
+                    "signals_stale_seconds",
+                    7200,
+                ),
+            )
+        )
+
+        output = build_report_docx(
+            resolved_draft,
+            report_date=(
+                now.strftime("%d.%m.%Y")
+            ),
+            resolved=True,
+        )
+
+    except psycopg.Error as exc:
+        print(
+            "/report/export.docx: "
+            f"db error: {exc}",
+            file=sys.stderr,
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+
+    filename_ascii = (
+        "MIP_analytical_report_"
+        + now.date().isoformat()
+        + ".docx"
+    )
+
+    filename_unicode = (
+        "МІП — аналітичний звіт — "
+        + now.date().isoformat()
+        + ".docx"
+    )
+
+    content_disposition = (
+        f'attachment; filename="{filename_ascii}"; '
+        "filename*=UTF-8''"
+        + quote(filename_unicode)
+    )
+
+    return Response(
+        content=output,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        ),
+        headers={
+            "Content-Disposition":
+                content_disposition,
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options":
+                "nosniff",
+        },
+    )
+
+
+@app.get("/report", response_class=HTMLResponse)
+def report_page(request: Request) -> HTMLResponse:
+    """Локальний конструктор чернетки аналітичного звіту."""
+    return templates.TemplateResponse(
+        request,
+        "report.html",
+        {
+            "active_page": "report",
+        },
+    )
+
+
 @app.get("/signals", response_class=HTMLResponse)
 def signals_page(request: Request) -> HTMLResponse:
     """Лише snapshot: генерація та підключення до БД поза HTTP-запитом."""
@@ -1251,6 +1407,478 @@ def signals_search_index(request: Request, q: str) -> dict:
         "total_matches": len(all_matches),
         "matches": all_matches[:50],
     }
+
+
+
+
+def _current_signal_candidate(
+    request: Request,
+    candidate_id: UUID,
+) -> dict:
+    """Повернути лише candidate з поточного валідного Signals snapshot."""
+    from web.signals import (
+        DEFAULT_SNAPSHOT,
+        load_signals,
+    )
+
+    view = load_signals(
+        getattr(
+            request.app.state,
+            "signals_snapshot_path",
+            DEFAULT_SNAPSHOT,
+        ),
+        stale_seconds=getattr(
+            request.app.state,
+            "signals_stale_seconds",
+            7200,
+        ),
+    )
+
+    snapshot = view.get("snapshot")
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Знімок сигналів недоступний.",
+        )
+
+    key = str(candidate_id)
+
+    candidate = next(
+        (
+            row
+            for row in snapshot["candidates"]
+            if row["candidate_id"] == key
+        ),
+        None,
+    )
+
+    if candidate is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Сигнал не знайдено у поточному знімку.",
+        )
+
+    return candidate
+
+
+async def _annotation_included_payload(
+    request: Request,
+) -> bool:
+    """Прийняти лише JSON {"included": true|false} без coercion."""
+    content_type = (
+        request.headers
+        .get("content-type", "")
+        .split(";", 1)[0]
+        .strip()
+        .lower()
+    )
+
+    if content_type != "application/json":
+        raise HTTPException(
+            status_code=415,
+            detail="Очікується application/json.",
+        )
+
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Некоректний JSON.",
+        ) from exc
+
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"included"}
+        or type(payload["included"]) is not bool
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Очікується boolean поле included.",
+        )
+
+    return payload["included"]
+
+
+def _require_candidate_member(
+    candidate: dict,
+    content_id: UUID,
+) -> str:
+    """Не дозволити annotation довільного material через Signals API."""
+    key = str(content_id)
+
+    if key not in candidate["content_ids"]:
+        raise HTTPException(
+            status_code=404,
+            detail="Матеріал не належить поточному складу сигналу.",
+        )
+
+    return key
+
+
+
+
+@app.get("/signals/{candidate_id}/annotations")
+def signal_annotations(
+    request: Request,
+    candidate_id: UUID,
+) -> dict:
+    """Поточна persisted/effective розмітка одного Signal."""
+    from web.signal_annotation_view import (
+        fetch_signal_annotation_view,
+    )
+
+    candidate = _current_signal_candidate(
+        request,
+        candidate_id,
+    )
+
+    try:
+        with read_connection() as conn:
+            return fetch_signal_annotation_view(
+                conn,
+                candidate,
+            )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+
+    except psycopg.Error as exc:
+        print(
+            f"/signals/annotations: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+
+@app.post("/signals/{candidate_id}/contours/{contour_id}")
+async def set_signal_contour(
+    request: Request,
+    candidate_id: UUID,
+    contour_id: int,
+) -> dict:
+    """Записати explicit analyst annotation для поточного сигналу."""
+    from web.annotation_store import (
+        annotation_write_connection,
+        ensure_signal_context,
+        require_active_contour,
+        set_signal_contour_annotation,
+    )
+
+    candidate = _current_signal_candidate(
+        request,
+        candidate_id,
+    )
+    included = await _annotation_included_payload(
+        request
+    )
+
+    try:
+        with annotation_write_connection() as conn:
+            require_active_contour(
+                conn,
+                contour_id,
+            )
+
+            context_id = ensure_signal_context(
+                conn,
+                content_ids=candidate["content_ids"],
+                representative_content_id=(
+                    candidate["representative_content_id"]
+                ),
+            )
+
+            set_signal_contour_annotation(
+                conn,
+                signal_context_id=context_id,
+                monitoring_contour_id=contour_id,
+                included=included,
+            )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    except psycopg.Error as exc:
+        print(
+            f"/signals/contours: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    return {
+        "candidate_id": str(candidate_id),
+        "signal_context_id": context_id,
+        "monitoring_contour_id": contour_id,
+        "included": included,
+    }
+
+
+@app.delete("/signals/{candidate_id}/contours/{contour_id}")
+def clear_signal_contour(
+    request: Request,
+    candidate_id: UUID,
+    contour_id: int,
+) -> dict:
+    """Прибрати explicit signal contour annotation."""
+    from web.annotation_store import (
+        annotation_write_connection,
+        clear_signal_contour_annotation,
+        ensure_signal_context,
+        require_active_contour,
+    )
+
+    candidate = _current_signal_candidate(
+        request,
+        candidate_id,
+    )
+
+    try:
+        with annotation_write_connection() as conn:
+            require_active_contour(
+                conn,
+                contour_id,
+            )
+
+            context_id = ensure_signal_context(
+                conn,
+                content_ids=candidate["content_ids"],
+                representative_content_id=(
+                    candidate["representative_content_id"]
+                ),
+            )
+
+            clear_signal_contour_annotation(
+                conn,
+                signal_context_id=context_id,
+                monitoring_contour_id=contour_id,
+            )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    except psycopg.Error as exc:
+        print(
+            f"/signals/contours/delete: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    return {
+        "candidate_id": str(candidate_id),
+        "monitoring_contour_id": contour_id,
+        "cleared": True,
+    }
+
+
+@app.post(
+    "/signals/{candidate_id}/materials/{content_id}/contours/{contour_id}"
+)
+async def set_signal_material_contour(
+    request: Request,
+    candidate_id: UUID,
+    content_id: UUID,
+    contour_id: int,
+) -> dict:
+    """Записати direct material contour annotation у межах поточного Signal."""
+    from web.annotation_store import (
+        annotation_write_connection,
+        require_active_contour,
+        set_content_contour_annotation,
+    )
+
+    candidate = _current_signal_candidate(
+        request,
+        candidate_id,
+    )
+    content_key = _require_candidate_member(
+        candidate,
+        content_id,
+    )
+    included = await _annotation_included_payload(
+        request
+    )
+
+    try:
+        with annotation_write_connection() as conn:
+            require_active_contour(
+                conn,
+                contour_id,
+            )
+
+            set_content_contour_annotation(
+                conn,
+                content_id=content_key,
+                monitoring_contour_id=contour_id,
+                included=included,
+            )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    except psycopg.Error as exc:
+        print(
+            f"/signals/material/contours: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    return {
+        "candidate_id": str(candidate_id),
+        "content_id": content_key,
+        "monitoring_contour_id": contour_id,
+        "included": included,
+    }
+
+
+@app.delete(
+    "/signals/{candidate_id}/materials/{content_id}/contours/{contour_id}"
+)
+def clear_signal_material_contour(
+    request: Request,
+    candidate_id: UUID,
+    content_id: UUID,
+    contour_id: int,
+) -> dict:
+    """Прибрати direct material contour annotation."""
+    from web.annotation_store import (
+        annotation_write_connection,
+        clear_content_contour_annotation,
+        require_active_contour,
+    )
+
+    candidate = _current_signal_candidate(
+        request,
+        candidate_id,
+    )
+    content_key = _require_candidate_member(
+        candidate,
+        content_id,
+    )
+
+    try:
+        with annotation_write_connection() as conn:
+            require_active_contour(
+                conn,
+                contour_id,
+            )
+
+            clear_content_contour_annotation(
+                conn,
+                content_id=content_key,
+                monitoring_contour_id=contour_id,
+            )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    except psycopg.Error as exc:
+        print(
+            f"/signals/material/contours/delete: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    return {
+        "candidate_id": str(candidate_id),
+        "content_id": content_key,
+        "monitoring_contour_id": contour_id,
+        "cleared": True,
+    }
+
+
+@app.post(
+    "/signals/{candidate_id}/materials/{content_id}/membership"
+)
+async def set_signal_material_membership(
+    request: Request,
+    candidate_id: UUID,
+    content_id: UUID,
+) -> dict:
+    """Записати analyst correction membership матеріалу в Signal."""
+    from web.annotation_store import (
+        annotation_write_connection,
+        ensure_signal_context,
+        set_signal_membership_annotation,
+    )
+
+    candidate = _current_signal_candidate(
+        request,
+        candidate_id,
+    )
+    content_key = _require_candidate_member(
+        candidate,
+        content_id,
+    )
+    included = await _annotation_included_payload(
+        request
+    )
+
+    try:
+        with annotation_write_connection() as conn:
+            context_id = ensure_signal_context(
+                conn,
+                content_ids=candidate["content_ids"],
+                representative_content_id=(
+                    candidate["representative_content_id"]
+                ),
+            )
+
+            set_signal_membership_annotation(
+                conn,
+                signal_context_id=context_id,
+                content_id=content_key,
+                included=included,
+            )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    except psycopg.Error as exc:
+        print(
+            f"/signals/material/membership: db error: {exc}",
+            file=sys.stderr,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=DB_UNAVAILABLE_MESSAGE,
+        ) from exc
+
+    return {
+        "candidate_id": str(candidate_id),
+        "content_id": content_key,
+        "signal_context_id": context_id,
+        "included": included,
+    }
+
 
 
 @app.get("/signals/{candidate_id}/export.xlsx")

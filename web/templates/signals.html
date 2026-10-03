@@ -190,6 +190,7 @@
             <article
                 class="signals-panel"
                 id="signal-panel-{{ candidate.candidate_id }}"
+                data-candidate-id="{{ candidate.candidate_id }}"
                 role="tabpanel"
                 aria-labelledby="signal-tab-{{ candidate.candidate_id }}"
                 {% if not loop.first %}hidden{% endif %}
@@ -206,10 +207,57 @@
                 </header>
 
                 <div
-                    class="signals-actions signals-actions-export-only"
-                    aria-label="Вивантаження сигналу"
+                    class="signals-actions"
+                    aria-label="Дії аналітика"
                 >
+                    <div class="signals-action-state">
+                        <strong>Контури</strong>
+                        <div
+                            class="signals-contour-chips"
+                            data-signal-contour-chips
+                        >
+                            <span class="signals-contour-empty">
+                                Завантаження…
+                            </span>
+                        </div>
+                    </div>
+
                     <div class="signals-action-buttons">
+                        <details
+                            class="signals-contour-picker"
+                            data-signal-contour-picker
+                        >
+                            <summary
+                                class="signals-action-button"
+                            >
+                                Контур
+                            </summary>
+
+                            <div
+                                class="signals-contour-menu"
+                                data-signal-contour-menu
+                            >
+                                Завантаження…
+                            </div>
+                        </details>
+
+                        <button
+                            type="button"
+                            class="signals-action-button"
+                            data-report-signal
+                            data-candidate-id="{{ candidate.candidate_id }}"
+                            data-report-title="{{ rendered_title|e }}"
+                            data-report-summary="{{ (candidate.ai_theses.summary if candidate.ai_theses else '')|e }}"
+                            data-report-source-count="{{ candidate.source_count }}"
+                            data-report-occurrence-count="{{ candidate.occurrence_count }}"
+                            aria-pressed="false"
+
+                            data-report-content-ids="{{ candidate.content_ids|join(',') }}"
+                            data-report-source-groups="{{ candidate.source_groups|join(',') }}"
+                            data-report-representative-content-id="{{ candidate.representative_content_id or '' }}">
+                            До звіту
+                        </button>
+
                         <a
                             class="signals-action-button signals-export-button"
                             href="/signals/{{ candidate.candidate_id }}/export.xlsx"
@@ -504,6 +552,9 @@
                         <article
                             class="signals-evidence"
                             data-evidence-item
+                            data-evidence-order="{{ loop.index }}"
+                            data-content-id="{{ evidence.content_id }}"
+                            data-occurrence-id="{{ evidence.occurrence_id }}"
                         >
                             <header>
                                 <span class="signals-evidence-index">{{ '%02d'|format(loop.index) }}</span>
@@ -523,10 +574,32 @@
                                     <dd>{{ fmt_kyiv_zoned(evidence.published_at or evidence.collected_at) }}</dd>
                                 </div>
                             </dl>
+
+                            <div
+                                class="signals-evidence-actions"
+                                data-material-actions
+                            ></div>
+
                             {% if not evidence.safe_link %}<span class="signals-link-missing">Посилання на джерело відсутнє</span>{% endif %}
                         </article>
                     {% endfor %}
                     </div>
+
+                    <details
+                        class="signals-excluded"
+                        data-excluded-section
+                        hidden
+                    >
+                        <summary>
+                            Виключені аналітиком ·
+                            <span data-excluded-count>0</span>
+                        </summary>
+
+                        <div
+                            class="signals-excluded-list"
+                            data-excluded-list
+                        ></div>
+                    </details>
 
                     {% if candidate.occurrence_count > candidate.chronology|length %}
                     <button
@@ -591,6 +664,7 @@
 
         if (activePanel) {
             ensureSignalChronology(activePanel);
+            loadSignalAnnotations(activePanel);
         }
 
         if (window.history && window.history.replaceState) {
@@ -1044,6 +1118,9 @@
         var article = document.createElement("article");
         article.className = "signals-evidence";
         article.dataset.evidenceItem = "";
+        article.dataset.evidenceOrder = String(number);
+        article.dataset.contentId = row.content_id;
+        article.dataset.occurrenceId = row.occurrence_id;
 
         var header = document.createElement("header");
 
@@ -1137,6 +1214,15 @@
         times.appendChild(timeRow);
         article.appendChild(times);
 
+        var materialActions =
+            document.createElement("div");
+
+        materialActions.className =
+            "signals-evidence-actions";
+        materialActions.dataset.materialActions = "";
+
+        article.appendChild(materialActions);
+
         if (!row.safe_link) {
             var missing = document.createElement("span");
             missing.className = "signals-link-missing";
@@ -1223,9 +1309,18 @@
                                 row,
                                 offset + index + 1
                             );
-
                         }
                     );
+
+                    if (
+                        panel &&
+                        panel._annotationView
+                    ) {
+                        renderMaterialActions(
+                            panel,
+                            panel._annotationView
+                        );
+                    }
 
                     var loaded =
                         offset + payload.items.length;
@@ -1646,6 +1741,1188 @@
         });
     }
 
+    var REPORT_STORAGE_KEY = "mip-report-draft-v1";
+    var REPORT_SCHEMA_VERSION = "mip-report-draft/1";
+
+    function contourShortName(contour) {
+        var names = {
+            dshv_objects: "Об'єкти ДШВ",
+            world_context: "Світовий",
+            national_context: "Загальнодержавний",
+            enemy_media: "Ворожі медіа"
+        };
+
+        return names[contour.code] || contour.name;
+    }
+
+    function signalAnnotationMap(view) {
+        var result = {};
+
+        (view.signal_annotations || []).forEach(
+            function (row) {
+                result[String(
+                    row.monitoring_contour_id
+                )] = row.included;
+            }
+        );
+
+        return result;
+    }
+
+    function renderSignalAnnotations(panel, view) {
+        var chips = panel.querySelector(
+            "[data-signal-contour-chips]"
+        );
+        var menu = panel.querySelector(
+            "[data-signal-contour-menu]"
+        );
+
+        if (!chips || !menu) return;
+
+        var annotations = signalAnnotationMap(view);
+        var selected = (view.contours || []).filter(
+            function (contour) {
+                return annotations[String(
+                    contour.monitoring_contour_id
+                )] === true;
+            }
+        );
+
+        chips.replaceChildren();
+
+        if (!selected.length) {
+            var empty = document.createElement("span");
+            empty.className = "signals-contour-empty";
+            empty.textContent = "Не задано";
+            chips.appendChild(empty);
+        } else {
+            selected.forEach(function (contour) {
+                var chip = document.createElement("span");
+                chip.className = "signals-contour-chip";
+                chip.textContent =
+                    contourShortName(contour);
+                chip.title = contour.name;
+                chips.appendChild(chip);
+            });
+        }
+
+        menu.replaceChildren();
+
+        (view.contours || []).forEach(
+            function (contour) {
+                var contourId = String(
+                    contour.monitoring_contour_id
+                );
+                var active =
+                    annotations[contourId] === true;
+
+                var button =
+                    document.createElement("button");
+
+                button.type = "button";
+                button.className =
+                    "signals-contour-option";
+                button.setAttribute(
+                    "aria-pressed",
+                    active ? "true" : "false"
+                );
+                button.textContent =
+                    contourShortName(contour);
+                button.title = contour.name;
+
+                button.addEventListener(
+                    "click",
+                    async function () {
+                        if (button.disabled) return;
+
+                        button.disabled = true;
+
+                        try {
+                            var candidateId =
+                                panel.dataset.candidateId;
+
+                            var url =
+                                "/signals/" +
+                                encodeURIComponent(
+                                    candidateId
+                                ) +
+                                "/contours/" +
+                                encodeURIComponent(
+                                    contourId
+                                );
+
+                            var options;
+
+                            if (active) {
+                                options = {
+                                    method: "DELETE",
+                                    credentials:
+                                        "same-origin",
+                                    headers: {
+                                        "Accept":
+                                            "application/json"
+                                    }
+                                };
+                            } else {
+                                options = {
+                                    method: "POST",
+                                    credentials:
+                                        "same-origin",
+                                    headers: {
+                                        "Accept":
+                                            "application/json",
+                                        "Content-Type":
+                                            "application/json"
+                                    },
+                                    body: JSON.stringify({
+                                        included: true
+                                    })
+                                };
+                            }
+
+                            var response =
+                                await fetch(url, options);
+
+                            var payload =
+                                await response.json();
+
+                            if (!response.ok) {
+                                throw new Error(
+                                    payload.detail ||
+                                    (
+                                        "HTTP " +
+                                        response.status
+                                    )
+                                );
+                            }
+
+                            await loadSignalAnnotations(
+                                panel,
+                                true
+                            );
+                        } catch (error) {
+                            console.error(
+                                "Signal contour annotation failed:",
+                                error
+                            );
+
+                            window.alert(
+                                "Не вдалося зберегти контур: " +
+                                (
+                                    error && error.message
+                                        ? error.message
+                                        : String(error)
+                                )
+                            );
+                        } finally {
+                            button.disabled = false;
+                        }
+                    }
+                );
+
+                menu.appendChild(button);
+            }
+        );
+    }
+
+    async function loadSignalAnnotations(
+        panel,
+        force
+    ) {
+        if (!panel) return;
+
+        if (
+            panel.dataset.annotationsLoading === "true"
+        ) {
+            return;
+        }
+
+        if (
+            !force &&
+            panel.dataset.annotationsLoaded === "true"
+        ) {
+            return;
+        }
+
+        var candidateId = panel.dataset.candidateId;
+
+        if (!candidateId) return;
+
+        panel.dataset.annotationsLoading = "true";
+
+        try {
+            var response = await fetch(
+                "/signals/" +
+                encodeURIComponent(candidateId) +
+                "/annotations",
+                {
+                    credentials: "same-origin",
+                    headers: {
+                        "Accept": "application/json"
+                    }
+                }
+            );
+
+            var payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    payload.detail ||
+                    ("HTTP " + response.status)
+                );
+            }
+
+            renderSignalAnnotations(
+                panel,
+                payload
+            );
+
+            panel._annotationView = payload;
+
+            renderMaterialActions(
+                panel,
+                payload
+            );
+
+            panel.dataset.annotationsLoaded =
+                "true";
+        } catch (error) {
+            console.error(
+                "Signal annotations load failed:",
+                error
+            );
+
+            var chips = panel.querySelector(
+                "[data-signal-contour-chips]"
+            );
+            var menu = panel.querySelector(
+                "[data-signal-contour-menu]"
+            );
+
+            if (chips) {
+                chips.textContent =
+                    "Недоступно";
+            }
+
+            if (menu) {
+                menu.textContent =
+                    "Не вдалося завантажити контури.";
+            }
+        } finally {
+            panel.dataset.annotationsLoading =
+                "false";
+        }
+    }
+
+
+    function effectiveMaterialContour(
+        material,
+        contourId
+    ) {
+        var rows =
+            material && Array.isArray(material.contours)
+                ? material.contours
+                : [];
+
+        return rows.find(function (row) {
+            return String(
+                row.monitoring_contour_id
+            ) === String(contourId);
+        }) || null;
+    }
+
+    function materialReportKey(article) {
+        return (
+            "material:" +
+            article.dataset.occurrenceId
+        );
+    }
+
+    function materialReportPayload(
+        panel,
+        article
+    ) {
+        var title = article.querySelector("h4");
+        var quote = article.querySelector("blockquote");
+        var source = article.querySelector(
+            "header strong"
+        );
+        var time = article.querySelector("time");
+        var sourceLink = article.querySelector(
+            ".signals-source-link"
+        );
+
+        return {
+            key: materialReportKey(article),
+            type: "material",
+            candidate_id:
+                panel.dataset.candidateId,
+            occurrence_id:
+                article.dataset.occurrenceId,
+            content_id:
+                article.dataset.contentId,
+            title:
+                title && title.textContent.trim()
+                    ? title.textContent.trim()
+                    : (
+                        source
+                            ? source.textContent.trim()
+                            : "Матеріал"
+                    ),
+            factual_summary:
+                quote
+                    ? quote.textContent.trim()
+                    : "",
+            source_name:
+                source
+                    ? source.textContent.trim()
+                    : "",
+            observed_at:
+                time
+                    ? time.getAttribute("datetime")
+                    : null,
+            source_url:
+                sourceLink
+                    ? sourceLink.href
+                    : null,
+            section_id: null,
+            analyst_assessment: "",
+            added_at:
+                new Date().toISOString()
+        };
+    }
+
+    function setReportMaterialState(
+        button,
+        article
+    ) {
+        var draft = readReportDraft();
+        var key = materialReportKey(article);
+
+        var selected = draft.items.some(
+            function (item) {
+                return item.key === key;
+            }
+        );
+
+        button.setAttribute(
+            "aria-pressed",
+            selected ? "true" : "false"
+        );
+
+        button.textContent =
+            selected
+                ? "У звіті"
+                : "До звіту";
+    }
+
+    function toggleReportMaterial(
+        panel,
+        article,
+        button
+    ) {
+        var draft = readReportDraft();
+        var key = materialReportKey(article);
+
+        var index = draft.items.findIndex(
+            function (item) {
+                return item.key === key;
+            }
+        );
+
+        if (index >= 0) {
+            draft.items.splice(index, 1);
+        } else {
+            draft.items.push(
+                materialReportPayload(
+                    panel,
+                    article
+                )
+            );
+        }
+
+        writeReportDraft(draft);
+
+        setReportMaterialState(
+            button,
+            article
+        );
+    }
+
+    async function mutateMaterialContour(
+        panel,
+        article,
+        contour,
+        state
+    ) {
+        var candidateId =
+            panel.dataset.candidateId;
+        var contentId =
+            article.dataset.contentId;
+        var contourId =
+            contour.monitoring_contour_id;
+
+        var manual =
+            state &&
+            state.source === "manual_content";
+
+        var url =
+            "/signals/" +
+            encodeURIComponent(candidateId) +
+            "/materials/" +
+            encodeURIComponent(contentId) +
+            "/contours/" +
+            encodeURIComponent(contourId);
+
+        var options;
+
+        if (manual) {
+            options = {
+                method: "DELETE",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json"
+                }
+            };
+        } else {
+            options = {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type":
+                        "application/json"
+                },
+                body: JSON.stringify({
+                    included:
+                        !(state && state.included)
+                })
+            };
+        }
+
+        var response = await fetch(
+            url,
+            options
+        );
+
+        var payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                payload.detail ||
+                ("HTTP " + response.status)
+            );
+        }
+
+        await loadSignalAnnotations(
+            panel,
+            true
+        );
+    }
+
+    async function mutateSignalMembership(
+        panel,
+        article,
+        excluded
+    ) {
+        var candidateId =
+            panel.dataset.candidateId;
+        var contentId =
+            article.dataset.contentId;
+
+        var response = await fetch(
+            "/signals/" +
+            encodeURIComponent(candidateId) +
+            "/materials/" +
+            encodeURIComponent(contentId) +
+            "/membership",
+            {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type":
+                        "application/json"
+                },
+                body: JSON.stringify({
+                    included: excluded
+                })
+            }
+        );
+
+        var payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                payload.detail ||
+                ("HTTP " + response.status)
+            );
+        }
+
+        await loadSignalAnnotations(
+            panel,
+            true
+        );
+    }
+
+    function renderMaterialActions(
+        panel,
+        view
+    ) {
+        if (!panel || !view) return;
+
+        var mainList = panel.querySelector(
+            "[data-evidence-list]"
+        );
+        var excludedSection =
+            panel.querySelector(
+                "[data-excluded-section]"
+            );
+        var excludedList =
+            panel.querySelector(
+                "[data-excluded-list]"
+            );
+        var excludedCount =
+            panel.querySelector(
+                "[data-excluded-count]"
+            );
+
+        if (
+            !mainList ||
+            !excludedSection ||
+            !excludedList
+        ) {
+            return;
+        }
+
+        var contours = Array.isArray(
+            view.contours
+        )
+            ? view.contours
+            : [];
+
+        var articles =
+            Array.prototype.slice.call(
+                panel.querySelectorAll(
+                    "[data-evidence-item]"
+                )
+            );
+
+        articles.sort(function (left, right) {
+            return (
+                Number(
+                    left.dataset.evidenceOrder ||
+                    0
+                ) -
+                Number(
+                    right.dataset.evidenceOrder ||
+                    0
+                )
+            );
+        });
+
+        var excludedTotal = 0;
+
+        articles.forEach(function (article) {
+            var contentId =
+                article.dataset.contentId;
+
+            var material =
+                view.materials &&
+                view.materials[contentId]
+                    ? view.materials[contentId]
+                    : {
+                        excluded_from_signal:
+                            false,
+                        contours: []
+                    };
+
+            var excluded =
+                material.excluded_from_signal ===
+                true;
+
+            var actions =
+                article.querySelector(
+                    "[data-material-actions]"
+                );
+
+            if (!actions) return;
+
+            actions.replaceChildren();
+
+            var contourState =
+                document.createElement("div");
+
+            contourState.className =
+                "signals-material-contours";
+
+            var includedContours =
+                (material.contours || []).filter(
+                    function (row) {
+                        return row.included;
+                    }
+                );
+
+            if (!includedContours.length) {
+                var noContour =
+                    document.createElement("span");
+
+                noContour.className =
+                    "signals-contour-empty";
+                noContour.textContent =
+                    "Контур не визначено";
+
+                contourState.appendChild(
+                    noContour
+                );
+            } else {
+                includedContours.forEach(
+                    function (row) {
+                        var contour =
+                            contours.find(
+                                function (item) {
+                                    return String(
+                                        item.monitoring_contour_id
+                                    ) === String(
+                                        row.monitoring_contour_id
+                                    );
+                                }
+                            );
+
+                        if (!contour) return;
+
+                        var chip =
+                            document.createElement(
+                                "span"
+                            );
+
+                        chip.className =
+                            "signals-contour-chip signals-material-contour-chip";
+
+                        var suffix = "";
+
+                        if (
+                            row.source ===
+                            "manual_content"
+                        ) {
+                            suffix =
+                                " · задано аналітиком";
+                        } else if (
+                            row.source ===
+                            "manual_signal"
+                        ) {
+                            suffix =
+                                " · успадковано";
+                        } else if (
+                            row.source === "system"
+                        ) {
+                            suffix =
+                                " · система";
+                        }
+
+                        chip.textContent =
+                            contourShortName(
+                                contour
+                            ) + suffix;
+
+                        chip.title =
+                            contour.name;
+
+                        contourState.appendChild(
+                            chip
+                        );
+                    }
+                );
+            }
+
+            actions.appendChild(
+                contourState
+            );
+
+            var buttons =
+                document.createElement("div");
+
+            buttons.className =
+                "signals-material-buttons";
+
+            var picker =
+                document.createElement(
+                    "details"
+                );
+
+            picker.className =
+                "signals-contour-picker signals-material-contour-picker";
+
+            var pickerSummary =
+                document.createElement(
+                    "summary"
+                );
+
+            pickerSummary.className =
+                "signals-action-button";
+            pickerSummary.textContent =
+                "Контур";
+
+            var menu =
+                document.createElement("div");
+
+            menu.className =
+                "signals-contour-menu";
+
+            contours.forEach(
+                function (contour) {
+                    var state =
+                        effectiveMaterialContour(
+                            material,
+                            contour.monitoring_contour_id
+                        );
+
+                    var option =
+                        document.createElement(
+                            "button"
+                        );
+
+                    option.type = "button";
+                    option.className =
+                        "signals-contour-option";
+
+                    if (
+                        state &&
+                        state.source ===
+                            "manual_content"
+                    ) {
+                        option.classList.add(
+                            "is-manual"
+                        );
+                    }
+
+                    option.setAttribute(
+                        "aria-pressed",
+                        state && state.included
+                            ? "true"
+                            : "false"
+                    );
+
+                    option.textContent =
+                        contourShortName(
+                            contour
+                        ) +
+                        (
+                            state &&
+                            state.source ===
+                                "manual_content"
+                                ? " · вручну"
+                                : ""
+                        );
+
+                    option.addEventListener(
+                        "click",
+                        async function () {
+                            if (
+                                option.disabled
+                            ) {
+                                return;
+                            }
+
+                            option.disabled = true;
+
+                            try {
+                                await mutateMaterialContour(
+                                    panel,
+                                    article,
+                                    contour,
+                                    state
+                                );
+                            } catch (error) {
+                                console.error(
+                                    "Material contour mutation failed:",
+                                    error
+                                );
+
+                                window.alert(
+                                    "Не вдалося зберегти контур матеріалу: " +
+                                    (
+                                        error &&
+                                        error.message
+                                            ? error.message
+                                            : String(
+                                                error
+                                            )
+                                    )
+                                );
+                            } finally {
+                                option.disabled =
+                                    false;
+                            }
+                        }
+                    );
+
+                    menu.appendChild(option);
+                }
+            );
+
+            picker.appendChild(
+                pickerSummary
+            );
+            picker.appendChild(menu);
+            buttons.appendChild(picker);
+
+            var reportButton =
+                document.createElement(
+                    "button"
+                );
+
+            reportButton.type = "button";
+            reportButton.className =
+                "signals-action-button";
+            reportButton.dataset.reportMaterial =
+                "";
+
+            setReportMaterialState(
+                reportButton,
+                article
+            );
+
+            reportButton.addEventListener(
+                "click",
+                function () {
+                    toggleReportMaterial(
+                        panel,
+                        article,
+                        reportButton
+                    );
+                }
+            );
+
+            buttons.appendChild(
+                reportButton
+            );
+
+            var membershipButton =
+                document.createElement(
+                    "button"
+                );
+
+            membershipButton.type = "button";
+            membershipButton.className =
+                "signals-action-button signals-membership-button";
+
+            membershipButton.textContent =
+                excluded
+                    ? "Повернути до сигналу"
+                    : "Не належить до сигналу";
+
+            membershipButton.addEventListener(
+                "click",
+                async function () {
+                    if (
+                        membershipButton.disabled
+                    ) {
+                        return;
+                    }
+
+                    membershipButton.disabled =
+                        true;
+
+                    try {
+                        await mutateSignalMembership(
+                            panel,
+                            article,
+                            excluded
+                        );
+                    } catch (error) {
+                        console.error(
+                            "Signal membership mutation failed:",
+                            error
+                        );
+
+                        window.alert(
+                            "Не вдалося змінити склад сигналу: " +
+                            (
+                                error &&
+                                error.message
+                                    ? error.message
+                                    : String(error)
+                            )
+                        );
+                    } finally {
+                        membershipButton.disabled =
+                            false;
+                    }
+                }
+            );
+
+            buttons.appendChild(
+                membershipButton
+            );
+
+            actions.appendChild(buttons);
+
+            if (excluded) {
+                excludedTotal += 1;
+                excludedList.appendChild(
+                    article
+                );
+            } else {
+                mainList.appendChild(
+                    article
+                );
+            }
+        });
+
+        if (excludedCount) {
+            excludedCount.textContent =
+                String(excludedTotal);
+        }
+
+        excludedSection.hidden =
+            excludedTotal === 0;
+    }
+
+
+    function emptyReportDraft() {
+        return {
+            schema_version:
+                REPORT_SCHEMA_VERSION,
+            items: []
+        };
+    }
+
+    function readReportDraft() {
+        try {
+            var raw = window.localStorage.getItem(
+                REPORT_STORAGE_KEY
+            );
+
+            if (!raw) {
+                return emptyReportDraft();
+            }
+
+            var parsed = JSON.parse(raw);
+
+            if (
+                !parsed ||
+                parsed.schema_version !==
+                    REPORT_SCHEMA_VERSION ||
+                !Array.isArray(parsed.items)
+            ) {
+                return emptyReportDraft();
+            }
+
+            return parsed;
+        } catch (error) {
+            return emptyReportDraft();
+        }
+    }
+
+    function writeReportDraft(draft) {
+        draft.updated_at =
+            new Date().toISOString();
+
+        window.localStorage.setItem(
+            REPORT_STORAGE_KEY,
+            JSON.stringify(draft)
+        );
+
+        window.dispatchEvent(
+            new Event("mip-report-updated")
+        );
+    }
+
+    function reportStringList(value) {
+        return String(value || "")
+            .split(",")
+            .map(function (item) {
+                return item.trim();
+            })
+            .filter(Boolean)
+            .sort();
+    }
+
+    function sameReportMembership(
+        left,
+        right
+    ) {
+        if (
+            !Array.isArray(left) ||
+            !Array.isArray(right) ||
+            left.length !== right.length
+        ) {
+            return false;
+        }
+
+        var a = left.slice().sort();
+        var b = right.slice().sort();
+
+        return a.every(
+            function (value, index) {
+                return value === b[index];
+            }
+        );
+    }
+
+    function reportSignalMatches(
+        item,
+        button
+    ) {
+        if (
+            !item ||
+            item.type !== "signal"
+        ) {
+            return false;
+        }
+
+        var buttonIds =
+            reportStringList(
+                button.dataset
+                    .reportContentIds
+            );
+
+        if (
+            Array.isArray(
+                item.content_ids
+            ) &&
+            item.content_ids.length &&
+            buttonIds.length
+        ) {
+            return sameReportMembership(
+                item.content_ids,
+                buttonIds
+            );
+        }
+
+        if (
+            item.candidate_id ===
+            button.dataset.candidateId
+        ) {
+            return true;
+        }
+
+        /*
+         * Legacy candidate_id у старих draft часто був
+         * representative content_id. Якщо representative
+         * змінився, старий UUID може лишитися членом нового
+         * exact signal membership.
+         */
+        return Boolean(
+            item.candidate_id &&
+            buttonIds.includes(
+                item.candidate_id
+            )
+        );
+    }
+
+    function signalReportKey(candidateId) {
+        return "signal:" + candidateId;
+    }
+
+    function refreshReportButtons() {
+        var draft = readReportDraft();
+
+        document.querySelectorAll(
+            "[data-report-signal]"
+        ).forEach(function (button) {
+            var selected = draft.items.some(
+                function (item) {
+                    return reportSignalMatches(
+                        item,
+                        button
+                    );
+                }
+            );
+
+            button.setAttribute(
+                "aria-pressed",
+                selected ? "true" : "false"
+            );
+
+            button.textContent =
+                selected
+                    ? "У звіті"
+                    : "До звіту";
+        });
+    }
+
+    document.querySelectorAll(
+        "[data-report-signal]"
+    ).forEach(function (button) {
+        button.addEventListener(
+            "click",
+            function () {
+                var candidateId =
+                    button.dataset.candidateId;
+                var key =
+                    signalReportKey(candidateId);
+                var draft =
+                    readReportDraft();
+
+                var index =
+                    draft.items.findIndex(
+                        function (item) {
+                            return reportSignalMatches(
+                                item,
+                                button
+                            );
+                        }
+                    );
+
+                if (index >= 0) {
+                    draft.items.splice(index, 1);
+                } else {
+                    draft.items.push({
+                        key: key,
+                        type: "signal",
+                        candidate_id:
+                            candidateId,
+                        content_ids:
+                            reportStringList(
+                                button.dataset
+                                    .reportContentIds
+                            ),
+                        source_groups:
+                            reportStringList(
+                                button.dataset
+                                    .reportSourceGroups
+                            ),
+                        representative_content_id:
+                            button.dataset
+                                .reportRepresentativeContentId ||
+                            null,
+                        title:
+                            button.dataset.reportTitle ||
+                            "Сигнал",
+                        factual_summary:
+                            button.dataset.reportSummary ||
+                            "",
+                        factual_summary_override:
+                            null,
+                        source_count:
+                            Number(
+                                button.dataset
+                                    .reportSourceCount ||
+                                0
+                            ),
+                        occurrence_count:
+                            Number(
+                                button.dataset
+                                    .reportOccurrenceCount ||
+                                0
+                            ),
+                        section_id: null,
+                        analyst_assessment: "",
+                        added_at:
+                            new Date().toISOString()
+                    });
+                }
+
+                writeReportDraft(draft);
+                refreshReportButtons();
+            }
+        );
+    });
+
+    refreshReportButtons();
+
     initSpreadTimelines();
 
     var hashItem = items.filter(function (item) { return '#' + item.dataset.target === window.location.hash; })[0];
@@ -1660,6 +2937,7 @@
 
     if (initialPanel) {
         ensureSignalChronology(initialPanel);
+        loadSignalAnnotations(initialPanel);
     }
 
     window.setTimeout(function () { window.location.reload(); }, 600000);

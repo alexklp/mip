@@ -6566,3 +6566,441 @@ a {
     box-shadow:
         0 0 0 2px var(--teal-mid);
 }
+
+
+/* Signals — analyst contour selector / report cart. */
+
+.signals-contour-chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.signals-contour-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 0.15rem 0.42rem;
+    border: 1px solid var(--border-interactive);
+    border-radius: 999px;
+    background: var(--steel-chip-bg);
+    color: var(--steel-tint);
+    font-size: 0.6875rem;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.signals-contour-empty {
+    color: var(--text-faint);
+    font-size: 0.6875rem;
+}
+
+.signals-contour-picker {
+    position: relative;
+}
+
+.signals-contour-picker > summary {
+    list-style: none;
+    user-select: none;
+}
+
+.signals-contour-picker > summary::-webkit-details-marker {
+    display: none;
+}
+
+.signals-contour-picker[open] > summary {
+    border-color: var(--teal-mid);
+    color: var(--text);
+}
+
+.signals-contour-menu {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 30;
+    display: grid;
+    gap: 0.3rem;
+    width: min(270px, 75vw);
+    padding: 0.45rem;
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: 0 10px 28px rgb(0 0 0 / 22%);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.signals-contour-option {
+    width: 100%;
+    min-height: 34px;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.signals-contour-option:hover,
+.signals-contour-option:focus-visible {
+    border-color: var(--border-interactive);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.signals-contour-option[aria-pressed="true"] {
+    border-color: #7f9b7d;
+    background: #273629;
+    color: #c7dfc5;
+    font-weight: 700;
+}
+
+.signals-contour-option[aria-pressed="true"]::before {
+    margin-right: 0.35rem;
+    content: "✓";
+    font-weight: 900;
+}
+
+@media (max-width: 760px) {
+    .signals-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .signals-contour-menu {
+        right: auto;
+        left: 0;
+    }
+}
+
+
+/* Signals: contour menu opens into the detail workspace, not under the queue. */
+.signals-contour-menu {
+    left: 0;
+    right: auto;
+}
+
+
+/* Signals — actions for individual materials. */
+
+.signals-evidence-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.8rem;
+    margin-top: 0.65rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--border);
+}
+
+.signals-material-contours,
+.signals-material-buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.signals-material-contour-chip {
+    font-size: 0.65625rem;
+}
+
+.signals-material-contour-picker {
+    position: relative;
+}
+
+.signals-material-contour-picker .signals-contour-menu {
+    left: 0;
+    right: auto;
+}
+
+.signals-contour-option.is-manual {
+    border-style: dashed;
+}
+
+.signals-membership-button {
+    color: var(--text-faint);
+}
+
+.signals-excluded {
+    margin-top: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+}
+
+.signals-excluded > summary {
+    padding: 0.55rem 0.7rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 650;
+    cursor: pointer;
+    user-select: none;
+}
+
+.signals-excluded-list {
+    padding: 0 0.7rem 0.7rem;
+}
+
+.signals-excluded-list .signals-evidence {
+    opacity: 0.72;
+}
+
+@media (max-width: 760px) {
+    .signals-evidence-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+
+/* ============================================================
+ * Report builder
+ * ============================================================ */
+
+.report-page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 1rem 1.15rem 2rem;
+}
+
+.report-summary {
+    margin-bottom: 1rem;
+}
+
+.report-empty {
+    display: grid;
+    justify-items: start;
+    gap: 0.6rem;
+    padding: 1.2rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.report-empty > span {
+    color: var(--text-muted);
+}
+
+.report-workspace {
+    display: grid;
+    gap: 1rem;
+}
+
+.report-section {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.report-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+}
+
+.report-section-head h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: 0.92rem;
+}
+
+.report-section-head > span {
+    color: var(--text-faint);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.report-section-items {
+    display: grid;
+}
+
+.report-section-empty {
+    margin: 0;
+    padding: 0.9rem;
+    color: var(--text-faint);
+    font-size: 0.78rem;
+}
+
+.report-item {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.85rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.report-item:last-child {
+    border-bottom: 0;
+}
+
+.report-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+
+.report-item-head > div:first-child {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.report-item-type {
+    display: inline-flex;
+    padding: 0.18rem 0.42rem;
+    border: 1px solid var(--border-interactive);
+    border-radius: 999px;
+    background: var(--steel-chip-bg);
+    color: var(--steel-tint);
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.report-item-meta {
+    color: var(--text-faint);
+    font-size: 0.72rem;
+}
+
+.report-item-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.report-icon-button {
+    min-height: 29px;
+    padding: 0.25rem 0.48rem;
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.report-icon-button:hover,
+.report-icon-button:focus-visible {
+    border-color: var(--teal-mid);
+    color: var(--text);
+}
+
+.report-icon-button.is-danger:hover,
+.report-icon-button.is-danger:focus-visible {
+    border-color: #9b7070;
+    color: #e3b7b7;
+}
+
+.report-field {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.report-field > span {
+    color: var(--text-faint);
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.report-field input,
+.report-field select,
+.report-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+}
+
+.report-field input,
+.report-field select {
+    min-height: 36px;
+    padding: 0.45rem 0.55rem;
+}
+
+.report-field textarea {
+    resize: vertical;
+    min-height: 72px;
+    padding: 0.55rem;
+    line-height: 1.5;
+}
+
+.report-section-field {
+    max-width: 620px;
+}
+
+.report-source-link {
+    justify-self: start;
+    color: var(--teal-tint);
+    font-size: 0.72rem;
+    text-decoration: none;
+}
+
+.report-source-link:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+    .report-item-head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .report-section-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.3rem;
+    }
+}
+
+/* Report builder: hidden states must win over layout display rules. */
+.report-empty[hidden],
+.report-workspace[hidden] {
+    display: none;
+}
+
+
+/* Report builder — Word export. */
+
+.report-export-actions {
+    display: flex;
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.report-export-button {
+    min-height: 36px;
+}
+
+.report-export-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.report-export-status {
+    min-height: 1em;
+    color: var(--text-faint);
+    font-size: 0.7rem;
+}
+
+@media (max-width: 760px) {
+    .report-export-actions {
+        align-items: flex-start;
+    }
+}
